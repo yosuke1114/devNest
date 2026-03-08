@@ -7,9 +7,13 @@ import { useProjectStore } from "../stores/projectStore";
 import { usePrStore } from "../stores/prStore";
 import type { FileDiffResult } from "../lib/diffParser";
 import { PRFilterBar } from "../components/pr/PRFilterBar";
-import { PRListItem } from "../components/pr/PRListItem";
+import { PRList } from "../components/pr/PRList";
+import { PRDetailHeader } from "../components/pr/PRDetailHeader";
+import { PRDetailTabs } from "../components/pr/PRDetailTabs";
 import { TabOverview } from "../components/pr/TabOverview";
 import { TabCodeDiff } from "../components/pr/TabCodeDiff";
+import { ReviewPanel } from "../components/pr/ReviewPanel";
+import { MergePanel } from "../components/pr/MergePanel";
 
 // ─── TabDesignDocs ────────────────────────────────────────────────────────────
 
@@ -237,41 +241,52 @@ function PRDetailPanel({ projectId }: { projectId: number }) {
     );
   }
 
-  const TABS = [
-    { id: "overview" as const, label: "Overview" },
-    { id: "diff" as const, label: "Code Changes" },
-    { id: "design-docs" as const, label: "Design Docs" },
-  ];
+  // canMerge: passing checks + approved review
+  const canMerge =
+    detail.pr.checks_status === "passing" &&
+    detail.reviews.some((r) => r.state === "approved");
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex border-b border-white/10 px-4">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-2 text-xs border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? "border-blue-500 text-white"
-                : "border-transparent text-gray-400 hover:text-gray-200"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* PR ヘッダー */}
+      <PRDetailHeader pr={detail.pr} />
+
+      {/* タブバー */}
+      <PRDetailTabs
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        codeFileCount={files.length}
+      />
 
       {activeTab === "overview" ? (
-        <TabOverview
-          detail={detail}
-          reviewStatus={reviewStatus}
-          mergeStatus={mergeStatus}
-          onApprove={() => submitReview(projectId, detail.pr.id, "approved")}
-          onRequestChanges={() => submitReview(projectId, detail.pr.id, "changes_requested")}
-          onMerge={() => mergePr(projectId, detail.pr.id, "squash")}
-        />
-      ) : activeTab === "diff" ? (
+        <div className="overflow-y-auto p-4 space-y-4">
+          <TabOverview
+            detail={detail}
+            reviewStatus={reviewStatus}
+            mergeStatus={mergeStatus}
+            onApprove={() => submitReview(projectId, detail.pr.id, "approved")}
+            onRequestChanges={() => submitReview(projectId, detail.pr.id, "changes_requested")}
+            onMerge={() => mergePr(projectId, detail.pr.id, "squash")}
+          />
+          {detail.pr.state === "open" && (
+            <>
+              <ReviewPanel
+                reviewStatus={reviewStatus}
+                onSubmitReview={(state, body) =>
+                  submitReview(projectId, detail.pr.id, state, body)
+                }
+              />
+              <MergePanel
+                canMerge={canMerge}
+                mergeStatus={mergeStatus}
+                onMerge={() => mergePr(projectId, detail.pr.id, "squash")}
+                headBranch={detail.pr.head_branch}
+                baseBranch={detail.pr.base_branch}
+              />
+            </>
+          )}
+        </div>
+      ) : activeTab === "code-diff" ? (
         <TabCodeDiff
           files={files}
           diff={diff}
@@ -342,24 +357,12 @@ export function PRScreen() {
           syncing={syncStatus === "loading"}
         />
 
-        <div className="flex-1 overflow-y-auto">
-          {fetchStatus === "loading" ? (
-            <div className="p-4 text-xs text-gray-500">Loading...</div>
-          ) : prs.length === 0 ? (
-            <div className="p-4 text-xs text-gray-500">No PRs found</div>
-          ) : (
-            prs.map((pr) => (
-              <PRListItem
-                key={pr.id}
-                pr={pr}
-                selected={pr.id === selectedPrId}
-                onSelect={() =>
-                  selectPr(pr.id, currentProject.id)
-                }
-              />
-            ))
-          )}
-        </div>
+        <PRList
+          prs={prs}
+          loading={fetchStatus === "loading"}
+          selectedPrId={selectedPrId}
+          onSelect={(pr) => selectPr(pr.id, currentProject.id)}
+        />
       </div>
 
       {/* PR Detail panel */}

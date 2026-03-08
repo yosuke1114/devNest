@@ -166,8 +166,8 @@ describe("prStore", () => {
   });
 
   it("setActiveTab() で activeTab が変わる", () => {
-    usePrStore.getState().setActiveTab("diff");
-    expect(usePrStore.getState().activeTab).toBe("diff");
+    usePrStore.getState().setActiveTab("code-diff");
+    expect(usePrStore.getState().activeTab).toBe("code-diff");
   });
 
   // ─── fetchDiff / loadDocDiff ───────────────────────────────────────────────

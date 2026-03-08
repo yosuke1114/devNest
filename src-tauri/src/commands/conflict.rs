@@ -74,8 +74,6 @@ pub async fn conflict_list(
 ) -> Result<ConflictScanResult> {
     let project = db::project::find(&state.db, project_id).await?;
     let local_path = project.local_path.clone();
-    let docs_root = project.docs_root.clone();
-
     // DB から未解消ファイル一覧を取得
     let rows = db::conflict::list_unresolved(&state.db, project_id).await?;
 
@@ -139,7 +137,7 @@ pub async fn conflict_resolve(
 
     // 解消を適用
     let resolved = apply_resolutions(&content, &resolutions)
-        .map_err(|e| AppError::Validation(e))?;
+        .map_err(AppError::Validation)?;
 
     // ディスクに書き戻す
     tokio::fs::write(&abs_path, resolved)

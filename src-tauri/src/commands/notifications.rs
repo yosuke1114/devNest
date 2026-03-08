@@ -50,6 +50,7 @@ pub async fn notification_navigate(
 }
 
 /// テスト・デモ用：通知を手動作成する
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn notification_push(
     project_id: i64,

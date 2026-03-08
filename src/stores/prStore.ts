@@ -20,7 +20,7 @@ interface PrState {
   diff: string;
   docDiffs: FileDiffResult[];   // .md ファイルのみ
   stateFilter: "open" | "closed" | "merged" | "all";
-  activeTab: "overview" | "diff" | "design-docs";
+  activeTab: "overview" | "code-diff" | "design-docs";
   fetchStatus: AsyncStatus;
   detailStatus: AsyncStatus;
   filesStatus: AsyncStatus;
