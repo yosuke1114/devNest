@@ -10,6 +10,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useIssueStore } from "../stores/issueStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useTerminalStore } from "../stores/terminalStore";
+import { useUiStore } from "../stores/uiStore";
+import { IssueDetail } from "../components/issues/IssueDetail";
 import type { Issue, IssueDraft, IssueDraftPatch } from "../types";
 
 type Tab = "list" | "wizard";
@@ -18,6 +21,8 @@ export function IssuesScreen() {
   const { currentProject } = useProjectStore();
   const {
     issues,
+    currentIssue,
+    issueLinks,
     drafts,
     currentDraft,
     draftStreamBuffer,
@@ -26,6 +31,10 @@ export function IssuesScreen() {
     generateStatus,
     fetchIssues,
     syncIssues,
+    selectIssue,
+    fetchIssueLinks,
+    addIssueLink,
+    removeIssueLink,
     fetchDrafts,
     createDraft,
     updateDraft,
@@ -34,6 +43,9 @@ export function IssuesScreen() {
     listenDraftChunk,
     listenDraftDone,
   } = useIssueStore();
+
+  const startSession = useTerminalStore((s) => s.startSession);
+  const navigate = useUiStore((s) => s.navigate);
 
   const [tab, setTab] = useState<Tab>("list");
   const [statusFilter, setStatusFilter] = useState<string>("open");
@@ -60,10 +72,21 @@ export function IssuesScreen() {
     );
   }
 
+  const handleSelectIssue = (issue: Issue) => {
+    selectIssue(issue);
+    fetchIssueLinks(issue.id);
+  };
+
+  const handleLaunchTerminal = (_issueId: number) => {
+    if (!currentProject) return;
+    startSession(currentProject.id);
+    navigate("terminal");
+  };
+
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      {/* タブ切り替え */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+    <div className="flex-1 flex overflow-hidden">
+      {/* 左ペイン: リスト + タブヘッダー */}
+      <div className="w-72 shrink-0 flex flex-col border-r border-white/10">
         <header
           style={{
             display: "flex",
@@ -128,7 +151,12 @@ export function IssuesScreen() {
         </header>
 
         {tab === "list" ? (
-          <IssueList issues={issues} loading={listStatus === "loading"} />
+          <IssueList
+            issues={issues}
+            loading={listStatus === "loading"}
+            selectedId={currentIssue?.id ?? null}
+            onSelect={handleSelectIssue}
+          />
         ) : (
           <WizardPanel
             drafts={drafts}
@@ -141,13 +169,40 @@ export function IssuesScreen() {
           />
         )}
       </div>
+
+      {/* 右ペイン: Issue 詳細 */}
+      {tab === "list" && currentIssue ? (
+        <IssueDetail
+          issue={currentIssue}
+          links={issueLinks}
+          linksStatus="success"
+          onAddLink={(issueId, documentId) => addIssueLink(issueId, documentId)}
+          onRemoveLink={(issueId, documentId) => removeIssueLink(issueId, documentId)}
+          onLaunchTerminal={handleLaunchTerminal}
+          onOpenDocument={() => {}}
+        />
+      ) : tab === "list" ? (
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+          Issue を選択してください
+        </div>
+      ) : null}
     </div>
   );
 }
 
 // ─── Issue List ───────────────────────────────────────────────────────────────
 
-function IssueList({ issues, loading }: { issues: Issue[]; loading: boolean }) {
+function IssueList({
+  issues,
+  loading,
+  selectedId,
+  onSelect,
+}: {
+  issues: Issue[];
+  loading: boolean;
+  selectedId: number | null;
+  onSelect: (issue: Issue) => void;
+}) {
   if (loading) {
     return <div style={centerStyle}>読み込み中…</div>;
   }
@@ -161,19 +216,33 @@ function IssueList({ issues, loading }: { issues: Issue[]; loading: boolean }) {
   return (
     <div style={{ overflow: "auto", flex: 1 }}>
       {issues.map((issue) => (
-        <IssueRow key={issue.id} issue={issue} />
+        <IssueRow
+          key={issue.id}
+          issue={issue}
+          selected={issue.id === selectedId}
+          onSelect={onSelect}
+        />
       ))}
     </div>
   );
 }
 
-function IssueRow({ issue }: { issue: Issue }) {
+function IssueRow({
+  issue,
+  selected,
+  onSelect,
+}: {
+  issue: Issue;
+  selected: boolean;
+  onSelect: (issue: Issue) => void;
+}) {
   const labels: string[] = (() => {
     try { return JSON.parse(issue.labels); } catch { return []; }
   })();
 
   return (
     <div
+      onClick={() => onSelect(issue)}
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -181,6 +250,7 @@ function IssueRow({ issue }: { issue: Issue }) {
         borderBottom: "1px solid #2a2a3a",
         gap: 12,
         cursor: "pointer",
+        background: selected ? "#2a2a42" : "transparent",
       }}
     >
       {issue.status === "closed" ? (
