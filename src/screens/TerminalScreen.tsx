@@ -3,11 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   IconPlayerPlay,
   IconPlayerStop,
-  IconGitBranch,
-  IconGitMerge,
   IconFileCode,
-  IconX,
-  IconCheck,
 } from "@tabler/icons-react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -16,166 +12,9 @@ import { useProjectStore } from "../stores/projectStore";
 import { useTerminalStore } from "../stores/terminalStore";
 import { usePrStore } from "../stores/prStore";
 import { useUiStore } from "../stores/uiStore";
-
-// PRCreateModal は PRScreen から再利用するため、インライン定義を使う
-// (circular import を避けるため独立コンポーネントとして定義)
-function InlinePRCreateModal({
-  branchName,
-  projectId,
-  onClose,
-}: {
-  branchName: string;
-  projectId: number;
-  onClose: (created: boolean) => void;
-}) {
-  const [title, setTitle] = useState(`feat: ${branchName}`);
-  const [body, setBody] = useState("");
-  const { createPrFromBranch, createStatus, error } = usePrStore();
-
-  const handleCreate = async () => {
-    try {
-      await createPrFromBranch(projectId, branchName, title, body || undefined);
-      onClose(true);
-    } catch {
-      // error stored
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ background: "rgba(0,0,0,0.7)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(false); }}
-    >
-      <div className="bg-gray-900 border border-white/20 rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-white">Create Pull Request</div>
-          <button onClick={() => onClose(false)} className="text-gray-500 hover:text-gray-300">
-            <IconX size={16} />
-          </button>
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs text-gray-400">Branch</div>
-          <div className="px-3 py-2 rounded bg-white/5 text-xs font-mono text-gray-300">{branchName}</div>
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs text-gray-400">Title</div>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-purple-500"
-          />
-        </div>
-        <div className="space-y-1">
-          <div className="text-xs text-gray-400">Description (optional)</div>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-gray-200 resize-none h-24 focus:outline-none focus:border-purple-500"
-            placeholder="What does this PR do?"
-          />
-        </div>
-        {error && createStatus === "error" && (
-          <div className="text-xs text-red-400">{error}</div>
-        )}
-        <div className="flex gap-2 justify-end">
-          <button onClick={() => onClose(false)} className="px-4 py-2 rounded text-xs text-gray-400 hover:bg-white/10">Cancel</button>
-          <button
-            onClick={handleCreate}
-            disabled={!title.trim() || createStatus === "loading"}
-            className="flex items-center gap-1.5 px-4 py-2 rounded text-xs bg-purple-700 hover:bg-purple-600 text-white disabled:opacity-50"
-          >
-            <IconGitMerge size={12} />
-            {createStatus === "loading" ? "Creating…" : "Create PR"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── PRReadyBanner ───────────────────────────────────────────────────────────
-
-function PRReadyBanner({
-  branchName,
-  hasDocChanges,
-  onCreatePR,
-  onReviewChanges,
-  onDismiss,
-}: {
-  branchName: string;
-  hasDocChanges: boolean;
-  onCreatePR: () => void;
-  onReviewChanges: () => void;
-  onDismiss: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-green-900/40 border-b border-green-700/50">
-      <IconGitBranch size={14} className="text-green-400 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <span className="text-xs font-medium text-green-300">PR READY: </span>
-        <span className="text-xs font-mono text-green-200">{branchName}</span>
-        {hasDocChanges && (
-          <span className="ml-2 text-[10px] text-green-400">（設計書変更あり）</span>
-        )}
-      </div>
-      <button
-        onClick={onCreatePR}
-        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-green-700 hover:bg-green-600 text-white transition-colors shrink-0"
-      >
-        <IconGitMerge size={11} /> CREATE PR
-      </button>
-      <button
-        onClick={onReviewChanges}
-        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-gray-300 transition-colors shrink-0"
-      >
-        REVIEW CHANGES
-      </button>
-      <button onClick={onDismiss} className="text-gray-500 hover:text-gray-300">
-        <IconX size={12} />
-      </button>
-    </div>
-  );
-}
-
-// ─── PRCreatedBanner ─────────────────────────────────────────────────────────
-
-function PRCreatedBanner({
-  prNumber,
-  title,
-  hasDocChanges,
-  onOpenPR,
-  onDismiss,
-}: {
-  prNumber: number;
-  title: string;
-  hasDocChanges: boolean;
-  onOpenPR: () => void;
-  onDismiss: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-purple-900/40 border-b border-purple-700/50">
-      <IconCheck size={14} className="text-purple-400 shrink-0" />
-      <div className="flex-1 min-w-0 text-xs text-purple-200">
-        <span className="font-medium">PR #{prNumber}</span> を作成しました — {title}
-        {hasDocChanges && (
-          <span className="ml-2 text-purple-400 text-[10px]">
-            設計書変更あり。Design Docs タブで確認できます。
-          </span>
-        )}
-      </div>
-      <button
-        onClick={onOpenPR}
-        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-purple-700 hover:bg-purple-600 text-white transition-colors shrink-0"
-      >
-        PR を開く →
-      </button>
-      <button onClick={onDismiss} className="text-gray-500 hover:text-gray-300">
-        <IconX size={12} />
-      </button>
-    </div>
-  );
-}
+import { PRCreateModal } from "../components/terminal/PRCreateModal";
+import { PRReadyBanner } from "../components/terminal/PRReadyBanner";
+import { PRCreatedBanner } from "../components/terminal/PRCreatedBanner";
 
 // ─── TerminalPane ────────────────────────────────────────────────────────────
 
@@ -293,6 +132,7 @@ export function TerminalScreen() {
   const { startSession, stopSession, dismissBanner, listenEvents } = useTerminalStore();
   const navigate = useUiStore((s) => s.navigate);
   const syncPrs = usePrStore((s) => s.syncPrs);
+  const { createPrFromBranch, createStatus: prCreateStatus, error: prCreateError } = usePrStore();
 
   const [terminalHeight, setTerminalHeight] = useState(280);
   const [prCreated, setPrCreated] = useState<{
@@ -343,16 +183,21 @@ export function TerminalScreen() {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* PR 作成モーダル */}
       {showCreateModal && currentProject && (
-        <InlinePRCreateModal
+        <PRCreateModal
           branchName={readyBranch || session?.branch_name || ""}
-          projectId={currentProject.id}
-          onClose={(created) => {
-            setShowCreateModal(false);
-            if (created) {
+          createStatus={prCreateStatus}
+          error={prCreateError}
+          onSubmit={async (title, body) => {
+            try {
+              await createPrFromBranch(currentProject.id, readyBranch || session?.branch_name || "", title, body);
+              setShowCreateModal(false);
               dismissBanner();
               navigate("pr");
+            } catch {
+              // error stored in prStore
             }
           }}
+          onClose={() => setShowCreateModal(false)}
         />
       )}
       {/* ヘッダー */}
