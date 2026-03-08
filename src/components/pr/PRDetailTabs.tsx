@@ -22,7 +22,7 @@ export function PRDetailTabs({ activeTab, onChange, codeFileCount = 0 }: PRDetai
   return (
     <div className="flex border-b border-white/10 px-4">
       {TABS.map((tab) => {
-        const isEnabled = tab.phase <= 2;
+        const isEnabled = true;
         const isActive = activeTab === tab.id;
 
         return (

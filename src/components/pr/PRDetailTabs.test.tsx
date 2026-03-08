@@ -66,11 +66,18 @@ describe("PRDetailTabs", () => {
     expect(onChange).toHaveBeenCalledWith("code-diff");
   });
 
-  // ─── Design Docs (Phase 4 = disabled) ────────────────────────────────────
+  // ─── Design Docs (enabled) ────────────────────────────────────────────────
 
-  it("Design Docs タブは Phase 2 では disabled", () => {
+  it("Design Docs タブは enabled", () => {
     render(<PRDetailTabs {...defaultProps} />);
-    expect(screen.getByRole("button", { name: /design docs/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /design docs/i })).not.toBeDisabled();
+  });
+
+  it("Design Docs クリックで onChange('design-docs') が呼ばれる", () => {
+    const onChange = vi.fn();
+    render(<PRDetailTabs {...defaultProps} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /design docs/i }));
+    expect(onChange).toHaveBeenCalledWith("design-docs");
   });
 
   // ─── codeFileCount バッジ ─────────────────────────────────────────────────
