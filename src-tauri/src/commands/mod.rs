@@ -3,6 +3,7 @@ pub mod document;
 pub mod github_auth;
 pub mod issue;
 pub mod notifications;
+pub mod polling;
 pub mod pr;
 pub mod project;
 pub mod search;
@@ -87,6 +88,10 @@ macro_rules! all_commands {
             commands::pr::pr_merge,
             commands::pr::pr_create_from_branch,
             commands::pr::git_pull,
+            // Phase 5: ポーリング制御
+            commands::polling::polling_start,
+            commands::polling::polling_stop,
+            commands::polling::polling_status,
         ]
     };
 }

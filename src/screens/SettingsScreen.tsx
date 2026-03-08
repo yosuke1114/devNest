@@ -182,6 +182,45 @@ export function SettingsScreen() {
         )}
       </div>
 
+      {/* バックグラウンド同期 */}
+      <Section title="バックグラウンド同期" style={{ marginTop: 32 }}>
+        <p style={{ color: "#888", fontSize: 14, marginBottom: 16 }}>
+          GitHub の CI 結果・PR 更新を自動的にポーリングします。
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={async () => { await ipc.pollingStart(); }}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 6,
+              border: "1px solid #2a5c2a",
+              background: "rgba(46, 100, 46, 0.4)",
+              color: "#a0e0a0",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            有効にする
+          </button>
+          <button
+            onClick={async () => { await ipc.pollingStop(); }}
+            style={{
+              padding: "6px 16px",
+              borderRadius: 6,
+              border: "1px solid #3a3a52",
+              background: "transparent",
+              color: "#aaa",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            無効にする
+          </button>
+        </div>
+      </Section>
+
       {/* 検索インデックス */}
       <Section title="検索インデックス" style={{ marginTop: 32 }}>
         {!currentProject ? (

@@ -262,6 +262,11 @@ export const notificationPush = (
 export const notificationPermissionRequest = () =>
   invoke<string>("notification_permission_request");
 
+// ─── Polling ─────────────────────────────────────────────────────────────────
+export const pollingStart = () => invoke<void>("polling_start");
+export const pollingStop = () => invoke<void>("polling_stop");
+export const pollingStatus = () => invoke<boolean>("polling_status");
+
 // ─── Conflict ─────────────────────────────────────────────────────────────────
 export const conflictScan = (projectId: number) =>
   invoke<ConflictScanResult>("conflict_scan", { projectId });

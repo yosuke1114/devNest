@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 use tokio::sync::RwLock;
 use crate::db::DbPool;
 
@@ -18,6 +19,8 @@ pub struct AppState {
     pub oauth_channels: Arc<RwLock<HashMap<i64, tokio::sync::oneshot::Sender<String>>>>,
     /// アクティブな PTY セッション（同時 1 セッション）
     pub pty_session: Arc<Mutex<Option<PtySessionHandle>>>,
+    /// バックグラウンドポーリングの有効／無効フラグ（デフォルト: 有効）
+    pub polling_active: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -27,6 +30,7 @@ impl AppState {
             polling_handles: Arc::new(RwLock::new(HashMap::new())),
             oauth_channels: Arc::new(RwLock::new(HashMap::new())),
             pty_session: Arc::new(Mutex::new(None)),
+            polling_active: Arc::new(AtomicBool::new(true)),
         }
     }
 }
