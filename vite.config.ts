@@ -1,7 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 // @ts-ignore — Vitest 型は vitest パッケージが提供
 /// <reference types="vitest" />
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -27,7 +31,7 @@ export default defineConfig(async () => ({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     alias: {
-      "@tauri-apps/plugin-dialog": "/Users/yo_kuro/devNest/src/test/__mocks__/@tauri-apps/plugin-dialog.ts",
+      "@tauri-apps/plugin-dialog": resolve(__dirname, "src/test/__mocks__/@tauri-apps/plugin-dialog.ts"),
     },
   },
   server: {
