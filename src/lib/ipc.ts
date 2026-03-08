@@ -11,6 +11,7 @@ import type {
   GitHubAuthStatus,
   GitHubLabel,
   Issue,
+  IssueContextChunk,
   IssueDocLink,
   IssueDraft,
   IssueDraftPatch,
@@ -208,6 +209,9 @@ export const documentSearchSemantic = (projectId: number, query: string) =>
 
 export const searchHistoryList = (projectId: number) =>
   invoke<SearchHistory[]>("search_history_list", { projectId });
+
+export const searchContextForIssue = (projectId: number, issueId: number) =>
+  invoke<IssueContextChunk[]>("search_context_for_issue", { projectId, issueId });
 
 // ─── Terminal ────────────────────────────────────────────────────────────────
 export const terminalSessionStart = (projectId: number, promptSummary?: string) =>

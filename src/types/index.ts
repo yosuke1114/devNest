@@ -296,6 +296,12 @@ export interface SearchResult {
   score: number;
 }
 
+export interface IssueContextChunk {
+  path: string;
+  section_heading: string | null;
+  content: string;
+}
+
 export interface SearchHistory {
   id: number;
   project_id: number;

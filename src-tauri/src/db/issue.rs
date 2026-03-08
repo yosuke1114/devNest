@@ -63,6 +63,17 @@ pub async fn upsert(
     Ok(row.0)
 }
 
+/// Issue を ID で取得する。存在しない場合は NotFound エラー。
+pub async fn find_by_id(pool: &DbPool, issue_id: i64) -> Result<crate::models::issue::Issue> {
+    sqlx::query_as::<_, crate::models::issue::Issue>(
+        "SELECT * FROM issues WHERE id = ?"
+    )
+    .bind(issue_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("issue {}", issue_id)))
+}
+
 /// プロジェクトの Issue 一覧を取得する（status フィルタは None = 全件）。
 pub async fn list(
     pool: &DbPool,

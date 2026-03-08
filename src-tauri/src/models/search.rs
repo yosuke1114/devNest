@@ -13,6 +13,14 @@ pub struct SearchResult {
     pub score: f64,
 }
 
+/// Issue のコンテキスト検索結果チャンク（Terminal セッション起動時に使用）。
+#[derive(Debug, Clone, Serialize)]
+pub struct IssueContextChunk {
+    pub path: String,
+    pub section_heading: Option<String>,
+    pub content: String,
+}
+
 /// 検索履歴エントリ。
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SearchHistory {

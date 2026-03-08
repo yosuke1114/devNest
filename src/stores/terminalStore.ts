@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as ipc from "../lib/ipc";
-import type { AsyncStatus, TerminalDonePayload, TerminalSession } from "../types";
+import type { AsyncStatus, IssueContextChunk, TerminalDonePayload, TerminalSession } from "../types";
 
 interface TerminalState {
   session: TerminalSession | null;
@@ -11,6 +11,9 @@ interface TerminalState {
   hasDocChanges: boolean;
   changedFiles: string[];
   error: string | null;
+  /** Issue コンテキスト検索結果（search_context_for_issue の結果）。
+   *  startSession 前に呼び側がセットし、Claude Code の context として利用する。 */
+  contextChunks: IssueContextChunk[];
 
   startSession: (projectId: number, promptSummary?: string) => Promise<void>;
   stopSession: () => Promise<void>;
@@ -32,6 +35,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   hasDocChanges: false,
   changedFiles: [],
   error: null,
+  contextChunks: [],
 
   startSession: async (projectId, promptSummary) => {
     set({ startStatus: "loading", error: null, showPrReadyBanner: false });

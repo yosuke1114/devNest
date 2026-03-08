@@ -62,6 +62,7 @@ macro_rules! all_commands {
             commands::search::document_search_semantic,
             commands::search::search_history_list,
             commands::search::index_reset,
+            commands::search::search_context_for_issue,
             // Phase 4: Conflict 解消
             commands::conflict::conflict_scan,
             commands::conflict::conflict_list,

@@ -1,7 +1,7 @@
 use tauri::State;
 use crate::db;
 use crate::error::{AppError, Result};
-use crate::models::search::{SearchHistory, SearchResult};
+use crate::models::search::{IssueContextChunk, SearchHistory, SearchResult};
 use crate::services::chunker;
 use crate::state::AppState;
 
@@ -136,6 +136,41 @@ pub async fn index_reset(
     Ok(count)
 }
 
+// ─── search_context_for_issue ────────────────────────────────────────────────
+
+/// Issue のタイトル + 本文をクエリとして設計書を FTS5 検索し、
+/// 関連チャンク上位 5 件を返す。Claude Code の context として使用。
+#[tauri::command]
+pub async fn search_context_for_issue(
+    project_id: i64,
+    issue_id: i64,
+    state: State<'_, AppState>,
+) -> std::result::Result<Vec<IssueContextChunk>, AppError> {
+    // 1. Issue を取得
+    let issue = db::issue::find_by_id(&state.db, issue_id).await?;
+
+    // 2. タイトル + 本文の先頭 300 文字をクエリに
+    let query = format!(
+        "{} {}",
+        issue.title,
+        issue.body.as_deref().unwrap_or("").chars().take(300).collect::<String>()
+    );
+
+    // 3. FTS5 で検索（上位 5 件）
+    let results = db::search::search_keyword(&state.db, project_id, &query, 5)
+        .await
+        .unwrap_or_default(); // インデックスなしの場合は空を返す
+
+    Ok(results
+        .into_iter()
+        .map(|r| IssueContextChunk {
+            path: r.path,
+            section_heading: r.section_heading,
+            content: r.content,
+        })
+        .collect())
+}
+
 // ─── ヘルパー ─────────────────────────────────────────────────────────────────
 
 /// Anthropic claude-haiku にクエリを渡し、FTS5 用の拡張キーワードリストを得る。
@@ -195,7 +230,9 @@ mod tests {
     use crate::db::{self, connect, migrations};
     use crate::db::project;
     use crate::services::{chunker, git::GitService};
+    use crate::services::github::{GitHubIssue, GitHubLabel, GitHubMilestone, GitHubUser};
     use crate::state::AppState;
+    use chrono::Utc;
     use git2::Repository;
     use tempfile::TempDir;
 
@@ -340,6 +377,105 @@ mod tests {
         let docs = db::document::list_by_project(&state.db, p.id).await.unwrap();
         let count = docs.len();
         assert_eq!(count, 0, "ドキュメント 0 件で count=0");
+    }
+
+    // ─── search_context_for_issue ────────────────────────────────────────────
+
+    fn make_gh_issue(number: i64, id: i64) -> GitHubIssue {
+        GitHubIssue {
+            number,
+            id,
+            title: "Fix authentication bug".to_string(),
+            body: Some("Users cannot log in when OAuth token expires. Need to refresh token.".to_string()),
+            state: "open".to_string(),
+            user: GitHubUser { login: "alice".to_string(), name: None, avatar_url: "".to_string() },
+            assignee: None,
+            labels: vec![GitHubLabel { id: 1, name: "bug".to_string(), color: "red".to_string(), description: None }],
+            milestone: Some(GitHubMilestone { title: "v1.0".to_string() }),
+            created_at: "2026-03-08T00:00:00Z".to_string(),
+            updated_at: "2026-03-08T00:00:00Z".to_string(),
+        }
+    }
+
+    // 🔴 Red: Issue が存在しない場合は find_by_id が NotFound エラーを返す
+    //  → コマンド search_context_for_issue もそのエラーを伝播する
+    #[tokio::test]
+    async fn test_search_context_for_issue_not_found() {
+        let (state, _dir) = setup().await;
+        let result = db::issue::find_by_id(&state.db, 9999).await;
+        assert!(result.is_err(), "存在しない issue_id は NotFound エラー");
+    }
+
+    // 🔴 Red: インデックスがない場合は空リストを返す
+    #[tokio::test]
+    async fn test_search_context_for_issue_no_index_returns_empty() {
+        let (state, _dir) = setup().await;
+        let p = project::insert(&state.db, "P", "/tmp", "o", "r").await.unwrap();
+        let now = Utc::now().to_rfc3339();
+        let issue_id = db::issue::upsert(&state.db, p.id, &make_gh_issue(1, 101), &now).await.unwrap();
+
+        // インデックスなし → unwrap_or_default() により空リスト
+        let issue = db::issue::find_by_id(&state.db, issue_id).await.unwrap();
+        let query = format!(
+            "{} {}",
+            issue.title,
+            issue.body.as_deref().unwrap_or("").chars().take(300).collect::<String>()
+        );
+        let chunks = db::search::search_keyword(&state.db, p.id, &query, 5)
+            .await
+            .unwrap_or_default();
+        assert!(chunks.is_empty(), "インデックスなし → 空リスト");
+    }
+
+    // 🔴 Red: インデックスがある場合は関連チャンクが返る
+    #[tokio::test]
+    async fn test_search_context_for_issue_with_index_returns_chunks() {
+        let content = "## Authentication\n\nOAuth token refresh flow. Users need to re-authenticate when tokens expire.";
+        let (state, _dir, project_id, _) = setup_with_indexed_doc(content).await;
+        let now = Utc::now().to_rfc3339();
+        let issue_id = db::issue::upsert(&state.db, project_id, &make_gh_issue(2, 102), &now).await.unwrap();
+
+        let issue = db::issue::find_by_id(&state.db, issue_id).await.unwrap();
+        let query = format!(
+            "{} {}",
+            issue.title,
+            issue.body.as_deref().unwrap_or("").chars().take(300).collect::<String>()
+        );
+        let results = db::search::search_keyword(&state.db, project_id, &query, 5)
+            .await
+            .unwrap_or_default();
+        // "authentication" や "token" を含むチャンクがヒットする
+        assert!(!results.is_empty(), "インデックスあり → 関連チャンクが返る");
+        assert!(
+            results[0].content.to_lowercase().contains("authentication")
+                || results[0].content.to_lowercase().contains("token"),
+            "ヒットしたチャンクに Issue 関連語が含まれる"
+        );
+    }
+
+    // 🔴 Red: find_by_id が存在する Issue を正しく返すこと
+    #[tokio::test]
+    async fn test_find_by_id_returns_issue() {
+        let (state, _dir) = setup().await;
+        let p = project::insert(&state.db, "P", "/tmp", "o", "r").await.unwrap();
+        let now = Utc::now().to_rfc3339();
+        let issue_id = db::issue::upsert(&state.db, p.id, &make_gh_issue(3, 103), &now).await.unwrap();
+
+        let issue = db::issue::find_by_id(&state.db, issue_id).await.unwrap();
+        assert_eq!(issue.id, issue_id);
+        assert_eq!(issue.title, "Fix authentication bug");
+    }
+
+    // 🔴 Red: find_by_id が存在しない ID で NotFound を返すこと
+    #[tokio::test]
+    async fn test_find_by_id_not_found() {
+        let (state, _dir) = setup().await;
+        let result = db::issue::find_by_id(&state.db, 99999).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            crate::error::AppError::NotFound(_) => {}
+            other => panic!("Expected NotFound, got {:?}", other),
+        }
     }
 
     // 🔴 Red: document_index_build 相当: delete → index で chunks が正しく登録されること
