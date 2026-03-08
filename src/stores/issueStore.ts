@@ -40,6 +40,7 @@ interface IssueState {
   updateDraft: (patch: IssueDraftPatch) => Promise<void>;
   selectDraft: (draft: IssueDraft | null) => void;
   generateDraft: (draftId: number) => Promise<void>;
+  cancelDraft: (draftId: number) => Promise<void>;
 
   // Labels
   fetchLabels: (projectId: number) => Promise<void>;
@@ -156,6 +157,14 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     } catch (e) {
       set({ generateStatus: "error", error: e as AppError });
     }
+  },
+
+  cancelDraft: async (draftId) => {
+    await ipc.issueDraftCancel(draftId);
+    set((s) => ({
+      drafts: s.drafts.filter((d) => d.id !== draftId),
+      currentDraft: s.currentDraft?.id === draftId ? null : s.currentDraft,
+    }));
   },
 
   fetchLabels: async (projectId) => {

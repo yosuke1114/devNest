@@ -4,9 +4,11 @@ import {
   IconCheck,
   IconX,
   IconLoader,
+  IconDatabase,
 } from "@tabler/icons-react";
 import { useProjectStore } from "../stores/projectStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import * as ipc from "../lib/ipc";
 
 export function SettingsScreen() {
   const { currentProject } = useProjectStore();
@@ -33,6 +35,8 @@ export function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [authStarted, setAuthStarted] = useState(false);
+  const [indexResetting, setIndexResetting] = useState(false);
+  const [indexResetMsg, setIndexResetMsg] = useState<string | null>(null);
 
   useEffect(() => {
     loadCredentials();
@@ -66,6 +70,22 @@ export function SettingsScreen() {
       await startAuth(currentProject.id);
     } catch (e) {
       setAuthStarted(false);
+    }
+  };
+
+  const handleIndexReset = async () => {
+    if (!currentProject) return;
+    if (!confirm("検索インデックスをリセットしますか？")) return;
+    setIndexResetting(true);
+    setIndexResetMsg(null);
+    try {
+      const count = await ipc.indexReset(currentProject.id);
+      setIndexResetMsg(`${count} 件のドキュメントのインデックスをリセットしました`);
+      setTimeout(() => setIndexResetMsg(null), 4000);
+    } catch {
+      setIndexResetMsg("リセットに失敗しました");
+    } finally {
+      setIndexResetting(false);
     }
   };
 
@@ -161,6 +181,49 @@ export function SettingsScreen() {
           </span>
         )}
       </div>
+
+      {/* 検索インデックス */}
+      <Section title="検索インデックス" style={{ marginTop: 32 }}>
+        {!currentProject ? (
+          <p style={{ color: "#888", fontSize: 14 }}>
+            プロジェクトを選択してください
+          </p>
+        ) : (
+          <div>
+            <p style={{ color: "#888", fontSize: 14, marginBottom: 16 }}>
+              検索インデックスをリセットすると、次回のインデックス構築時に再作成されます。
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button
+                onClick={handleIndexReset}
+                disabled={indexResetting}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  background: "transparent",
+                  border: "1px solid #3a3a52",
+                  borderRadius: 6,
+                  color: "#e0e0e0",
+                  cursor: indexResetting ? "not-allowed" : "pointer",
+                  padding: "8px 14px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  opacity: indexResetting ? 0.7 : 1,
+                }}
+              >
+                <IconDatabase size={16} />
+                {indexResetting ? "リセット中…" : "インデックスをリセット"}
+              </button>
+              {indexResetMsg && (
+                <span style={{ color: "#2ecc71", fontSize: 13 }}>
+                  {indexResetMsg}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </Section>
 
       {/* GitHub 認証 */}
       <Section title="GitHub 認証" style={{ marginTop: 32 }}>

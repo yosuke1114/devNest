@@ -138,6 +138,9 @@ export const issueDraftList = (projectId: number) =>
 export const issueDraftGenerate = (draftId: number) =>
   invoke<void>("issue_draft_generate", { draftId });
 
+export const issueDraftCancel = (draftId: number) =>
+  invoke<void>("issue_draft_cancel", { draftId });
+
 export const githubLabelsList = (projectId: number) =>
   invoke<GitHubLabel[]>("github_labels_list", { projectId });
 
@@ -190,6 +193,9 @@ export const prMerge = (
 // ─── Search ──────────────────────────────────────────────────────────────────
 export const documentIndexBuild = (projectId: number, documentId: number) =>
   invoke<number>("document_index_build", { projectId, documentId });
+
+export const indexReset = (projectId: number) =>
+  invoke<number>("index_reset", { projectId });
 
 export const documentSearchKeyword = (projectId: number, query: string) =>
   invoke<SearchResult[]>("document_search_keyword", { projectId, query });

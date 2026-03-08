@@ -228,6 +228,41 @@ describe("issueStore", () => {
     expect(useIssueStore.getState().generateStatus).toBe("success");
   });
 
+  // ─── cancelDraft ───────────────────────────────────────────────────────────
+
+  it("cancelDraft() が issueDraftCancel を呼ぶ", async () => {
+    vi.mocked(ipc.issueDraftCancel).mockResolvedValueOnce(undefined);
+    await useIssueStore.getState().cancelDraft(1);
+    expect(ipc.issueDraftCancel).toHaveBeenCalledWith(1);
+  });
+
+  it("cancelDraft() 後に drafts から対象が除去される", async () => {
+    const draft1 = makeDraft({ id: 1 });
+    const draft2 = makeDraft({ id: 2 });
+    useIssueStore.setState({ drafts: [draft1, draft2], currentDraft: draft1 });
+    vi.mocked(ipc.issueDraftCancel).mockResolvedValueOnce(undefined);
+
+    await useIssueStore.getState().cancelDraft(1);
+
+    const state = useIssueStore.getState();
+    expect(state.drafts).toHaveLength(1);
+    expect(state.drafts[0].id).toBe(2);
+    expect(state.currentDraft).toBeNull();
+  });
+
+  it("cancelDraft() で currentDraft でない下書きを削除しても currentDraft は維持される", async () => {
+    const draft1 = makeDraft({ id: 1 });
+    const draft2 = makeDraft({ id: 2 });
+    useIssueStore.setState({ drafts: [draft1, draft2], currentDraft: draft2 });
+    vi.mocked(ipc.issueDraftCancel).mockResolvedValueOnce(undefined);
+
+    await useIssueStore.getState().cancelDraft(1);
+
+    const state = useIssueStore.getState();
+    expect(state.drafts).toHaveLength(1);
+    expect(state.currentDraft?.id).toBe(2);
+  });
+
   // ─── fetchLabels ───────────────────────────────────────────────────────────
 
   it("fetchLabels() が githubLabelsList を呼ぶ", async () => {

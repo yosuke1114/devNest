@@ -44,6 +44,7 @@ macro_rules! all_commands {
             commands::issue::issue_draft_update,
             commands::issue::issue_draft_list,
             commands::issue::issue_draft_generate,
+            commands::issue::issue_draft_cancel,
             commands::issue::github_labels_list,
             // Phase 1: GitHub 認証
             commands::github_auth::github_auth_start,
@@ -60,6 +61,7 @@ macro_rules! all_commands {
             commands::search::document_search_keyword,
             commands::search::document_search_semantic,
             commands::search::search_history_list,
+            commands::search::index_reset,
             // Phase 4: Conflict 解消
             commands::conflict::conflict_scan,
             commands::conflict::conflict_list,

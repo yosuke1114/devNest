@@ -119,6 +119,17 @@ pub async fn issue_draft_list(
     db::issue::draft_list(&state.db, project_id).await
 }
 
+// ─── issue_draft_cancel ──────────────────────────────────────────────────────
+
+/// Issue ドラフトを削除（キャンセル）する。
+#[tauri::command]
+pub async fn issue_draft_cancel(
+    draft_id: i64,
+    state: State<'_, AppState>,
+) -> std::result::Result<(), AppError> {
+    db::issue::draft_delete(&state.db, draft_id).await
+}
+
 // ─── T-R-D06: issue_draft_generate ──────────────────────────────────────────
 
 /// issue_draft_chunk イベントのペイロード
@@ -432,6 +443,30 @@ mod tests {
         db::issue::link_remove(&state.db, issue_id, doc_id).await.unwrap();
         let links_after = db::issue::link_list(&state.db, issue_id).await.unwrap();
         assert!(links_after.is_empty());
+    }
+
+    // 🔴 Red: draft_cancel で下書きが DB から消えること
+    #[tokio::test]
+    async fn test_draft_cancel_removes_from_db() {
+        let (state, _dir) = setup().await;
+        let pid = insert_project(&state).await;
+        let draft = db::issue::draft_create(&state.db, pid).await.unwrap();
+        // command layer delegates to db::issue::draft_delete
+        db::issue::draft_delete(&state.db, draft.id).await.unwrap();
+        let list = db::issue::draft_list(&state.db, pid).await.unwrap();
+        assert!(list.is_empty());
+    }
+
+    // 🔴 Red: 存在しない draft_id は NotFound エラー
+    #[tokio::test]
+    async fn test_draft_cancel_not_found_returns_error() {
+        let (state, _dir) = setup().await;
+        let result = db::issue::draft_delete(&state.db, 9999).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::NotFound(_) => {}
+            other => panic!("Expected NotFound, got {:?}", other),
+        }
     }
 
     // 🔴 Red: draft_update で status を 'submitted' に変更できること

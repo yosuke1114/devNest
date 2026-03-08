@@ -211,6 +211,18 @@ pub async fn draft_find(pool: &DbPool, draft_id: i64) -> Result<IssueDraft> {
     .ok_or_else(|| AppError::NotFound(format!("draft id={}", draft_id)))
 }
 
+/// Issue ドラフトを削除する。存在しない場合は NotFound エラー。
+pub async fn draft_delete(pool: &DbPool, draft_id: i64) -> Result<()> {
+    let rows = sqlx::query("DELETE FROM issue_drafts WHERE id = ?")
+        .bind(draft_id)
+        .execute(pool)
+        .await?;
+    if rows.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!("draft {}", draft_id)));
+    }
+    Ok(())
+}
+
 /// プロジェクトの Issue ドラフト一覧。
 pub async fn draft_list(pool: &DbPool, project_id: i64) -> Result<Vec<IssueDraft>> {
     let drafts = sqlx::query_as::<_, IssueDraft>(
@@ -407,5 +419,30 @@ mod tests {
         draft_create(&pool, pid).await.unwrap();
         let drafts = draft_list(&pool, pid).await.unwrap();
         assert_eq!(drafts.len(), 2);
+    }
+
+    // 🔴 Red: draft_delete でドラフトが DB から削除されること
+    #[tokio::test]
+    async fn test_draft_delete_removes_from_db() {
+        let (pool, _dir) = setup().await;
+        let pid = insert_project(&pool).await;
+        let draft = draft_create(&pool, pid).await.unwrap();
+
+        draft_delete(&pool, draft.id).await.unwrap();
+
+        let list = draft_list(&pool, pid).await.unwrap();
+        assert!(list.is_empty());
+    }
+
+    // 🔴 Red: 存在しない draft_id は NotFound エラー
+    #[tokio::test]
+    async fn test_draft_delete_not_found_returns_error() {
+        let (pool, _dir) = setup().await;
+        let result = draft_delete(&pool, 9999).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::NotFound(_) => {}
+            other => panic!("Expected NotFound, got {:?}", other),
+        }
     }
 }

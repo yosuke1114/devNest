@@ -119,6 +119,23 @@ pub async fn search_history_list(
     db::search::list_history(&state.db, project_id, 20).await
 }
 
+// ─── index_reset ─────────────────────────────────────────────────────────────
+
+/// プロジェクトの全ドキュメントのインデックスを削除する。
+/// 戻り値: 処理したドキュメント数。
+#[tauri::command]
+pub async fn index_reset(
+    project_id: i64,
+    state: State<'_, AppState>,
+) -> std::result::Result<usize, AppError> {
+    let docs = db::document::list_by_project(&state.db, project_id).await?;
+    let count = docs.len();
+    for doc in &docs {
+        let _ = db::search::delete_document_index(&state.db, doc.id).await;
+    }
+    Ok(count)
+}
+
 // ─── ヘルパー ─────────────────────────────────────────────────────────────────
 
 /// Anthropic claude-haiku にクエリを渡し、FTS5 用の拡張キーワードリストを得る。
@@ -288,6 +305,41 @@ mod tests {
         let sem = db::search::search_keyword(&state.db, project_id, "authentication", 20)
             .await.unwrap();
         assert_eq!(kw.len(), sem.len(), "API キーなし時は keyword と同じ結果");
+    }
+
+    // 🔴 Red: index_reset でプロジェクトの全インデックスが削除されること
+    #[tokio::test]
+    async fn test_index_reset_clears_all() {
+        let content = "## Architecture\n\nThis is the system design.";
+        let (state, _dir, project_id, doc_id) = setup_with_indexed_doc(content).await;
+
+        // インデックスが存在することを確認
+        let before = db::search::search_keyword(&state.db, project_id, "architecture", 20).await.unwrap();
+        assert!(!before.is_empty(), "インデックスが存在する");
+
+        // index_reset 相当: 全ドキュメントのインデックスを削除
+        let docs = db::document::list_by_project(&state.db, project_id).await.unwrap();
+        let count = docs.len();
+        for doc in &docs {
+            db::search::delete_document_index(&state.db, doc.id).await.unwrap();
+        }
+        assert_eq!(count, 1, "1ドキュメント処理した");
+
+        // インデックスがクリアされたことを確認
+        let after = db::search::search_keyword(&state.db, project_id, "architecture", 20).await.unwrap();
+        assert!(after.is_empty(), "インデックスがリセットされた");
+        let _ = doc_id;
+    }
+
+    // 🔴 Red: ドキュメントが 0 件のとき 0 を返すこと
+    #[tokio::test]
+    async fn test_index_reset_empty_returns_zero() {
+        let (state, _dir) = setup().await;
+        let p = project::insert(&state.db, "P", "/tmp", "o", "r").await.unwrap();
+
+        let docs = db::document::list_by_project(&state.db, p.id).await.unwrap();
+        let count = docs.len();
+        assert_eq!(count, 0, "ドキュメント 0 件で count=0");
     }
 
     // 🔴 Red: document_index_build 相当: delete → index で chunks が正しく登録されること
