@@ -1,6 +1,7 @@
 import { IconFileCode } from "@tabler/icons-react";
 import type { PrFile } from "../../types";
 import { parseDiff } from "../../lib/diffParser";
+import { FileDiff } from "./FileDiff";
 
 interface TabCodeDiffProps {
   files: PrFile[];
@@ -62,45 +63,9 @@ export function TabCodeDiff({
         </div>
       )}
 
-      {/* Diff hunks */}
+      {/* Diff hunks via FileDiff */}
       {fileDiffs.map((fd) => (
-        <div key={fd.filename} className="rounded-lg border border-white/10 overflow-hidden">
-          <div className="px-3 py-2 bg-white/5 text-xs font-mono text-gray-300 border-b border-white/10">
-            {fd.filename}
-          </div>
-          {fd.hunks.map((hunk, hi) => (
-            <div key={hi}>
-              <div className="px-3 py-1 bg-blue-950/40 text-[10px] font-mono text-blue-300">
-                {hunk.header}
-              </div>
-              <div className="font-mono text-[11px] leading-5">
-                {hunk.lines.map((line, li) => (
-                  <div
-                    key={li}
-                    className={`flex ${
-                      line.type === "add"
-                        ? "bg-green-950/40 text-green-300"
-                        : line.type === "remove"
-                        ? "bg-red-950/40 text-red-300"
-                        : "text-gray-400"
-                    }`}
-                  >
-                    <span className="w-10 px-2 text-right text-gray-600 select-none shrink-0">
-                      {line.oldLineNo ?? ""}
-                    </span>
-                    <span className="w-10 px-2 text-right text-gray-600 select-none shrink-0">
-                      {line.newLineNo ?? ""}
-                    </span>
-                    <span className="px-2 whitespace-pre flex-1 overflow-x-auto">
-                      {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
-                      {line.content}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <FileDiff key={fd.filename} fileDiff={fd} />
       ))}
     </div>
   );

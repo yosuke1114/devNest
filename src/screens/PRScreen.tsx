@@ -260,14 +260,7 @@ function PRDetailPanel({ projectId }: { projectId: number }) {
 
       {activeTab === "overview" ? (
         <div className="overflow-y-auto p-4 space-y-4">
-          <TabOverview
-            detail={detail}
-            reviewStatus={reviewStatus}
-            mergeStatus={mergeStatus}
-            onApprove={() => submitReview(projectId, detail.pr.id, "approved")}
-            onRequestChanges={() => submitReview(projectId, detail.pr.id, "changes_requested")}
-            onMerge={() => mergePr(projectId, detail.pr.id, "squash")}
-          />
+          <TabOverview detail={detail} />
           {detail.pr.state === "open" && (
             <>
               <ReviewPanel
