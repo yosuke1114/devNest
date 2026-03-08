@@ -7,3 +7,5 @@ dist/
 *.db-wal
 .env
 .env.local
+src-tauri/not-a-valid-url
+src-tauri/not-a-valid-url-wal
