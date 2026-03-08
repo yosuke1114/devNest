@@ -16,6 +16,7 @@ interface NotificationsState {
   markRead: (notificationId: number) => Promise<void>;
   markAllRead: (projectId: number) => Promise<void>;
   navigateTo: (projectId: number, notificationId: number) => Promise<void>;
+  requestPermission: () => Promise<void>;
   listenEvents: () => () => void;
   onNotificationNew: (payload: { notificationId: number; title: string }) => void;
 }
@@ -98,6 +99,11 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       created_at: now,
     };
     set((s) => ({ notifications: [stub, ...s.notifications] }));
+  },
+
+  requestPermission: async () => {
+    const status = await ipc.notificationPermissionRequest();
+    set({ permissionStatus: status as NotificationsState["permissionStatus"] });
   },
 
   listenEvents: () => {

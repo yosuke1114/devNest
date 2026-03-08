@@ -74,6 +74,7 @@ macro_rules! all_commands {
             commands::notifications::notification_mark_all_read,
             commands::notifications::notification_navigate,
             commands::notifications::notification_push,
+            commands::notifications::notification_permission_request,
             // Phase 2: PR
             commands::pr::pr_sync,
             commands::pr::pr_list,

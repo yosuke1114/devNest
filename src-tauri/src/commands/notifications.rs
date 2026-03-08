@@ -1,5 +1,6 @@
 use tauri::{Emitter, State};
-use crate::error::Result;
+use tauri_plugin_notification::NotificationExt;
+use crate::error::{AppError, Result};
 use crate::models::notifications::{NavigationTarget, NewNotification, Notification};
 use crate::state::AppState;
 use crate::db;
@@ -77,6 +78,18 @@ pub async fn notification_push(
         "title": title,
     }));
     Ok(id)
+}
+
+/// OS の通知権限をリクエストし、結果を文字列で返す
+#[tauri::command]
+pub async fn notification_permission_request(
+    app: tauri::AppHandle,
+) -> std::result::Result<String, AppError> {
+    let status = app
+        .notification()
+        .request_permission()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(format!("{:?}", status).to_lowercase())
 }
 
 #[cfg(test)]

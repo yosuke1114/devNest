@@ -176,4 +176,18 @@ describe("notificationsStore", () => {
     useNotificationsStore.getState().onNotificationNew({ notificationId: 5, title: "Test" });
     expect(useNotificationsStore.getState().notifications[0].is_read).toBe(false);
   });
+
+  // ─── requestPermission ────────────────────────────────────────────────────
+
+  it("requestPermission() が notificationPermissionRequest を呼ぶ", async () => {
+    mockIpc.notificationPermissionRequest.mockResolvedValueOnce("granted");
+    await useNotificationsStore.getState().requestPermission();
+    expect(mockIpc.notificationPermissionRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("requestPermission() 成功後に permissionStatus が 'granted' になる", async () => {
+    mockIpc.notificationPermissionRequest.mockResolvedValueOnce("granted");
+    await useNotificationsStore.getState().requestPermission();
+    expect(useNotificationsStore.getState().permissionStatus).toBe("granted");
+  });
 });

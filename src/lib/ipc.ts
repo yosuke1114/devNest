@@ -252,6 +252,9 @@ export const notificationPush = (
     destResourceId,
   });
 
+export const notificationPermissionRequest = () =>
+  invoke<string>("notification_permission_request");
+
 // ─── Conflict ─────────────────────────────────────────────────────────────────
 export const conflictScan = (projectId: number) =>
   invoke<ConflictScanResult>("conflict_scan", { projectId });
