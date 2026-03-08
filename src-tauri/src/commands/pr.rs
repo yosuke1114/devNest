@@ -4,6 +4,7 @@ use crate::db;
 use crate::error::AppError;
 use crate::models::pr::{PrComment, PrDetail, PrFile, PullRequest, ReviewSubmitPayload};
 use crate::services::{github::GitHubClient, keychain};
+use crate::services::git::PullStatus;
 use crate::state::AppState;
 
 // ─── pr_sync ─────────────────────────────────────────────────────────────────
@@ -247,6 +248,36 @@ pub async fn pr_create_from_branch(
     prs.into_iter()
         .find(|p| p.github_number == gh_pr.number)
         .ok_or_else(|| AppError::NotFound("created PR not found in DB".to_string()))
+}
+
+// ─── git_pull ─────────────────────────────────────────────────────────────────
+
+/// ローカルリポジトリを fetch + fast-forward pull する。
+/// 戻り値: "success" | "up_to_date" | "conflict"
+#[tauri::command]
+pub async fn git_pull(
+    project_id: i64,
+    state: State<'_, AppState>,
+) -> std::result::Result<String, AppError> {
+    let project = db::project::find(&state.db, project_id).await?;
+    let local_path = project.local_path.clone();
+    let token = keychain::require_token(project_id)?;
+
+    let status = tokio::task::spawn_blocking(move || -> std::result::Result<PullStatus, AppError> {
+        let git = crate::services::git::GitService::open(&local_path)?;
+        let branch = git.current_branch()?;
+        let result = git.pull(&token, "origin", &branch)?;
+        Ok(result.status)
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    Ok(match status {
+        PullStatus::Success => "success",
+        PullStatus::UpToDate => "up_to_date",
+        PullStatus::Conflict => "conflict",
+    }
+    .to_string())
 }
 
 #[cfg(test)]

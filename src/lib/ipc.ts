@@ -190,6 +190,9 @@ export const prMerge = (
   mergeMethod?: string
 ) => invoke<void>("pr_merge", { projectId, prId, mergeMethod });
 
+export const gitPull = (projectId: number) =>
+  invoke<string>("git_pull", { projectId });
+
 // ─── Search ──────────────────────────────────────────────────────────────────
 export const documentIndexBuild = (projectId: number, documentId: number) =>
   invoke<number>("document_index_build", { projectId, documentId });

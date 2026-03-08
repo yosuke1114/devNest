@@ -177,6 +177,57 @@ impl GitService {
         Ok(())
     }
 
+    /// HTTPS トークン認証で fetch + fast-forward pull する
+    pub fn pull(&self, token: &str, remote_name: &str, branch: &str) -> crate::error::Result<PullResult> {
+        // 1. fetch
+        let mut remote = self.repo.find_remote(remote_name)
+            .map_err(|e| AppError::Git(e.to_string()))?;
+
+        let mut callbacks = git2::RemoteCallbacks::new();
+        let token_clone = token.to_string();
+        callbacks.credentials(move |_url, _username_from_url, _allowed| {
+            git2::Cred::userpass_plaintext("x-access-token", &token_clone)
+        });
+
+        let mut fetch_opts = git2::FetchOptions::new();
+        fetch_opts.remote_callbacks(callbacks);
+
+        remote.fetch(&[branch], Some(&mut fetch_opts), None)
+            .map_err(|e| AppError::Git(format!("fetch 失敗: {}", e)))?;
+
+        // 2. FETCH_HEAD
+        let fetch_head = match self.repo.find_reference("FETCH_HEAD") {
+            Ok(r) => r,
+            Err(_) => return Ok(PullResult { status: PullStatus::UpToDate, conflict_files: vec![] }),
+        };
+        let fetch_commit = self.repo.reference_to_annotated_commit(&fetch_head)
+            .map_err(|e| AppError::Git(e.to_string()))?;
+
+        // 3. merge analysis
+        let (analysis, _) = self.repo.merge_analysis(&[&fetch_commit])
+            .map_err(|e| AppError::Git(e.to_string()))?;
+
+        if analysis.is_up_to_date() {
+            return Ok(PullResult { status: PullStatus::UpToDate, conflict_files: vec![] });
+        }
+
+        if analysis.is_fast_forward() {
+            let ref_name = format!("refs/heads/{}", branch);
+            let mut reference = self.repo.find_reference(&ref_name)
+                .map_err(|e| AppError::Git(e.to_string()))?;
+            reference.set_target(fetch_commit.id(), "pull: fast-forward")
+                .map_err(|e| AppError::Git(e.to_string()))?;
+            self.repo.set_head(&ref_name)
+                .map_err(|e| AppError::Git(e.to_string()))?;
+            self.repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))
+                .map_err(|e| AppError::Git(e.to_string()))?;
+            return Ok(PullResult { status: PullStatus::Success, conflict_files: vec![] });
+        }
+
+        // diverged or conflict
+        Ok(PullResult { status: PullStatus::Conflict, conflict_files: vec![] })
+    }
+
     /// git status でコンフリクト状態のファイルパスを返す
     pub fn list_conflicted_files(&self) -> Result<Vec<String>> {
         let statuses = self
@@ -412,6 +463,36 @@ mod tests {
 
         let conflicts = svc.list_conflicted_files().unwrap();
         assert!(conflicts.is_empty(), "クリーンなリポジトリにコンフリクトはない");
+    }
+
+    // 🔴 Red: pull がリモート未設定のときエラーを返すこと
+    #[test]
+    fn test_pull_without_remote_returns_error() {
+        let dir = TempDir::new().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "Test").unwrap();
+        cfg.set_str("user.email", "test@example.com").unwrap();
+        drop(cfg);
+        let svc = GitService::open(dir.path().to_str().unwrap()).unwrap();
+        // origin が設定されていないのでエラー
+        let result = svc.pull("token", "origin", "main");
+        assert!(result.is_err(), "origin 未設定なら AppError::Git が返る");
+    }
+
+    // 🔴 Red: current_branch が HEAD コミット後にブランチ名を返すこと
+    #[test]
+    fn test_current_branch_returns_head_name() {
+        let dir = TempDir::new().unwrap();
+        let (svc, _) = init_bare_repo(&dir);
+        // コミット前は HEAD が存在しないためエラーになる
+        let result_before = svc.current_branch();
+        // コミット後はブランチ名を返す
+        svc.write_and_commit("readme.md", "# README", "initial").unwrap();
+        let branch = svc.current_branch().unwrap();
+        assert!(!branch.is_empty(), "ブランチ名が空でないこと");
+        // コミット前の結果（エラーの場合）または成功（git init デフォルトブランチ名）
+        let _ = result_before; // どちらでも ok
     }
 
     // 🔴 Red: 2ブランチのマージコンフリクトを list_conflicted_files が検出すること

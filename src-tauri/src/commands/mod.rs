@@ -85,6 +85,7 @@ macro_rules! all_commands {
             commands::pr::pr_review_submit,
             commands::pr::pr_merge,
             commands::pr::pr_create_from_branch,
+            commands::pr::git_pull,
         ]
     };
 }
