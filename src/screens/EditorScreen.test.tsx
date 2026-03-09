@@ -43,6 +43,10 @@ vi.mock("../stores/uiStore", () => ({
   useUiStore: (sel?: (s: typeof mockUiStore) => unknown) =>
     sel ? sel(mockUiStore) : mockUiStore,
 }));
+vi.mock("react-markdown", () => ({
+  default: ({ children }: { children: string }) => <div data-testid="markdown-preview">{children}</div>,
+}));
+vi.mock("remark-gfm", () => ({ default: vi.fn() }));
 vi.mock("@codemirror/lang-markdown", () => ({ markdown: vi.fn(() => []) }));
 vi.mock("@codemirror/theme-one-dark", () => ({ oneDark: {} }));
 vi.mock("codemirror", () => ({

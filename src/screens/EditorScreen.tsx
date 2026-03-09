@@ -12,6 +12,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { useIssueStore } from "../stores/issueStore";
 import { useUiStore } from "../stores/uiStore";
 import { LinkedIssuesPanel } from "../components/editor/LinkedIssuesPanel";
+import { MarkdownPreview } from "../components/editor/MarkdownPreview";
 import { UnsavedWarningModal } from "../components/editor/UnsavedWarningModal";
 import type { Document, Issue } from "../types";
 
@@ -39,6 +40,7 @@ export function EditorScreen() {
   const viewRef = useRef<EditorView | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [pendingDoc, setPendingDoc] = useState<Document | null>(null);
+  const [previewContent, setPreviewContent] = useState("");
 
   // イベントリスナー登録
   useEffect(() => {
@@ -68,6 +70,8 @@ export function EditorScreen() {
     // 既存の editor を破棄
     viewRef.current?.destroy();
 
+    setPreviewContent(currentDoc.content);
+
     const view = new EditorView({
       doc: currentDoc.content,
       extensions: [
@@ -77,6 +81,7 @@ export function EditorScreen() {
         EditorView.updateListener.of((update: import("@codemirror/view").ViewUpdate) => {
           if (update.docChanged) {
             setDirty(currentDoc.id, true);
+            setPreviewContent(update.state.doc.toString());
           }
         }),
       ],
@@ -302,10 +307,10 @@ export function EditorScreen() {
         )}
       </div>
 
-      {/* 右サイドバー: Linked Issues */}
+      {/* 右サイドバー: Preview + Linked Issues */}
       <aside
         style={{
-          width: 240,
+          width: 280,
           flexShrink: 0,
           borderLeft: "1px solid #2a2a3a",
           background: "#161622",
@@ -314,6 +319,9 @@ export function EditorScreen() {
           flexDirection: "column",
         }}
       >
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", borderBottom: "1px solid #2a2a3a" }}>
+          <MarkdownPreview content={previewContent} />
+        </div>
         <LinkedIssuesPanel
           issues={linkedIssues}
           loading={false}
