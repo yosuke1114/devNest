@@ -153,9 +153,8 @@ export const usePrStore = create<PrState>((set, get) => ({
   loadDocDiff: async (projectId, prId) => {
     set({ docDiffStatus: "loading" });
     try {
-      const raw = await ipc.prGetDiff(projectId, prId);
-      const all = parseDiff(raw);
-      const docDiffs = all.filter((f) => f.filename.endsWith(".md"));
+      const raw = await ipc.prDocDiffGet(projectId, prId);
+      const docDiffs = parseDiff(raw);
       set({ docDiffs, docDiffStatus: "success" });
     } catch (e) {
       set({ docDiffStatus: "error", error: String(e) });

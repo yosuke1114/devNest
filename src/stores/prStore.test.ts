@@ -182,28 +182,28 @@ describe("prStore", () => {
     expect(usePrStore.getState().diffStatus).toBe("success");
   });
 
-  it("loadDocDiff() が .md ファイルのみ docDiffs に含める", async () => {
+  it("loadDocDiff() が prDocDiffGet を呼び docDiffs をセットする", async () => {
+    // Rust 側で .md フィルタ済みの diff が返る
     const rawDiff = [
       "diff --git a/docs/spec.md b/docs/spec.md",
+      "--- a/docs/spec.md",
+      "+++ b/docs/spec.md",
       "@@ -1 +1 @@",
       " markdown",
-      "diff --git a/src/main.ts b/src/main.ts",
-      "@@ -1 +1 @@",
-      " typescript",
     ].join("\n");
-    mockIpc.prGetDiff.mockResolvedValueOnce(rawDiff);
+    mockIpc.prDocDiffGet.mockResolvedValueOnce(rawDiff);
 
     await usePrStore.getState().loadDocDiff(1, 5);
 
+    expect(mockIpc.prDocDiffGet).toHaveBeenCalledWith(1, 5);
     const { docDiffs } = usePrStore.getState();
     expect(docDiffs).toHaveLength(1);
     expect(docDiffs[0].filename).toBe("docs/spec.md");
     expect(usePrStore.getState().docDiffStatus).toBe("success");
   });
 
-  it("loadDocDiff() .md ファイルがない diff では docDiffs が空になる", async () => {
-    const rawDiff = "diff --git a/src/main.ts b/src/main.ts\n@@ -1 +1 @@\n ts";
-    mockIpc.prGetDiff.mockResolvedValueOnce(rawDiff);
+  it("loadDocDiff() 空文字列の場合は docDiffs が空になる", async () => {
+    mockIpc.prDocDiffGet.mockResolvedValueOnce("");
 
     await usePrStore.getState().loadDocDiff(1, 5);
 

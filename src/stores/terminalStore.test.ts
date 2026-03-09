@@ -1,10 +1,19 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { useTerminalStore } from "./terminalStore";
 import * as ipc from "../lib/ipc";
-import type { TerminalDonePayload, TerminalSession } from "../types";
+import type { IssueDocLink, TerminalDonePayload, TerminalSession } from "../types";
 
 vi.mock("../lib/ipc");
 const mockIpc = vi.mocked(ipc);
+
+// F-K02: issueStore のモック
+const mockIssueLinks: IssueDocLink[] = [];
+vi.mock("./issueStore", () => ({
+  useIssueStore: {
+    getState: vi.fn(() => ({ issueLinks: mockIssueLinks })),
+  },
+}));
+import { useIssueStore } from "./issueStore";
 
 function makeSession(overrides: Partial<TerminalSession> = {}): TerminalSession {
   return {
@@ -95,6 +104,54 @@ describe("terminalStore", () => {
 
     expect(useTerminalStore.getState().startStatus).toBe("error");
     expect(useTerminalStore.getState().error).toBeTruthy();
+  });
+
+  // ─── F-K02: issueLinks コンテキスト注入 ────────────────────────────────────
+
+  it("startSession() issueLinks のパスが promptSummary に注入される", async () => {
+    const links: IssueDocLink[] = [
+      {
+        id: 1, issue_id: 1, document_id: 10, link_type: "manual", created_by: "user",
+        created_at: "2026-01-01T00:00:00Z", path: "docs/api.md", title: "API仕様",
+      },
+      {
+        id: 2, issue_id: 1, document_id: 11, link_type: "ai_suggested", created_by: "ai",
+        created_at: "2026-01-01T00:00:00Z", path: "docs/design.md", title: "設計書",
+      },
+    ];
+    vi.mocked(useIssueStore).getState.mockReturnValueOnce({ issueLinks: links } as ReturnType<typeof useIssueStore.getState>);
+    mockIpc.terminalSessionStart.mockResolvedValueOnce(makeSession());
+
+    await useTerminalStore.getState().startSession(1);
+
+    const call = mockIpc.terminalSessionStart.mock.calls[0];
+    expect(call[1]).toContain("docs/api.md");
+    expect(call[1]).toContain("docs/design.md");
+  });
+
+  it("startSession() issueLinks がない場合は promptSummary をそのまま渡す", async () => {
+    vi.mocked(useIssueStore).getState.mockReturnValueOnce({ issueLinks: [] } as ReturnType<typeof useIssueStore.getState>);
+    mockIpc.terminalSessionStart.mockResolvedValueOnce(makeSession());
+
+    await useTerminalStore.getState().startSession(1, "Fix the bug");
+
+    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug");
+  });
+
+  it("startSession() path が null の issueLinks は無視される", async () => {
+    const links: IssueDocLink[] = [
+      {
+        id: 1, issue_id: 1, document_id: 10, link_type: "manual", created_by: "user",
+        created_at: "2026-01-01T00:00:00Z", path: null, title: "title",
+      },
+    ];
+    vi.mocked(useIssueStore).getState.mockReturnValueOnce({ issueLinks: links } as ReturnType<typeof useIssueStore.getState>);
+    mockIpc.terminalSessionStart.mockResolvedValueOnce(makeSession());
+
+    await useTerminalStore.getState().startSession(1, "Fix the bug");
+
+    // path=null のみなので docPaths は空 → promptSummary をそのまま渡す
+    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug");
   });
 
   // ─── stopSession ──────────────────────────────────────────────────────────

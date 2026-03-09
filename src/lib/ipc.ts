@@ -197,6 +197,9 @@ export const prMerge = (
 export const gitPull = (projectId: number) =>
   invoke<string>("git_pull", { projectId });
 
+export const prDocDiffGet = (projectId: number, prId: number) =>
+  invoke<string>("pr_doc_diff_get", { projectId, prId });
+
 // ─── Search ──────────────────────────────────────────────────────────────────
 export const indexBuild = (projectId: number) =>
   invoke<number>("index_build", { projectId });

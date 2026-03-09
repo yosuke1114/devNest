@@ -305,6 +305,24 @@ describe("issueStore", () => {
     expect(useIssueStore.getState().issueLinks).toHaveLength(0);
   });
 
+  // ─── getContextDocIds ─────────────────────────────────────────────────────
+
+  it("getContextDocIds() が issueLinks の document_id リストを返す", () => {
+    const links = [
+      makeDocLink({ document_id: 10 }),
+      makeDocLink({ document_id: 20 }),
+    ];
+    useIssueStore.setState({ issueLinks: links });
+
+    const ids = useIssueStore.getState().getContextDocIds();
+    expect(ids).toEqual([10, 20]);
+  });
+
+  it("getContextDocIds() issueLinks が空なら空配列を返す", () => {
+    useIssueStore.setState({ issueLinks: [] });
+    expect(useIssueStore.getState().getContextDocIds()).toEqual([]);
+  });
+
   // ─── fetchDrafts ──────────────────────────────────────────────────────────
 
   it("fetchDrafts() が issueDraftList を呼ぶ", async () => {

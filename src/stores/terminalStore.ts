@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as ipc from "../lib/ipc";
 import type { AsyncStatus, IssueContextChunk, TerminalDonePayload, TerminalSession } from "../types";
+import { useIssueStore } from "./issueStore";
 
 interface TerminalState {
   session: TerminalSession | null;
@@ -40,7 +41,16 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   startSession: async (projectId, promptSummary) => {
     set({ startStatus: "loading", error: null, showPrReadyBanner: false });
     try {
-      const session = await ipc.terminalSessionStart(projectId, promptSummary);
+      // F-K02: issueStore の issueLinks からリンク済みドキュメントパスを context として注入
+      const issueLinks = useIssueStore.getState().issueLinks;
+      const docPaths = issueLinks
+        .map((l) => l.path)
+        .filter((p): p is string => p !== null);
+      const contextSummary =
+        docPaths.length > 0
+          ? `関連設計書: ${docPaths.join(", ")}${promptSummary ? `\n${promptSummary}` : ""}`
+          : promptSummary;
+      const session = await ipc.terminalSessionStart(projectId, contextSummary);
       set({ session, startStatus: "success" });
     } catch (e) {
       set({ startStatus: "error", error: String(e) });

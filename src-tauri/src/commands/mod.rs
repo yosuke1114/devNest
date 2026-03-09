@@ -89,6 +89,7 @@ macro_rules! all_commands {
             commands::pr::pr_review_submit,
             commands::pr::pr_merge,
             commands::pr::pr_create_from_branch,
+            commands::pr::pr_doc_diff_get,
             commands::pr::git_pull,
             // Phase 5: ポーリング制御
             commands::polling::polling_start,

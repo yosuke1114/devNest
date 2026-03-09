@@ -249,6 +249,51 @@ pub async fn pr_create_from_branch(
         .ok_or_else(|| AppError::NotFound("created PR not found in DB".to_string()))
 }
 
+// ─── pr_doc_diff_get ─────────────────────────────────────────────────────────
+
+/// PR の .md ファイルのみの unified diff を返す（Design Docs タブ用）。
+/// GitHub API GET /pulls/{n}/files → .md フィルタ → unified diff 文字列として返す。
+/// parseDiff（TypeScript側）がそのまま処理できる形式。
+#[tauri::command]
+pub async fn pr_doc_diff_get(
+    project_id: i64,
+    pr_id: i64,
+    state: State<'_, AppState>,
+) -> std::result::Result<String, AppError> {
+    let project = db::project::find(&state.db, project_id).await?;
+    let pr = db::pr::find(&state.db, pr_id).await?;
+    let token = keychain::require_token(project_id)?;
+    let client = GitHubClient::new(&token, &project.repo_owner, &project.repo_name);
+
+    let files = client.list_pull_request_files(pr.github_number).await?;
+
+    // .md ファイルのみ抽出して unified diff 文字列を組み立てる
+    let diff = build_doc_diff(&files);
+    Ok(diff)
+}
+
+/// `PrFile` リストから .md ファイルのみを抽出し、unified diff 形式の文字列を組み立てる。
+/// parseDiff が処理できるよう `diff --git a/{path} b/{path}` ヘッダを付与する。
+pub(crate) fn build_doc_diff(files: &[crate::models::pr::PrFile]) -> String {
+    let mut out = String::new();
+    for f in files {
+        if !f.filename.ends_with(".md") {
+            continue;
+        }
+        // diff ヘッダ
+        out.push_str(&format!(
+            "diff --git a/{} b/{}\n--- a/{}\n+++ b/{}\n",
+            f.filename, f.filename, f.filename, f.filename
+        ));
+        // patch（hunks）
+        if let Some(patch) = &f.patch {
+            out.push_str(patch);
+            out.push('\n');
+        }
+    }
+    out
+}
+
 // ─── git_pull ─────────────────────────────────────────────────────────────────
 
 /// ローカルリポジトリを fetch + fast-forward pull する。
@@ -390,6 +435,72 @@ mod tests {
         // フィルタなし（全件）
         let all_prs = db::pr::list(&state.db, pid, None).await.unwrap();
         assert_eq!(all_prs.len(), 2);
+    }
+
+    // ─── build_doc_diff ────────────────────────────────────────────────────────
+
+    fn make_file(filename: &str, patch: Option<&str>) -> crate::models::pr::PrFile {
+        crate::models::pr::PrFile {
+            filename: filename.to_string(),
+            status: "modified".to_string(),
+            additions: 1,
+            deletions: 0,
+            patch: patch.map(|s| s.to_string()),
+        }
+    }
+
+    // 🔴 Red: .md ファイルが diff に含まれる
+    #[test]
+    fn test_build_doc_diff_includes_md_files() {
+        let files = vec![
+            make_file("docs/spec.md", Some("@@ -1 +1 @@\n-old\n+new")),
+            make_file("src/main.ts", Some("@@ -1 +1 @@\n-a\n+b")),
+        ];
+        let diff = build_doc_diff(&files);
+        assert!(diff.contains("docs/spec.md"), "md file should be included");
+        assert!(!diff.contains("src/main.ts"), "ts file should be excluded");
+    }
+
+    // 🔴 Red: 非 .md ファイルのみなら空文字列
+    #[test]
+    fn test_build_doc_diff_empty_when_no_md() {
+        let files = vec![
+            make_file("src/main.ts", Some("@@ -1 +1 @@\n-a\n+b")),
+            make_file("src/lib.rs", None),
+        ];
+        let diff = build_doc_diff(&files);
+        assert!(diff.is_empty());
+    }
+
+    // 🔴 Red: patch が None でも diff ヘッダは出力される
+    #[test]
+    fn test_build_doc_diff_no_patch() {
+        let files = vec![make_file("docs/readme.md", None)];
+        let diff = build_doc_diff(&files);
+        assert!(diff.contains("diff --git a/docs/readme.md b/docs/readme.md"));
+        // patch がなくてもヘッダ行は含まれる
+        assert!(diff.contains("--- a/docs/readme.md"));
+    }
+
+    // 🔴 Red: patch がある場合は hunk 内容も含まれる
+    #[test]
+    fn test_build_doc_diff_includes_hunk() {
+        let files = vec![make_file("docs/spec.md", Some("@@ -1,2 +1,2 @@\n-old line\n+new line"))];
+        let diff = build_doc_diff(&files);
+        assert!(diff.contains("@@ -1,2 +1,2 @@"));
+        assert!(diff.contains("+new line"));
+    }
+
+    // 🔴 Red: 複数の .md ファイルがある場合、すべて含まれる
+    #[test]
+    fn test_build_doc_diff_multiple_md_files() {
+        let files = vec![
+            make_file("docs/a.md", Some("@@ -1 +1 @@\n-a\n+A")),
+            make_file("docs/b.md", Some("@@ -1 +1 @@\n-b\n+B")),
+        ];
+        let diff = build_doc_diff(&files);
+        assert!(diff.contains("docs/a.md"));
+        assert!(diff.contains("docs/b.md"));
     }
 
     // 🔴 Red: pr_review_add でコメントが追加されること

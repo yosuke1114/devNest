@@ -33,6 +33,7 @@ interface IssueState {
   fetchIssueLinks: (issueId: number) => Promise<void>;
   addIssueLink: (issueId: number, documentId: number) => Promise<void>;
   removeIssueLink: (issueId: number, documentId: number) => Promise<void>;
+  getContextDocIds: () => number[];
 
   // Draft
   fetchDrafts: (projectId: number) => Promise<void>;
@@ -118,6 +119,8 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       throw e;
     }
   },
+
+  getContextDocIds: () => get().issueLinks.map((l) => l.document_id),
 
   fetchDrafts: async (projectId) => {
     try {
