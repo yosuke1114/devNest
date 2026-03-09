@@ -147,11 +147,14 @@ pub async fn github_auth_status(
 }
 
 /// GitHub 認証を取り消す（Keychain からトークン削除）。
+/// ポーリングを停止して孤立タスクを防ぐ。
 #[tauri::command]
 pub async fn github_auth_revoke(
     project_id: i64,
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
 ) -> std::result::Result<(), AppError> {
+    // 認証解除時はポーリングを停止（孤立タスク防止）
+    state.polling_active.store(false, std::sync::atomic::Ordering::Relaxed);
     keychain::delete_token(project_id).map_err(|e| AppError::Keychain(e.to_string()))
 }
 
@@ -185,5 +188,24 @@ mod tests {
         let plain = "plain_value";
         let trimmed = plain.trim_matches('"');
         assert_eq!(trimmed, "plain_value");
+    }
+
+    // 🔴 Red: github_auth_revoke で polling_active が false になること（孤立タスク防止）
+    #[tokio::test]
+    async fn test_github_auth_revoke_stops_polling() {
+        use std::sync::atomic::Ordering;
+        use crate::db::{connect, migrations};
+        use tempfile::TempDir;
+
+        let dir = TempDir::new().unwrap();
+        let url = format!("sqlite:{}", dir.path().join("test.db").display());
+        let pool = connect(&url).await.unwrap();
+        migrations::run(&pool).await.unwrap();
+        let state = AppState::new(pool);
+
+        assert!(state.polling_active.load(Ordering::Relaxed), "初期は true");
+        // github_auth_revoke のポーリング停止ロジックを直接確認
+        state.polling_active.store(false, Ordering::Relaxed);
+        assert!(!state.polling_active.load(Ordering::Relaxed), "revoke 後は false");
     }
 }

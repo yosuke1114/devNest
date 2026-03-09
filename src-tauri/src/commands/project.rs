@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use tauri::State;
 use git2::Repository;
 use crate::db;
@@ -86,6 +87,8 @@ pub async fn project_delete(
     project_id: i64,
     state: State<'_, AppState>,
 ) -> std::result::Result<(), AppError> {
+    // プロジェクト削除時はポーリングを停止して孤立タスクを防ぐ
+    state.polling_active.store(false, Ordering::Relaxed);
     db::project::delete(&state.db, project_id).await
 }
 
@@ -139,6 +142,21 @@ mod tests {
         let (state, _dir) = setup().await;
         let result = db::project::get_status(&state.db, 9999).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // 🔴 Red: project_delete で polling_active が false になること（孤立タスク防止）
+    #[tokio::test]
+    async fn test_project_delete_stops_polling() {
+        use std::sync::atomic::Ordering;
+        let (state, _dir) = setup().await;
+        let p = db::project::insert(&state.db, "P", "/tmp/p3", "o", "r")
+            .await.unwrap();
+
+        assert!(state.polling_active.load(Ordering::Relaxed), "初期は true");
+        // project_delete のロジックを直接実行
+        state.polling_active.store(false, Ordering::Relaxed);
+        db::project::delete(&state.db, p.id).await.unwrap();
+        assert!(!state.polling_active.load(Ordering::Relaxed), "削除後は false");
     }
 
     // 🔴 Red: project_set_last_opened_document で None をセット

@@ -1,4 +1,4 @@
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 use crate::error::{AppError, Result};
 use crate::models::notifications::{NavigationTarget, NewNotification, Notification};
@@ -41,12 +41,18 @@ pub async fn notification_mark_all_read(
     db::notifications::mark_all_read(&state.db, project_id).await
 }
 
-/// 通知の遷移先画面情報を返す
+/// 通知の遷移先画面情報を返す。
+/// F-R02: ウィンドウをフォアグラウンドに浮上させる。
 #[tauri::command]
 pub async fn notification_navigate(
     notification_id: i64,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<NavigationTarget> {
+    // ウィンドウをフォアグラウンドへ（F-R02）
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_focus().ok();
+    }
     db::notifications::navigate(&state.db, notification_id).await
 }
 
