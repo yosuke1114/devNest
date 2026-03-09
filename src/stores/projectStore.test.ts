@@ -33,6 +33,8 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 describe("projectStore", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // デフォルトで invoke を解決させる（polling_start など副作用呼び出し用）
+    mockInvoke.mockResolvedValue(undefined);
     useProjectStore.setState({
       projects: [],
       currentProject: null,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  IconBell,
   IconBrandGithub,
   IconCheck,
   IconX,
@@ -8,10 +9,12 @@ import {
 } from "@tabler/icons-react";
 import { useProjectStore } from "../stores/projectStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useNotificationsStore } from "../stores/notificationsStore";
 import * as ipc from "../lib/ipc";
 
 export function SettingsScreen() {
   const { currentProject } = useProjectStore();
+  const { permissionStatus, requestPermission } = useNotificationsStore();
   const {
     theme,
     authStatus,
@@ -185,6 +188,30 @@ export function SettingsScreen() {
             無効にする
           </button>
         </div>
+      </Section>
+
+      {/* OS 通知 */}
+      <Section title="OS 通知" style={{ marginTop: 32 }}>
+        <p style={{ color: "#888", fontSize: 14, marginBottom: 12 }}>
+          CI 結果・PR コメント・Conflict などをリアルタイムで OS 通知として受け取れます。
+        </p>
+        {permissionStatus === "granted" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#2ecc71", fontSize: 13 }}>
+            <IconCheck size={14} /> 通知が許可されています
+          </div>
+        ) : permissionStatus === "denied" ? (
+          <div style={{ color: "#e74c3c", fontSize: 13 }}>
+            通知がブロックされています。システム設定から許可してください。
+          </div>
+        ) : (
+          <button
+            onClick={requestPermission}
+            className="btn-secondary"
+            style={{ display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <IconBell size={14} /> ALLOW NOTIFICATIONS
+          </button>
+        )}
       </Section>
 
       {/* 検索インデックス */}

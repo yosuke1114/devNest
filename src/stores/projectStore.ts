@@ -40,7 +40,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  selectProject: (project) => set({ currentProject: project }),
+  selectProject: (project) => {
+    set({ currentProject: project });
+    // F-P02: プロジェクト選択時にポーリングを自動起動
+    ipc.pollingStart().catch(() => {});
+  },
 
   createProject: async (name, localPath) => {
     set({ listStatus: "loading", error: null });

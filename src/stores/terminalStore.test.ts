@@ -119,7 +119,7 @@ describe("terminalStore", () => {
         created_at: "2026-01-01T00:00:00Z", path: "docs/design.md", title: "設計書",
       },
     ];
-    vi.mocked(useIssueStore).getState.mockReturnValueOnce({ issueLinks: links } as ReturnType<typeof useIssueStore.getState>);
+    vi.mocked(useIssueStore.getState).mockReturnValueOnce({ issueLinks: links } as ReturnType<typeof useIssueStore.getState>);
     mockIpc.terminalSessionStart.mockResolvedValueOnce(makeSession());
 
     await useTerminalStore.getState().startSession(1);
@@ -130,7 +130,7 @@ describe("terminalStore", () => {
   });
 
   it("startSession() issueLinks がない場合は promptSummary をそのまま渡す", async () => {
-    vi.mocked(useIssueStore).getState.mockReturnValueOnce({ issueLinks: [] } as ReturnType<typeof useIssueStore.getState>);
+    vi.mocked(useIssueStore.getState).mockReturnValueOnce({ issueLinks: [] } as unknown as ReturnType<typeof useIssueStore.getState>);
     mockIpc.terminalSessionStart.mockResolvedValueOnce(makeSession());
 
     await useTerminalStore.getState().startSession(1, "Fix the bug");
@@ -145,7 +145,7 @@ describe("terminalStore", () => {
         created_at: "2026-01-01T00:00:00Z", path: null, title: "title",
       },
     ];
-    vi.mocked(useIssueStore).getState.mockReturnValueOnce({ issueLinks: links } as ReturnType<typeof useIssueStore.getState>);
+    vi.mocked(useIssueStore.getState).mockReturnValueOnce({ issueLinks: links } as ReturnType<typeof useIssueStore.getState>);
     mockIpc.terminalSessionStart.mockResolvedValueOnce(makeSession());
 
     await useTerminalStore.getState().startSession(1, "Fix the bug");

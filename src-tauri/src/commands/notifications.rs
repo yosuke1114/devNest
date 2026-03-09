@@ -75,8 +75,15 @@ pub async fn notification_push(
     // フロントに通知イベントを送信
     let _ = app.emit("notification_new", serde_json::json!({
         "notificationId": id,
-        "title": title,
+        "title": title.clone(),
     }));
+    // OS 通知を発火（F-P02）
+    let _ = app
+        .notification()
+        .builder()
+        .title("DevNest")
+        .body(&title)
+        .show();
     Ok(id)
 }
 

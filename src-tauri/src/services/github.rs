@@ -90,6 +90,46 @@ pub struct GitHubAuthStatus {
     pub avatar_url: Option<String>,
 }
 
+// ─── GitHub Notifications API 型 ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GithubNotification {
+    pub id: String,
+    pub reason: String,
+    pub unread: bool,
+    pub subject: GithubNotificationSubject,
+    pub repository: GithubNotificationRepo,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GithubNotificationSubject {
+    pub title: String,
+    #[serde(rename = "type")]
+    pub subject_type: String,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GithubNotificationRepo {
+    pub full_name: String,
+}
+
+// ─── CI Check Runs 型 ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CheckRunsResponse {
+    pub check_runs: Vec<CheckRun>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CheckRun {
+    pub id: i64,
+    pub name: String,
+    pub status: String,      // "queued" | "in_progress" | "completed"
+    pub conclusion: Option<String>, // "success" | "failure" | "cancelled" | ...
+}
+
 pub struct GitHubClient {
     token: String,
     owner: String,
@@ -526,6 +566,45 @@ impl GitHubClient {
 
         self.check_rate_limit(&resp)?;
         Ok(())
+    }
+
+    /// GET /notifications?participating=true
+    /// ユーザー自身が関与する通知のみを取得する。
+    pub async fn list_github_notifications(&self) -> Result<Vec<GithubNotification>> {
+        let url = "https://api.github.com/notifications?participating=true&per_page=50";
+        let resp = self
+            .http
+            .get(url)
+            .header("Authorization", self.auth_header())
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))?;
+        self.check_rate_limit(&resp)?;
+        resp.json::<Vec<GithubNotification>>()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))
+    }
+
+    /// GET /repos/{owner}/{repo}/commits/{sha}/check-runs
+    /// 指定コミットの CI チェック結果を取得する。
+    pub async fn get_check_runs(&self, sha: &str) -> Result<CheckRunsResponse> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/commits/{}/check-runs",
+            self.owner, self.repo, sha
+        );
+        let resp = self
+            .http
+            .get(&url)
+            .header("Authorization", self.auth_header())
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))?;
+        self.check_rate_limit(&resp)?;
+        resp.json::<CheckRunsResponse>()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))
     }
 }
 
