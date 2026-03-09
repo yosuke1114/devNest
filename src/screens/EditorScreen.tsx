@@ -12,6 +12,7 @@ import { useProjectStore } from "../stores/projectStore";
 import { useIssueStore } from "../stores/issueStore";
 import { useUiStore } from "../stores/uiStore";
 import { LinkedIssuesPanel } from "../components/editor/LinkedIssuesPanel";
+import { UnsavedWarningModal } from "../components/editor/UnsavedWarningModal";
 import type { Document, Issue } from "../types";
 
 export function EditorScreen() {
@@ -37,6 +38,7 @@ export function EditorScreen() {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const [pendingDoc, setPendingDoc] = useState<Document | null>(null);
 
   // イベントリスナー登録
   useEffect(() => {
@@ -89,13 +91,40 @@ export function EditorScreen() {
   }, [currentDoc?.id]);
 
   const handleSelectDoc = useCallback(
-    async (doc: Document) => {
+    (doc: Document) => {
+      if (currentDoc?.is_dirty && currentDoc.id !== doc.id) {
+        setPendingDoc(doc);
+        return;
+      }
       setSelectedDocId(doc.id);
-      await openDocument(doc.id);
+      openDocument(doc.id);
       fetchLinkedIssues(doc.id);
     },
-    [openDocument, fetchLinkedIssues]
+    [currentDoc, openDocument, fetchLinkedIssues]
   );
+
+  const handleModalSave = useCallback(async () => {
+    if (!pendingDoc || !viewRef.current || !currentDoc) return;
+    const content = viewRef.current.state.doc.toString();
+    await saveDocument(currentDoc.id, content);
+    setSelectedDocId(pendingDoc.id);
+    await openDocument(pendingDoc.id);
+    fetchLinkedIssues(pendingDoc.id);
+    setPendingDoc(null);
+  }, [pendingDoc, currentDoc, saveDocument, openDocument, fetchLinkedIssues]);
+
+  const handleModalDiscard = useCallback(async () => {
+    if (!pendingDoc || !currentDoc) return;
+    setDirty(currentDoc.id, false);
+    setSelectedDocId(pendingDoc.id);
+    await openDocument(pendingDoc.id);
+    fetchLinkedIssues(pendingDoc.id);
+    setPendingDoc(null);
+  }, [pendingDoc, currentDoc, setDirty, openDocument, fetchLinkedIssues]);
+
+  const handleModalCancel = useCallback(() => {
+    setPendingDoc(null);
+  }, []);
 
   const handleIssueClick = useCallback(
     (issue: Issue) => {
@@ -135,6 +164,15 @@ export function EditorScreen() {
   }
 
   return (
+    <>
+    {pendingDoc && currentDoc && (
+      <UnsavedWarningModal
+        filename={currentDoc.path}
+        onSave={handleModalSave}
+        onDiscard={handleModalDiscard}
+        onCancel={handleModalCancel}
+      />
+    )}
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       {/* ファイルツリー */}
       <aside
@@ -283,6 +321,7 @@ export function EditorScreen() {
         />
       </aside>
     </div>
+  </>
   );
 }
 
