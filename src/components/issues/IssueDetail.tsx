@@ -1,4 +1,6 @@
 import { IconTerminal2, IconX, IconFileText } from "@tabler/icons-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Issue, IssueDocLink } from "../../types";
 
 interface IssueDetailProps {
@@ -62,9 +64,11 @@ export function IssueDetail({
         <div className="rounded-lg border border-white/10 p-3">
           <div className="text-xs font-medium text-gray-400 mb-2">Description</div>
           {issue.body ? (
-            <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">
-              {issue.body}
-            </p>
+            <div className="text-xs text-gray-300 leading-relaxed prose prose-invert prose-xs max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {issue.body}
+              </ReactMarkdown>
+            </div>
           ) : (
             <p className="text-xs text-gray-600 italic">説明なし</p>
           )}
