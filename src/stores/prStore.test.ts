@@ -239,12 +239,43 @@ describe("prStore", () => {
     const pr = makePr({ id: 5, state: "open" });
     usePrStore.setState({ prs: [pr], selectedPrId: 5 });
     mockIpc.prMerge.mockResolvedValueOnce(undefined);
+    mockIpc.gitPull.mockResolvedValueOnce("success");
 
     await usePrStore.getState().mergePr(1, 5);
 
     expect(usePrStore.getState().prs[0].state).toBe("merged");
     expect(usePrStore.getState().selectedPrId).toBeNull();
     expect(usePrStore.getState().mergeStatus).toBe("success");
+  });
+
+  it("mergePr() 後の gitPull が 'conflict' を返したとき ConflictScreen へ遷移する", async () => {
+    const pr = makePr({ id: 5, state: "open" });
+    usePrStore.setState({ prs: [pr], selectedPrId: 5 });
+    const mockNavigate = vi.fn();
+    const { useUiStore } = await import("./uiStore");
+    vi.mocked(useUiStore.getState).mockReturnValue({ navigate: mockNavigate } as any);
+
+    mockIpc.prMerge.mockResolvedValueOnce(undefined);
+    mockIpc.gitPull.mockResolvedValueOnce("conflict");
+
+    await usePrStore.getState().mergePr(1, 5);
+
+    expect(mockNavigate).toHaveBeenCalledWith("conflict");
+  });
+
+  it("mergePr() 後の gitPull が 'up_to_date' のとき遷移しない", async () => {
+    const pr = makePr({ id: 5, state: "open" });
+    usePrStore.setState({ prs: [pr], selectedPrId: 5 });
+    const mockNavigate = vi.fn();
+    const { useUiStore } = await import("./uiStore");
+    vi.mocked(useUiStore.getState).mockReturnValue({ navigate: mockNavigate } as any);
+
+    mockIpc.prMerge.mockResolvedValueOnce(undefined);
+    mockIpc.gitPull.mockResolvedValueOnce("up_to_date");
+
+    await usePrStore.getState().mergePr(1, 5);
+
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   // ─── createPrFromBranch ───────────────────────────────────────────────────

@@ -430,6 +430,39 @@ impl GitHubClient {
             .map_err(|e| AppError::GitHub(e.to_string()))
     }
 
+    /// POST /repos/{owner}/{repo}/issues/{issue_number}/comments — PR にコメント投稿
+    /// GitHub API では PR も Issue として扱われるため issue_comment エンドポイントを使用する。
+    pub async fn add_issue_comment(
+        &self,
+        issue_number: i64,
+        body: &str,
+    ) -> Result<i64> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/issues/{}/comments",
+            self.owner, self.repo, issue_number
+        );
+        #[derive(serde::Deserialize)]
+        struct CommentResp {
+            id: i64,
+        }
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .header("Accept", "application/vnd.github+json")
+            .json(&serde_json::json!({ "body": body }))
+            .send()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))?;
+
+        self.check_rate_limit(&resp)?;
+        let comment: CommentResp = resp
+            .json()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))?;
+        Ok(comment.id)
+    }
+
     /// POST /repos/{owner}/{repo}/pulls — PR 作成
     pub async fn create_pull_request(
         &self,

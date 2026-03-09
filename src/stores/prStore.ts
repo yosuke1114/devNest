@@ -197,11 +197,14 @@ export const usePrStore = create<PrState>((set, get) => ({
         p.id === prId ? { ...p, state: "merged" as const } : p
       );
       set({ prs, mergeStatus: "success", selectedPrId: null, detail: null });
-      // マージ後にローカルを最新に追随（失敗は無視）
+      // マージ後にローカルを最新に追随（コンフリクト時は ConflictScreen へ誘導）
       try {
-        await ipc.gitPull(projectId);
+        const pullResult = await ipc.gitPull(projectId);
+        if (pullResult === "conflict") {
+          useUiStore.getState().navigate("conflict");
+        }
       } catch {
-        // pull 失敗は無視（コンフリクトは ConflictScreen で対処）
+        // pull 失敗は無視
       }
     } catch (e) {
       set({ mergeStatus: "error", error: String(e) });

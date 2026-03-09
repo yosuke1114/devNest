@@ -111,16 +111,18 @@ pub async fn pr_add_comment(
     state: State<'_, AppState>,
 ) -> std::result::Result<PrComment, AppError> {
     let project = db::project::find(&state.db, project_id).await?;
-    let _pr = db::pr::find(&state.db, pr_id).await?;
+    let pr = db::pr::find(&state.db, pr_id).await?;
+    let token = keychain::require_token(project_id)?;
+    let client = GitHubClient::new(&token, &project.repo_owner, &project.repo_name);
+
+    // author_login を GitHub API から取得
+    let author = client
+        .get_user()
+        .await
+        .map(|u| u.login)
+        .unwrap_or_else(|_| "unknown".to_string());
 
     // ローカル保存（pending）
-    // author_login を Keychain から取得（なければ "unknown"）
-    let author = keychain::get_token(project_id)
-        .ok()
-        .flatten()
-        .map(|_| "me".to_string()) // TODO: auth_status から取得
-        .unwrap_or_else(|| "unknown".to_string());
-
     let comment = db::pr::add_comment(
         &state.db,
         pr_id,
@@ -134,13 +136,10 @@ pub async fn pr_add_comment(
     // GitHub に非同期投稿（失敗しても pending のまま残す）
     let comment_id = comment.id;
     let db_clone = state.db.clone();
+    let gh_number = pr.github_number;
     tokio::spawn(async move {
-        if let Ok(token) = keychain::require_token(project_id) {
-            let client = GitHubClient::new(&token, &project.repo_owner, &project.repo_name);
-            // インラインコメント投稿（簡易版：PR body コメントとして投稿）
-            // 実際の diff-level コメントは commit_id が必要なため今回は issue comment に代替
-            let _ = client.list_pull_requests(Some("open")).await; // TODO: proper inline comment API
-            let _ = db::pr::mark_comment_synced(&db_clone, comment_id, comment_id).await;
+        if let Ok(gh_comment_id) = client.add_issue_comment(gh_number, &body).await {
+            let _ = db::pr::mark_comment_synced(&db_clone, comment_id, gh_comment_id).await;
         }
     });
 
@@ -253,6 +252,7 @@ pub async fn pr_create_from_branch(
 // ─── git_pull ─────────────────────────────────────────────────────────────────
 
 /// ローカルリポジトリを fetch + fast-forward pull する。
+/// コンフリクト発生時は conflict_files テーブルに登録して "conflict" を返す。
 /// 戻り値: "success" | "up_to_date" | "conflict"
 #[tauri::command]
 pub async fn git_pull(
@@ -263,14 +263,33 @@ pub async fn git_pull(
     let local_path = project.local_path.clone();
     let token = keychain::require_token(project_id)?;
 
-    let status = tokio::task::spawn_blocking(move || -> std::result::Result<PullStatus, AppError> {
-        let git = crate::services::git::GitService::open(&local_path)?;
-        let branch = git.current_branch()?;
-        let result = git.pull(&token, "origin", &branch)?;
-        Ok(result.status)
-    })
+    let (status, conflict_files) = tokio::task::spawn_blocking(
+        move || -> std::result::Result<(PullStatus, Vec<String>), AppError> {
+            let git = crate::services::git::GitService::open(&local_path)?;
+            let branch = git.current_branch()?;
+            let result = git.pull(&token, "origin", &branch)?;
+            let files = if result.status == PullStatus::Conflict {
+                git.list_conflicted_files().unwrap_or_default()
+            } else {
+                vec![]
+            };
+            Ok((result.status, files))
+        },
+    )
     .await
     .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // コンフリクト発生時は DB に記録
+    if status == PullStatus::Conflict {
+        // 既存レコードをクリアして新規登録
+        db::conflict::delete_all(&state.db, project_id).await.ok();
+        for path in &conflict_files {
+            let is_managed = path.ends_with(".md");
+            db::conflict::upsert(&state.db, project_id, path, is_managed)
+                .await
+                .ok();
+        }
+    }
 
     Ok(match status {
         PullStatus::Success => "success",
