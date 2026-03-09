@@ -92,7 +92,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const stub: Notification = {
       id: payload.notificationId,
       project_id: 0,
-      event_type: (payload.eventType as Notification["event_type"]) ?? "ai_edit",
+      event_type: (payload.eventType ?? "ci_pass") as Notification["event_type"],
       title: payload.title,
       body: null,
       dest_screen: null,

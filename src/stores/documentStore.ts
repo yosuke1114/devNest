@@ -86,7 +86,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     try {
       const result = await ipc.documentScan(projectId);
       await get().fetchDocuments(projectId);
-      return result.count;
+      return result.total;
     } catch (e) {
       set({ error: e as AppError });
       return 0;

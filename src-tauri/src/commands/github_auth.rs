@@ -30,7 +30,13 @@ pub async fn github_auth_start(
 ) -> std::result::Result<(), AppError> {
     let client_id = get_setting_plain(&state.db, GITHUB_CLIENT_ID_KEY)
         .await
-        .ok_or_else(|| AppError::Validation("GitHub Client ID が設定されていません".to_string()))?;
+        .ok_or_else(|| AppError::Validation("GitHub Client ID が設定されていません。Settings で OAuth App のクライアント ID を設定してください。".to_string()))?;
+
+    if client_id.is_empty() {
+        return Err(AppError::Validation(
+            "GitHub Client ID が設定されていません。Settings で OAuth App のクライアント ID を設定してください。".to_string(),
+        ));
+    }
 
     let url = oauth::auth_url(&client_id);
 

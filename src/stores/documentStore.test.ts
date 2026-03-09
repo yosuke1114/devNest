@@ -208,7 +208,7 @@ describe("documentStore", () => {
   // ─── scanDocuments ─────────────────────────────────────────────────────────
 
   it("scanDocuments() が documentScan と documentList を呼ぶ", async () => {
-    mockIpc.documentScan.mockResolvedValueOnce({ count: 2 });
+    mockIpc.documentScan.mockResolvedValueOnce({ added: 2, updated: 0, deleted: 0, total: 2 });
     mockIpc.documentList.mockResolvedValueOnce([makeDocument()]);
 
     const count = await useDocumentStore.getState().scanDocuments(1);

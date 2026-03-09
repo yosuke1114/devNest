@@ -166,6 +166,11 @@ pub async fn issue_draft_generate(
     let api_key = api_key_row
         .map(|(v,)| v.trim_matches('"').to_string())
         .ok_or_else(|| AppError::Validation("Anthropic API キーが設定されていません".to_string()))?;
+    if api_key.is_empty() {
+        return Err(AppError::Validation(
+            "Anthropic API キーが設定されていません。Settings で API キーを設定してください。".to_string(),
+        ));
+    }
 
     // 関連ドキュメント一覧
     let links = db::issue::link_list(&state.db, draft_id).await.unwrap_or_default();

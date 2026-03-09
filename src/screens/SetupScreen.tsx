@@ -116,12 +116,27 @@ function Step1GitHub({
   onBack: () => void;
 }) {
   const { authStatus, authStatus2, startAuth, fetchAuthStatus } = useSettingsStore();
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     fetchAuthStatus(projectId);
   }, [projectId]);
 
   const connected = authStatus?.connected;
+
+  const handleConnect = async () => {
+    setAuthError(null);
+    setConnecting(true);
+    try {
+      await startAuth(projectId);
+    } catch (e) {
+      const err = e as { message?: string };
+      setAuthError(err.message ?? "GitHub 認証の開始に失敗しました");
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -144,11 +159,18 @@ function Step1GitHub({
       ) : (
         <button
           data-testid="setup-connect-github"
-          onClick={() => startAuth(projectId)}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm text-gray-200 border border-white/10 transition-colors"
+          onClick={handleConnect}
+          disabled={connecting}
+          className="flex items-center gap-2 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm text-gray-200 border border-white/10 transition-colors disabled:opacity-50"
         >
-          CONNECT WITH GITHUB
+          {connecting ? "開始中…" : "CONNECT WITH GITHUB"}
         </button>
+      )}
+
+      {authError && (
+        <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
+          {authError}
+        </p>
       )}
 
       <NavButtons onBack={onBack} onNext={onNext} nextLabel={connected ? "NEXT" : "SKIP"} />
@@ -442,10 +464,15 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
 
   const handleStep2 = async (syncMode: string, _policy: string) => {
     if (currentProject) {
-      await updateProject({
-        id: currentProject.id,
-        sync_mode: syncMode as "auto" | "manual",
-      });
+      try {
+        await updateProject({
+          id: currentProject.id,
+          sync_mode: syncMode as "auto" | "manual",
+        });
+      } catch (e) {
+        // 同期モードの更新失敗はウィザード進行をブロックしない（Settings で後から変更可）
+        console.error("sync mode update failed:", e);
+      }
     }
     advance(2);
   };

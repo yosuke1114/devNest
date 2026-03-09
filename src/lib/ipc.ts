@@ -29,6 +29,7 @@ import type {
   ProjectPatch,
   ProjectStatus,
   SaveResult,
+  ScanResult,
   SearchHistory,
   SearchResult,
   SettingValue,
@@ -68,7 +69,7 @@ export const documentGet = (projectId: number, documentId: number) =>
   invoke<DocumentWithContent>("document_get", { projectId, documentId });
 
 export const documentScan = (projectId: number) =>
-  invoke<{ count: number }>("document_scan", { projectId });
+  invoke<ScanResult>("document_scan", { projectId });
 
 export const documentSave = (projectId: number, documentId: number, content: string) =>
   invoke<SaveResult>("document_save", { projectId, documentId, content });

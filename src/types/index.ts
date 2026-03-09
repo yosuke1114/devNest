@@ -70,6 +70,13 @@ export interface ProjectPatch {
 }
 
 // ─── Document ────────────────────────────────────────────────────────────────
+export interface ScanResult {
+  added: number;
+  updated: number;
+  deleted: number;
+  total: number;
+}
+
 export interface Document {
   id: number;
   project_id: number;
@@ -366,8 +373,12 @@ export interface ResolveAllResult {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 export type NotificationEventType =
-  | "ci_pass" | "ci_fail" | "pr_comment" | "pr_opened"
-  | "issue_assigned" | "conflict" | "ai_edit";
+  | "ci_pass" | "ci_passed" | "ci_fail"
+  | "pr_comment" | "pr_opened"
+  | "issue_assigned"
+  | "conflict" | "conflict_detected"
+  | "ai_edit" | "ai_pr_created"
+  | (string & {});
 
 export interface Notification {
   id: number;

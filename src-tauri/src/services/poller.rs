@@ -162,6 +162,7 @@ async fn sync_project(app: &AppHandle, pool: &DbPool, project_id: i64) {
                                         serde_json::json!({
                                             "notificationId": id,
                                             "title": n.title,
+                                            "eventType": n.event_type,
                                         }),
                                     );
                                 }
@@ -228,11 +229,13 @@ async fn sync_project(app: &AppHandle, pool: &DbPool, project_id: i64) {
             };
             if let Ok(id) = db::notifications::create(pool, &n).await {
                 let notif_title = n.title.clone();
+                let notif_event_type = n.event_type.clone();
                 let _ = app.emit(
                     "notification_new",
                     serde_json::json!({
                         "notificationId": id,
                         "title": notif_title,
+                        "eventType": notif_event_type,
                     }),
                 );
             }
@@ -279,6 +282,7 @@ async fn sync_project(app: &AppHandle, pool: &DbPool, project_id: i64) {
                     serde_json::json!({
                         "notificationId": id,
                         "title": n.title,
+                        "eventType": n.event_type,
                     }),
                 );
             }

@@ -11,7 +11,7 @@ use crate::state::{AppState, PtySessionHandle};
 #[tauri::command]
 pub async fn terminal_session_start(
     project_id: i64,
-    _prompt_summary: Option<String>,
+    prompt_summary: Option<String>,
     issue_number: Option<i64>,
     issue_id: Option<i64>,
     context_doc_ids: Option<Vec<i64>>,
@@ -46,6 +46,7 @@ pub async fn terminal_session_start(
     let pty_arc = state.pty_session.clone();
     let db_clone = state.db.clone();
     let local_path = project.local_path.clone();
+    let prompt_summary = prompt_summary;
     let tokio_handle = tokio::runtime::Handle::current();
 
     std::thread::spawn(move || {
@@ -104,10 +105,27 @@ pub async fn terminal_session_start(
             }
         };
 
+        // コンテキスト（prompt_summary）があれば Claude CLI 起動後に stdin へ注入
         // ライターを AppState に格納
         {
             if let Ok(mut guard) = pty_arc.lock() {
                 *guard = Some(PtySessionHandle { session_id, writer });
+            }
+        }
+
+        // prompt_summary を stdin に書き込む（コンテキスト注入 F-K02）
+        if let Some(ref summary) = prompt_summary {
+            if !summary.is_empty() {
+                // Claude CLI が起動するまで少し待つ
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                if let Ok(mut guard) = pty_arc.lock() {
+                    if let Some(ref mut handle) = *guard {
+                        if handle.session_id == session_id {
+                            let _ = handle.writer.write_all(summary.as_bytes());
+                            let _ = handle.writer.write_all(b"\n");
+                        }
+                    }
+                }
             }
         }
 
