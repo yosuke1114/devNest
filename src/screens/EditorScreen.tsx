@@ -17,7 +17,7 @@ import { UnsavedWarningModal } from "../components/editor/UnsavedWarningModal";
 import type { Document, Issue } from "../types";
 
 export function EditorScreen() {
-  const { currentProject } = useProjectStore();
+  const { currentProject, setLastOpenedDocument } = useProjectStore();
   const {
     documents,
     currentDoc,
@@ -104,8 +104,9 @@ export function EditorScreen() {
       setSelectedDocId(doc.id);
       openDocument(doc.id);
       fetchLinkedIssues(doc.id);
+      if (currentProject) setLastOpenedDocument(currentProject.id, doc.id);
     },
-    [currentDoc, openDocument, fetchLinkedIssues]
+    [currentDoc, currentProject, openDocument, fetchLinkedIssues, setLastOpenedDocument]
   );
 
   const handleModalSave = useCallback(async () => {
@@ -115,8 +116,9 @@ export function EditorScreen() {
     setSelectedDocId(pendingDoc.id);
     await openDocument(pendingDoc.id);
     fetchLinkedIssues(pendingDoc.id);
+    if (currentProject) setLastOpenedDocument(currentProject.id, pendingDoc.id);
     setPendingDoc(null);
-  }, [pendingDoc, currentDoc, saveDocument, openDocument, fetchLinkedIssues]);
+  }, [pendingDoc, currentDoc, currentProject, saveDocument, openDocument, fetchLinkedIssues, setLastOpenedDocument]);
 
   const handleModalDiscard = useCallback(async () => {
     if (!pendingDoc || !currentDoc) return;
@@ -124,8 +126,9 @@ export function EditorScreen() {
     setSelectedDocId(pendingDoc.id);
     await openDocument(pendingDoc.id);
     fetchLinkedIssues(pendingDoc.id);
+    if (currentProject) setLastOpenedDocument(currentProject.id, pendingDoc.id);
     setPendingDoc(null);
-  }, [pendingDoc, currentDoc, setDirty, openDocument, fetchLinkedIssues]);
+  }, [pendingDoc, currentDoc, currentProject, setDirty, openDocument, fetchLinkedIssues, setLastOpenedDocument]);
 
   const handleModalCancel = useCallback(() => {
     setPendingDoc(null);

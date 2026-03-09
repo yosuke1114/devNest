@@ -22,6 +22,7 @@ const mockDocumentStore = {
 
 const mockProjectStore = {
   currentProject: { id: 1, name: "TestProject", last_opened_document_id: null },
+  setLastOpenedDocument: vi.fn().mockResolvedValue(undefined),
 };
 
 const mockIssueStore = { selectIssue: vi.fn() };
@@ -144,5 +145,54 @@ describe("EditorScreen — UnsavedWarningModal wire-up", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
     expect(mockDocumentStore.openDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe("EditorScreen — setLastOpenedDocument wire-up", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDocumentStore.currentDoc = null;
+    mockDocumentStore.saveStatus = "idle";
+    mockDocumentStore.documents = [
+      { id: 1, project_id: 1, path: "docs/a.md", is_dirty: false, push_status: "synced" },
+      { id: 2, project_id: 1, path: "docs/b.md", is_dirty: false, push_status: "synced" },
+    ];
+  });
+
+  it("ドキュメントを選択すると setLastOpenedDocument が呼ばれる", async () => {
+    render(<EditorScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /b\.md/ }));
+    await waitFor(() => {
+      expect(mockProjectStore.setLastOpenedDocument).toHaveBeenCalledWith(1, 2);
+    });
+  });
+
+  it("dirty なドキュメントから保存して切り替えると setLastOpenedDocument が呼ばれる", async () => {
+    mockDocumentStore.currentDoc = {
+      id: 1, project_id: 1, path: "docs/a.md", content: "# A", is_dirty: true,
+    };
+    render(<EditorScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /b\.md/ }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /保存/ }));
+    await waitFor(() => {
+      expect(mockProjectStore.setLastOpenedDocument).toHaveBeenCalledWith(1, 2);
+    });
+  });
+
+  it("dirty なドキュメントから破棄して切り替えると setLastOpenedDocument が呼ばれる", async () => {
+    mockDocumentStore.currentDoc = {
+      id: 1, project_id: 1, path: "docs/a.md", content: "# A", is_dirty: true,
+    };
+    render(<EditorScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /b\.md/ }));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /破棄/ }));
+    await waitFor(() => {
+      expect(mockProjectStore.setLastOpenedDocument).toHaveBeenCalledWith(1, 2);
+    });
   });
 });

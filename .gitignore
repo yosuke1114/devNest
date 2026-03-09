@@ -9,3 +9,5 @@ dist/
 .env.local
 src-tauri/not-a-valid-url
 src-tauri/not-a-valid-url-wal
+e2e/bridge-server.mjs
+e2e/screenshots/
