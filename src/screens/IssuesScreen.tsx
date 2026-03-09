@@ -50,7 +50,8 @@ export function IssuesScreen() {
 
   const startSession = useTerminalStore((s) => s.startSession);
   const navigate = useUiStore((s) => s.navigate);
-  const { documents, openDocument } = useDocumentStore((s) => ({ documents: s.documents, openDocument: s.openDocument }));
+  const documents = useDocumentStore((s) => s.documents);
+  const openDocument = useDocumentStore((s) => s.openDocument);
 
   const [tab, setTab] = useState<Tab>("list");
   const [statusFilter, setStatusFilter] = useState<string>("open");
