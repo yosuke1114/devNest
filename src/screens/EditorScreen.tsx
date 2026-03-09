@@ -181,7 +181,7 @@ export function EditorScreen() {
         onCancel={handleModalCancel}
       />
     )}
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
       {/* ファイルツリー */}
       <aside
         style={{
@@ -251,7 +251,7 @@ export function EditorScreen() {
       </aside>
 
       {/* エディタ本体 */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {/* ツールバー */}
         <div
           style={{
@@ -274,7 +274,7 @@ export function EditorScreen() {
           )}
 
           {currentDoc?.push_status === "push_failed" && (
-            <button onClick={handleRetry} style={iconBtnStyle} title="再プッシュ">
+            <button onClick={handleRetry} className="btn-icon" title="再プッシュ">
               <IconRefresh size={16} />
             </button>
           )}
@@ -282,20 +282,10 @@ export function EditorScreen() {
           <button
             onClick={handleSave}
             disabled={saveStatus === "loading" || !currentDoc}
-            style={{
-              ...iconBtnStyle,
-              background: "#7c6cf2",
-              color: "#fff",
-              padding: "4px 12px",
-              borderRadius: 4,
-              gap: 4,
-              display: "flex",
-              alignItems: "center",
-              opacity: saveStatus === "loading" ? 0.7 : 1,
-            }}
+            className="btn-primary"
           >
-            <IconDeviceFloppy size={16} />
-            保存
+            <IconDeviceFloppy size={15} />
+            {saveStatus === "loading" ? "保存中…" : "保存"}
           </button>
         </div>
 

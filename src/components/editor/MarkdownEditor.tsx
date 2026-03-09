@@ -41,7 +41,13 @@ export function MarkdownEditor({
         view = new EditorView({
           state: EditorState.create({
             doc: initialContent,
-            extensions: [basicSetup, markdown(), oneDark, updateListener],
+            extensions: [
+              basicSetup,
+              markdown(),
+              oneDark,
+              updateListener,
+              EditorView.lineWrapping,
+            ],
           }),
           parent: containerRef.current,
         });

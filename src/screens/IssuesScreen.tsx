@@ -113,9 +113,10 @@ export function IssuesScreen() {
               const draft = await createDraft(currentProject.id);
               selectDraft(draft);
             }}
-            style={{ ...actionBtnStyle, gap: 4, display: "flex", alignItems: "center" }}
+            className="btn-primary"
+            style={{ padding: "4px 10px", fontSize: 12 }}
           >
-            <IconPlus size={16} />
+            <IconPlus size={14} />
             新規
           </button>
         </header>
@@ -157,11 +158,11 @@ export function IssuesScreen() {
           <button
             onClick={() => syncIssues(currentProject.id)}
             disabled={syncStatus === "loading"}
-            style={actionBtnStyle}
+            className="btn-icon"
             title="GitHub から同期"
           >
             <IconRefresh
-              size={16}
+              size={15}
               style={{
                 animation:
                   syncStatus === "loading" ? "spin 1s linear infinite" : undefined,

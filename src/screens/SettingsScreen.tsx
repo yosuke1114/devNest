@@ -160,17 +160,7 @@ export function SettingsScreen() {
         <button
           onClick={handleSaveCredentials}
           disabled={saving}
-          style={{
-            background: "#7c6cf2",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            padding: "10px 20px",
-            cursor: saving ? "not-allowed" : "pointer",
-            fontWeight: 600,
-            fontSize: 14,
-            opacity: saving ? 0.7 : 1,
-          }}
+          className="btn-primary"
         >
           {saving ? "保存中…" : "設定を保存"}
         </button>
@@ -188,34 +178,10 @@ export function SettingsScreen() {
           GitHub の CI 結果・PR 更新を自動的にポーリングします。
         </p>
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={async () => { await ipc.pollingStart(); }}
-            style={{
-              padding: "6px 16px",
-              borderRadius: 6,
-              border: "1px solid #2a5c2a",
-              background: "rgba(46, 100, 46, 0.4)",
-              color: "#a0e0a0",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
+          <button onClick={async () => { await ipc.pollingStart(); }} className="btn-secondary">
             有効にする
           </button>
-          <button
-            onClick={async () => { await ipc.pollingStop(); }}
-            style={{
-              padding: "6px 16px",
-              borderRadius: 6,
-              border: "1px solid #3a3a52",
-              background: "transparent",
-              color: "#aaa",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
+          <button onClick={async () => { await ipc.pollingStop(); }} className="btn-secondary">
             無効にする
           </button>
         </div>
@@ -236,22 +202,9 @@ export function SettingsScreen() {
               <button
                 onClick={handleIndexReset}
                 disabled={indexResetting}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "transparent",
-                  border: "1px solid #3a3a52",
-                  borderRadius: 6,
-                  color: "#e0e0e0",
-                  cursor: indexResetting ? "not-allowed" : "pointer",
-                  padding: "8px 14px",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  opacity: indexResetting ? 0.7 : 1,
-                }}
+                className="btn-secondary"
               >
-                <IconDatabase size={16} />
+                <IconDatabase size={15} />
                 {indexResetting ? "リセット中…" : "インデックスをリセット"}
               </button>
               {indexResetMsg && (
@@ -306,21 +259,7 @@ export function SettingsScreen() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={handleRevoke}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: "transparent",
-                border: "1px solid #c0392b",
-                borderRadius: 6,
-                color: "#e74c3c",
-                cursor: "pointer",
-                padding: "8px 14px",
-                fontSize: 13,
-              }}
-            >
+            <button onClick={handleRevoke} className="btn-danger">
               <IconX size={14} />
               認証を解除
             </button>
@@ -333,25 +272,10 @@ export function SettingsScreen() {
             <button
               onClick={handleStartAuth}
               disabled={authStarted}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                background: "#24292f",
-                color: "#fff",
-                border: "1px solid #3a3a52",
-                borderRadius: 6,
-                padding: "10px 18px",
-                cursor: authStarted ? "not-allowed" : "pointer",
-                fontWeight: 600,
-                fontSize: 14,
-                opacity: authStarted ? 0.7 : 1,
-              }}
+              className="btn-secondary"
             >
-              <IconBrandGithub size={18} />
-              {authStarted
-                ? "ブラウザで認証を完了してください…"
-                : "GitHub で認証する"}
+              <IconBrandGithub size={16} />
+              {authStarted ? "ブラウザで認証を完了してください…" : "GitHub で認証する"}
             </button>
           </div>
         )}

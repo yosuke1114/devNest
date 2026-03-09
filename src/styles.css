@@ -32,28 +32,54 @@ body {
 .markdown-body {
   color: #c9d1d9;
   line-height: 1.7;
+  /* デスクトップアプリ: 長い行を折り返してはみ出しを防ぐ */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
+.markdown-body p,
+.markdown-body li,
+.markdown-body blockquote {
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .markdown-body h1, .markdown-body h2, .markdown-body h3 {
   color: #e6edf3;
   margin: 16px 0 8px;
+  overflow-wrap: break-word;
 }
 .markdown-body code {
   background: #2a2a42;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
+  word-break: break-all;
 }
 .markdown-body pre {
   background: #1e1e30;
   padding: 12px;
   border-radius: 6px;
-  overflow: auto;
+  /* コードブロックは横スクロール（整形を維持） */
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+}
+.markdown-body pre code {
+  word-break: normal;
+  white-space: pre;
+}
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
 }
 .markdown-body ul, .markdown-body ol {
   padding-left: 24px;
 }
 .markdown-body a {
   color: #7c6cf2;
+  word-break: break-all;
 }
 
 /* スピナー */
@@ -71,4 +97,112 @@ select, input, textarea {
 }
 select:focus, input:focus, textarea:focus {
   border-color: #7c6cf2 !important;
+}
+
+/* ─── ボタン共通スタイル ──────────────────────────────────────────────────────── */
+
+/* プライマリ（保存・確定など） */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #7c6cf2 0%, #6355d4 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+  transition: filter 0.15s, opacity 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 2px 8px rgba(124,108,242,0.45), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.92);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* セカンダリ（同期・キャンセルなど） */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(255,255,255,0.05);
+  color: #c0c0d0;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.22);
+  color: #e0e0e0;
+}
+.btn-secondary:active:not(:disabled) {
+  background: rgba(255,255,255,0.07);
+}
+.btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* アイコンのみのゴースト型 */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  color: #888;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.btn-icon:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
+  color: #c0c0d0;
+  border-color: rgba(255,255,255,0.1);
+}
+.btn-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* 危険系（削除・解除など） */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: transparent;
+  color: #e74c3c;
+  border: 1px solid rgba(231,76,60,0.4);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(231,76,60,0.12);
+  border-color: rgba(231,76,60,0.7);
 }

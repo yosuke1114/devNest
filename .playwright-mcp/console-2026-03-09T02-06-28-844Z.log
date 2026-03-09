@@ -529,3 +529,14 @@
     at commitPassiveUnmountEffectsInsideOfDeletedTree_begin (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=6fbbc6d7:11593:15)
     at recursivelyTraversePassiveUnmountEffects (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=6fbbc6d7:11465:15)
     at commitPassiveUnmountOnFiber (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=6fbbc6d7:11516:13)
+[33296406ms] TypeError: Cannot read properties of undefined (reading 'unregisterListener')
+    at _unlisten (http://localhost:1420/node_modules/.vite/deps/@tauri-apps_api_event.js?v=c9273a8c:26:43)
+    at http://localhost:1420/node_modules/.vite/deps/@tauri-apps_api_event.js?v=c9273a8c:40:24
+    at http://localhost:1420/src/screens/EditorScreen.tsx:48:27
+    at Object.react_stack_bottom_frame (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:18573:13)
+    at runWithFiberInDEV (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:997:72)
+    at commitHookEffectListUnmount (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:9449:160)
+    at commitHookPassiveUnmountEffects (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:9468:60)
+    at commitPassiveUnmountEffectsInsideOfDeletedTree_begin (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:11593:15)
+    at recursivelyTraversePassiveUnmountEffects (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:11465:15)
+    at commitPassiveUnmountOnFiber (http://localhost:1420/node_modules/.vite/deps/react-dom_client.js?v=8fabdaac:11516:13)

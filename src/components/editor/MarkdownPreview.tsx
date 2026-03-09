@@ -35,6 +35,7 @@ export function MarkdownPreview({ content }: MarkdownPreviewProps) {
           overflow: "auto",
           padding: "12px 16px",
           fontSize: 13,
+          minWidth: 0,
         }}
       >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
