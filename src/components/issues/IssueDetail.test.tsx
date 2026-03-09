@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { IssueDetail } from "./IssueDetail";
-import type { Issue, IssueDocLink } from "../../types";
+import type { Document, Issue, IssueDocLink } from "../../types";
 
 function makeIssue(overrides: Partial<Issue> = {}): Issue {
   return {
@@ -35,6 +35,25 @@ function makeLink(overrides: Partial<IssueDocLink> = {}): IssueDocLink {
     created_at: "2026-01-01T00:00:00Z",
     path: "docs/auth.md",
     title: "Auth Design",
+    ...overrides,
+  };
+}
+
+function makeDocument(overrides: Partial<Document> = {}): Document {
+  return {
+    id: 20,
+    project_id: 1,
+    path: "docs/api-spec.md",
+    title: "API Spec",
+    sha: "abc123",
+    size_bytes: 500,
+    embedding_status: "indexed",
+    push_status: "synced",
+    is_dirty: false,
+    last_indexed_at: null,
+    last_synced_at: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
     ...overrides,
   };
 }
@@ -257,5 +276,106 @@ describe("IssueDetail", () => {
     expect(
       screen.getByRole("button", { name: /launch terminal/i })
     ).toBeDisabled();
+  });
+
+  // ─── DocLinkPanel: + LINK DOC ──────────────────────────────────────────────
+
+  it("+ LINK DOC ボタンが表示される", () => {
+    render(
+      <IssueDetail
+        issue={makeIssue()}
+        links={[]}
+        linksStatus="success"
+        documents={[makeDocument()]}
+        onAddLink={asyncNoop}
+        onRemoveLink={asyncNoop}
+        onLaunchTerminal={noop}
+        onOpenDocument={noop}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: /\+ LINK DOC/i })
+    ).toBeInTheDocument();
+  });
+
+  it("+ LINK DOC をクリックするとドキュメント一覧が表示される", () => {
+    render(
+      <IssueDetail
+        issue={makeIssue()}
+        links={[]}
+        linksStatus="success"
+        documents={[makeDocument({ id: 20, path: "docs/api-spec.md" })]}
+        onAddLink={asyncNoop}
+        onRemoveLink={asyncNoop}
+        onLaunchTerminal={noop}
+        onOpenDocument={noop}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /\+ LINK DOC/i }));
+    expect(screen.getByText("docs/api-spec.md")).toBeInTheDocument();
+  });
+
+  it("ドキュメントを選択すると onAddLink が呼ばれる", async () => {
+    const onAddLink = vi.fn().mockResolvedValue(undefined);
+    render(
+      <IssueDetail
+        issue={makeIssue({ id: 1 })}
+        links={[]}
+        linksStatus="success"
+        documents={[makeDocument({ id: 20, path: "docs/api-spec.md" })]}
+        onAddLink={onAddLink}
+        onRemoveLink={asyncNoop}
+        onLaunchTerminal={noop}
+        onOpenDocument={noop}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /\+ LINK DOC/i }));
+    fireEvent.click(screen.getByText("docs/api-spec.md"));
+    expect(onAddLink).toHaveBeenCalledWith(1, 20);
+  });
+
+  it("既にリンク済みのドキュメントはピッカーに表示されない", () => {
+    const linkedDoc = makeDocument({ id: 10, path: "docs/auth.md" });
+    const unlinkedDoc = makeDocument({ id: 20, path: "docs/api-spec.md" });
+    render(
+      <IssueDetail
+        issue={makeIssue()}
+        links={[makeLink({ document_id: 10, path: "docs/auth.md" })]}
+        linksStatus="success"
+        documents={[linkedDoc, unlinkedDoc]}
+        onAddLink={asyncNoop}
+        onRemoveLink={asyncNoop}
+        onLaunchTerminal={noop}
+        onOpenDocument={noop}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /\+ LINK DOC/i }));
+    // unlinked は表示される
+    expect(screen.getByText("docs/api-spec.md")).toBeInTheDocument();
+    // linked はピッカーに出ない（既にリンク表示で1つだが、ピッカー内には出ない）
+    const buttons = screen.queryAllByText("docs/auth.md");
+    // ピッカーオプション（button）としては表示されないこと
+    const pickerButtons = buttons.filter(
+      (el) => el.closest("[data-testid='doc-picker']") !== null
+    );
+    expect(pickerButtons).toHaveLength(0);
+  });
+
+  it("documents が空のとき + LINK DOC は表示されない", () => {
+    render(
+      <IssueDetail
+        issue={makeIssue()}
+        links={[]}
+        linksStatus="success"
+        documents={[]}
+        onAddLink={asyncNoop}
+        onRemoveLink={asyncNoop}
+        onLaunchTerminal={noop}
+        onOpenDocument={noop}
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: /\+ LINK DOC/i })
+    ).not.toBeInTheDocument();
   });
 });

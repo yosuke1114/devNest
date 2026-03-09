@@ -263,6 +263,74 @@ describe("issueStore", () => {
     expect(state.currentDraft?.id).toBe(2);
   });
 
+  // ─── addIssueLink / removeIssueLink ──────────────────────────────────────
+
+  it("addIssueLink() が issueDocLinkAdd を呼ぶ", async () => {
+    mockIpc.issueDocLinkAdd.mockResolvedValueOnce(undefined);
+    mockIpc.issueDocLinkList.mockResolvedValueOnce([]);
+    await useIssueStore.getState().addIssueLink(1, 10);
+    expect(mockIpc.issueDocLinkAdd).toHaveBeenCalledWith(1, 10);
+  });
+
+  it("addIssueLink() 後に issueLinks が再フェッチされる", async () => {
+    const link = makeDocLink({ issue_id: 1, document_id: 10 });
+    mockIpc.issueDocLinkAdd.mockResolvedValueOnce(undefined);
+    mockIpc.issueDocLinkList.mockResolvedValueOnce([link]);
+
+    await useIssueStore.getState().addIssueLink(1, 10);
+
+    expect(mockIpc.issueDocLinkList).toHaveBeenCalledWith(1);
+    expect(useIssueStore.getState().issueLinks).toHaveLength(1);
+  });
+
+  it("removeIssueLink() が issueDocLinkRemove を呼ぶ", async () => {
+    const link = makeDocLink({ id: 5, issue_id: 1, document_id: 10 });
+    useIssueStore.setState({ issueLinks: [link] });
+    mockIpc.issueDocLinkRemove.mockResolvedValueOnce(undefined);
+    mockIpc.issueDocLinkList.mockResolvedValueOnce([]);
+
+    await useIssueStore.getState().removeIssueLink(1, 10);
+
+    expect(mockIpc.issueDocLinkRemove).toHaveBeenCalledWith(1, 10);
+  });
+
+  it("removeIssueLink() 後に issueLinks が更新される", async () => {
+    const link = makeDocLink({ issue_id: 1, document_id: 10 });
+    useIssueStore.setState({ issueLinks: [link] });
+    mockIpc.issueDocLinkRemove.mockResolvedValueOnce(undefined);
+    mockIpc.issueDocLinkList.mockResolvedValueOnce([]);
+
+    await useIssueStore.getState().removeIssueLink(1, 10);
+
+    expect(useIssueStore.getState().issueLinks).toHaveLength(0);
+  });
+
+  // ─── fetchDrafts ──────────────────────────────────────────────────────────
+
+  it("fetchDrafts() が issueDraftList を呼ぶ", async () => {
+    mockIpc.issueDraftList.mockResolvedValueOnce([]);
+    await useIssueStore.getState().fetchDrafts(1);
+    expect(mockIpc.issueDraftList).toHaveBeenCalledWith(1);
+  });
+
+  it("fetchDrafts() 成功時に drafts がセットされる", async () => {
+    const draft = makeDraft({ id: 10 });
+    mockIpc.issueDraftList.mockResolvedValueOnce([draft]);
+
+    await useIssueStore.getState().fetchDrafts(1);
+
+    expect(useIssueStore.getState().drafts).toHaveLength(1);
+    expect(useIssueStore.getState().drafts[0].id).toBe(10);
+  });
+
+  it("fetchDrafts() 失敗時に drafts が空のままになる", async () => {
+    mockIpc.issueDraftList.mockRejectedValueOnce(new Error("fail"));
+
+    await useIssueStore.getState().fetchDrafts(1);
+
+    expect(useIssueStore.getState().drafts).toHaveLength(0);
+  });
+
   // ─── fetchLabels ───────────────────────────────────────────────────────────
 
   it("fetchLabels() が githubLabelsList を呼ぶ", async () => {

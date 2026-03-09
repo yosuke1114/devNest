@@ -190,4 +190,125 @@ describe("notificationsStore", () => {
     await useNotificationsStore.getState().requestPermission();
     expect(useNotificationsStore.getState().permissionStatus).toBe("granted");
   });
+
+  // ─── navigateTo ───────────────────────────────────────────────────────────
+
+  it("navigateTo() が対象通知を見つけられない場合は何もしない", async () => {
+    useNotificationsStore.setState({ notifications: [] });
+    // 例外が発生しないこと
+    await useNotificationsStore.getState().navigateTo(1, 999);
+    expect(mockIpc.notificationMarkRead).not.toHaveBeenCalled();
+    expect(mockIpc.notificationNavigate).not.toHaveBeenCalled();
+  });
+
+  it("navigateTo() が未読通知を markRead する", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 5, is_read: false })],
+      unreadCount: 1,
+    });
+    mockIpc.notificationMarkRead.mockResolvedValueOnce(undefined);
+    mockIpc.notificationNavigate.mockResolvedValueOnce({ screen: "pr", resource_id: null });
+
+    await useNotificationsStore.getState().navigateTo(1, 5);
+
+    expect(mockIpc.notificationMarkRead).toHaveBeenCalledWith(5);
+  });
+
+  it("navigateTo() が既読通知では markRead を呼ばない", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 5, is_read: true })],
+      unreadCount: 0,
+    });
+    mockIpc.notificationNavigate.mockResolvedValueOnce({ screen: "pr", resource_id: null });
+
+    await useNotificationsStore.getState().navigateTo(1, 5);
+
+    expect(mockIpc.notificationMarkRead).not.toHaveBeenCalled();
+  });
+
+  it("navigateTo() が notificationNavigate を呼ぶ", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 7, is_read: true })],
+    });
+    mockIpc.notificationNavigate.mockResolvedValueOnce({ screen: "notifications", resource_id: null });
+
+    await useNotificationsStore.getState().navigateTo(1, 7);
+
+    expect(mockIpc.notificationNavigate).toHaveBeenCalledWith(7);
+  });
+
+  it("navigateTo() が navigate ターゲットの画面に遷移する", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 8, is_read: true })],
+    });
+    mockIpc.notificationNavigate.mockResolvedValueOnce({ screen: "conflict", resource_id: null });
+
+    await useNotificationsStore.getState().navigateTo(1, 8);
+
+    expect(useUiStore.getState().currentScreen).toBe("conflict");
+  });
+
+  it("navigateTo() が null を返した場合は遷移しない", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 9, is_read: true })],
+    });
+    mockIpc.notificationNavigate.mockResolvedValueOnce(null as never);
+
+    await useNotificationsStore.getState().navigateTo(1, 9);
+
+    // currentScreen は setup のまま（navigate は呼ばれない）
+    expect(useUiStore.getState().currentScreen).toBe("setup");
+  });
+
+  it("navigateTo() で screen=pr かつ resource_id が null の場合も pr に遷移する", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 10, is_read: true })],
+    });
+    mockIpc.notificationNavigate.mockResolvedValueOnce({ screen: "pr", resource_id: null });
+
+    await useNotificationsStore.getState().navigateTo(1, 10);
+
+    expect(useUiStore.getState().currentScreen).toBe("pr");
+  });
+
+  it("navigateTo() で screen=pr かつ resource_id がある場合 prList を取得して selectPr を呼ぶ", async () => {
+    useNotificationsStore.setState({
+      notifications: [makeNotification({ id: 11, is_read: true })],
+    });
+    mockIpc.notificationNavigate.mockResolvedValueOnce({ screen: "pr", resource_id: 44 });
+    mockIpc.prList.mockResolvedValueOnce([
+      {
+        id: 1,
+        project_id: 1,
+        github_number: 44,
+        github_id: 1044,
+        title: "feat: auto",
+        body: "",
+        state: "open",
+        head_branch: "feat/44",
+        base_branch: "main",
+        author_login: "user",
+        checks_status: "passing",
+        linked_issue_number: null,
+        draft: false,
+        merged_at: null,
+        github_created_at: "2026-01-01T00:00:00Z",
+        github_updated_at: "2026-01-01T00:00:00Z",
+        synced_at: "2026-01-01T00:00:00Z",
+      },
+    ]);
+
+    // prStore mock の selectPr を確認できるよう取得
+    const { usePrStore } = await import("./prStore");
+    const mockSelectPr = vi.fn();
+    vi.mocked(usePrStore.getState).mockReturnValueOnce({
+      selectPr: mockSelectPr,
+    } as never);
+
+    await useNotificationsStore.getState().navigateTo(1, 11);
+
+    expect(mockIpc.prList).toHaveBeenCalledWith(1);
+    expect(mockSelectPr).toHaveBeenCalledWith(1, 1);
+    expect(useUiStore.getState().currentScreen).toBe("pr");
+  });
 });

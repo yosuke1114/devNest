@@ -1,12 +1,14 @@
+import { useState } from "react";
 import { IconTerminal2, IconX, IconFileText } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Issue, IssueDocLink } from "../../types";
+import type { Document, Issue, IssueDocLink } from "../../types";
 
 interface IssueDetailProps {
   issue: Issue;
   links: IssueDocLink[];
   linksStatus: string;
+  documents?: Document[];
   onAddLink: (issueId: number, documentId: number) => Promise<void>;
   onRemoveLink: (issueId: number, documentId: number) => Promise<void>;
   onLaunchTerminal: (issueId: number) => void;
@@ -32,11 +34,22 @@ export function IssueDetail({
   issue,
   links,
   linksStatus,
+  documents = [],
+  onAddLink,
   onRemoveLink,
   onLaunchTerminal,
   onOpenDocument,
 }: IssueDetailProps) {
   const isOpen = issue.status !== "closed";
+  const [showPicker, setShowPicker] = useState(false);
+
+  const linkedDocIds = new Set(links.map((l) => l.document_id));
+  const availableDocs = documents.filter((d) => !linkedDocIds.has(d.id));
+
+  const handleAddLink = async (docId: number) => {
+    setShowPicker(false);
+    await onAddLink(issue.id, docId);
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -76,7 +89,33 @@ export function IssueDetail({
 
         {/* DocLinkPanel */}
         <div className="rounded-lg border border-white/10 p-3">
-          <div className="text-xs font-medium text-gray-400 mb-2">Design Docs</div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-medium text-gray-400">Design Docs</div>
+            {availableDocs.length > 0 && (
+              <button
+                onClick={() => setShowPicker((v) => !v)}
+                className="flex items-center gap-0.5 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                + LINK DOC
+              </button>
+            )}
+          </div>
+          {showPicker && (
+            <div
+              data-testid="doc-picker"
+              className="mb-2 rounded border border-white/10 bg-black/40 overflow-hidden"
+            >
+              {availableDocs.map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() => handleAddLink(doc.id)}
+                  className="w-full text-left px-3 py-1.5 text-xs font-mono text-gray-300 hover:bg-white/10 transition-colors"
+                >
+                  {doc.path}
+                </button>
+              ))}
+            </div>
+          )}
           {linksStatus === "loading" ? (
             <div className="text-xs text-gray-500">Loading...</div>
           ) : links.length === 0 ? (

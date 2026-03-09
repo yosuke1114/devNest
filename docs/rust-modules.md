@@ -20,6 +20,7 @@ src-tauri/
     db/
       mod.rs                 # DbPool 型エイリアス・init()
       migrations.rs          # sqlx::migrate! ラッパー
+      <!-- e2e test: 打鍵確認 OK -->
       cleanup.rs             # startup_cleanup 実装
     models/
       mod.rs

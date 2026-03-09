@@ -225,7 +225,7 @@ export function buildMockIpcScript(overrides: Record<string, unknown> = {}): str
     notification_unread_count: 1,
     notification_mark_read: null,
     notification_mark_all_read: null,
-    notification_navigate: { screen: "pr", id: 1 },
+    notification_navigate: { screen: "pr", resource_id: 1 },
     notification_permission_request: "granted",
     polling_start: null,
     polling_stop: null,

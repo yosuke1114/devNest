@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useIssueStore } from "../stores/issueStore";
 import { useProjectStore } from "../stores/projectStore";
+import { useDocumentStore } from "../stores/documentStore";
 import { useTerminalStore } from "../stores/terminalStore";
 import { useUiStore } from "../stores/uiStore";
 import { IssueDetail } from "../components/issues/IssueDetail";
@@ -46,6 +47,7 @@ export function IssuesScreen() {
 
   const startSession = useTerminalStore((s) => s.startSession);
   const navigate = useUiStore((s) => s.navigate);
+  const documents = useDocumentStore((s) => s.documents);
 
   const [tab, setTab] = useState<Tab>("list");
   const [statusFilter, setStatusFilter] = useState<string>("open");
@@ -176,6 +178,7 @@ export function IssuesScreen() {
           issue={currentIssue}
           links={issueLinks}
           linksStatus="success"
+          documents={documents}
           onAddLink={(issueId, documentId) => addIssueLink(issueId, documentId)}
           onRemoveLink={(issueId, documentId) => removeIssueLink(issueId, documentId)}
           onLaunchTerminal={handleLaunchTerminal}
