@@ -142,6 +142,9 @@ export const issueDraftGenerate = (draftId: number) =>
 export const issueDraftCancel = (draftId: number) =>
   invoke<void>("issue_draft_cancel", { draftId });
 
+export const issueCreate = (draftId: number) =>
+  invoke<Issue>("issue_create", { draftId });
+
 export const githubLabelsList = (projectId: number) =>
   invoke<GitHubLabel[]>("github_labels_list", { projectId });
 

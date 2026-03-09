@@ -370,14 +370,3 @@ function EmptyState({ message }: { message: string }) {
     </div>
   );
 }
-
-const iconBtnStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid #3a3a52",
-  color: "#aaa",
-  cursor: "pointer",
-  borderRadius: 4,
-  padding: 4,
-  display: "flex",
-  alignItems: "center",
-};

@@ -46,6 +46,7 @@ macro_rules! all_commands {
             commands::issue::issue_draft_list,
             commands::issue::issue_draft_generate,
             commands::issue::issue_draft_cancel,
+            commands::issue::issue_create,
             commands::issue::github_labels_list,
             // Phase 1: GitHub 認証
             commands::github_auth::github_auth_start,

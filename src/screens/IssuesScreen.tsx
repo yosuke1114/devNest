@@ -27,6 +27,7 @@ export function IssuesScreen() {
     drafts,
     currentDraft,
     draftStreamBuffer,
+    labels,
     listStatus,
     syncStatus,
     generateStatus,
@@ -41,13 +42,15 @@ export function IssuesScreen() {
     updateDraft,
     selectDraft,
     generateDraft,
+    fetchLabels,
+    createIssue,
     listenDraftChunk,
     listenDraftDone,
   } = useIssueStore();
 
   const startSession = useTerminalStore((s) => s.startSession);
   const navigate = useUiStore((s) => s.navigate);
-  const documents = useDocumentStore((s) => s.documents);
+  const { documents, openDocument } = useDocumentStore((s) => ({ documents: s.documents, openDocument: s.openDocument }));
 
   const [tab, setTab] = useState<Tab>("list");
   const [statusFilter, setStatusFilter] = useState<string>("open");
@@ -125,9 +128,16 @@ export function IssuesScreen() {
           currentDraft={currentDraft}
           streamBuffer={draftStreamBuffer}
           generating={generateStatus === "loading"}
+          labels={labels}
           onSelectDraft={selectDraft}
           onUpdateDraft={updateDraft}
           onGenerate={generateDraft}
+          onFetchLabels={() => currentProject && fetchLabels(currentProject.id)}
+          onCreateIssue={createIssue}
+          onLaunchTerminal={() => {
+            startSession(currentProject.id);
+            navigate("terminal");
+          }}
         />
       </div>
     );
@@ -188,7 +198,10 @@ export function IssuesScreen() {
           onAddLink={(issueId, documentId) => addIssueLink(issueId, documentId)}
           onRemoveLink={(issueId, documentId) => removeIssueLink(issueId, documentId)}
           onLaunchTerminal={handleLaunchTerminal}
-          onOpenDocument={() => {}}
+          onOpenDocument={(documentId) => {
+            openDocument(documentId);
+            navigate("editor");
+          }}
         />
       ) : (
         <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
@@ -302,31 +315,89 @@ interface WizardPanelProps {
   currentDraft: IssueDraft | null;
   streamBuffer: string;
   generating: boolean;
+  labels: import("../types").GitHubLabel[];
   onSelectDraft: (d: IssueDraft | null) => void;
   onUpdateDraft: (patch: IssueDraftPatch) => Promise<void>;
   onGenerate: (draftId: number) => Promise<void>;
+  onFetchLabels: () => void;
+  onCreateIssue: (draftId: number) => Promise<Issue>;
+  onLaunchTerminal: () => void;
 }
+
+type WizardStep = "edit" | "labels" | "confirm" | "done";
 
 function WizardPanel({
   drafts,
   currentDraft,
   streamBuffer,
   generating,
+  labels,
   onSelectDraft,
   onUpdateDraft,
   onGenerate,
+  onFetchLabels,
+  onCreateIssue,
+  onLaunchTerminal,
 }: WizardPanelProps) {
   const [title, setTitle] = useState(currentDraft?.title ?? "");
   const [context, setContext] = useState(currentDraft?.wizard_context ?? "");
+  const [assignee, setAssignee] = useState(currentDraft?.assignee_login ?? "");
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [step, setStep] = useState<WizardStep>("edit");
+  const [filing, setFiling] = useState(false);
+  const [filedIssue, setFiledIssue] = useState<Issue | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
     setTitle(currentDraft?.title ?? "");
     setContext(currentDraft?.wizard_context ?? "");
+    setAssignee(currentDraft?.assignee_login ?? "");
+    try { setSelectedLabels(JSON.parse(currentDraft?.labels ?? "[]")); } catch { setSelectedLabels([]); }
+    setStep("edit");
+    setFiledIssue(null);
+    setFileError(null);
   }, [currentDraft?.id]);
 
   const handleBlur = () => {
     if (!currentDraft) return;
     onUpdateDraft({ id: currentDraft.id, title, wizard_context: context });
+  };
+
+  const handleGoToLabels = () => {
+    if (!currentDraft) return;
+    onFetchLabels();
+    setStep("labels");
+  };
+
+  const handleSaveLabels = async () => {
+    if (!currentDraft) return;
+    await onUpdateDraft({
+      id: currentDraft.id,
+      labels: JSON.stringify(selectedLabels),
+      assignee_login: assignee || undefined,
+    });
+    setStep("confirm");
+  };
+
+  const handleFile = async () => {
+    if (!currentDraft) return;
+    setFiling(true);
+    setFileError(null);
+    try {
+      const issue = await onCreateIssue(currentDraft.id);
+      setFiledIssue(issue);
+      setStep("done");
+    } catch (e) {
+      setFileError(String(e));
+    } finally {
+      setFiling(false);
+    }
+  };
+
+  const toggleLabel = (name: string) => {
+    setSelectedLabels((prev) =>
+      prev.includes(name) ? prev.filter((l) => l !== name) : [...prev, name]
+    );
   };
 
   return (
@@ -338,6 +409,7 @@ function WizardPanel({
           borderRight: "1px solid #2a2a3a",
           overflow: "auto",
           background: "#161622",
+          flexShrink: 0,
         }}
       >
         <div
@@ -378,25 +450,15 @@ function WizardPanel({
         ))}
       </aside>
 
-      {/* エディタ */}
-      {currentDraft ? (
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            gap: 0,
-            overflow: "hidden",
-          }}
-        >
+      {/* メインエリア */}
+      {!currentDraft ? (
+        <div style={{ ...centerStyle, flex: 1 }}>
+          ドラフトを選択するか、新規作成してください
+        </div>
+      ) : step === "edit" ? (
+        <div style={{ flex: 1, display: "flex", gap: 0, overflow: "hidden" }}>
           {/* 入力フォーム */}
-          <div
-            style={{
-              flex: 1,
-              padding: 20,
-              overflow: "auto",
-              borderRight: "1px solid #2a2a3a",
-            }}
-          >
+          <div style={{ flex: 1, padding: 20, overflow: "auto", borderRight: "1px solid #2a2a3a" }}>
             <label style={labelStyle}>タイトル</label>
             <input
               value={title}
@@ -418,65 +480,134 @@ function WizardPanel({
               style={{ ...inputStyle, resize: "vertical" }}
             />
 
-            <button
-              onClick={() => onGenerate(currentDraft.id)}
-              disabled={generating}
-              style={{
-                marginTop: 16,
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: "#7c6cf2",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                padding: "10px 18px",
-                cursor: generating ? "not-allowed" : "pointer",
-                fontWeight: 600,
-                fontSize: 14,
-                opacity: generating ? 0.7 : 1,
-              }}
-            >
-              <IconSparkles size={16} />
-              {generating ? "生成中…" : "AI で本文を生成"}
-            </button>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => onGenerate(currentDraft.id)}
+                disabled={generating}
+                className="btn-primary"
+              >
+                <IconSparkles size={16} />
+                {generating ? "生成中…" : "AI で本文を生成"}
+              </button>
+              {streamBuffer && (
+                <button onClick={handleGoToLabels} className="btn-secondary">
+                  次へ →
+                </button>
+              )}
+            </div>
           </div>
 
           {/* プレビュー */}
-          <div
-            style={{
-              flex: 1,
-              padding: 20,
-              overflow: "auto",
-              background: "#161622",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                color: "#888",
-                marginBottom: 12,
-                textTransform: "uppercase",
-              }}
-            >
+          <div style={{ flex: 1, padding: 20, overflow: "auto", background: "#161622" }}>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 12, textTransform: "uppercase" }}>
               Preview
             </div>
             <div className="markdown-body" style={{ fontSize: 14, lineHeight: 1.7 }}>
               {streamBuffer ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {streamBuffer}
-                </ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamBuffer}</ReactMarkdown>
               ) : (
-                <span style={{ color: "#555" }}>
-                  生成ボタンを押すと AI が本文を生成します
-                </span>
+                <span style={{ color: "#555" }}>生成ボタンを押すと AI が本文を生成します</span>
               )}
             </div>
           </div>
         </div>
+      ) : step === "labels" ? (
+        <div style={{ flex: 1, padding: 24, overflow: "auto" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: "#c0c0d0" }}>
+            ラベル・担当者
+          </h3>
+
+          <label style={labelStyle}>担当者 (GitHub ログイン名)</label>
+          <input
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+            placeholder="例: alice"
+            style={{ ...inputStyle, marginBottom: 20 }}
+          />
+
+          <label style={{ ...labelStyle, marginBottom: 10 }}>ラベル</label>
+          {labels.length === 0 ? (
+            <p style={{ color: "#666", fontSize: 13 }}>ラベルが取得できませんでした</p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+              {labels.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => toggleLabel(l.name)}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: 12,
+                    border: `1px solid #${l.color}`,
+                    background: selectedLabels.includes(l.name) ? `#${l.color}33` : "transparent",
+                    color: selectedLabels.includes(l.name) ? `#${l.color}` : "#888",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: selectedLabels.includes(l.name) ? 600 : 400,
+                  }}
+                >
+                  {l.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setStep("edit")} className="btn-secondary">← 戻る</button>
+            <button onClick={handleSaveLabels} className="btn-primary">確認へ →</button>
+          </div>
+        </div>
+      ) : step === "confirm" ? (
+        <div style={{ flex: 1, padding: 24, overflow: "auto" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: "#c0c0d0" }}>
+            Issue 確認
+          </h3>
+
+          <div style={{ background: "#1e1e30", border: "1px solid #2a2a3a", borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{currentDraft.title}</div>
+            {selectedLabels.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                {selectedLabels.map((l) => (
+                  <span key={l} style={{ fontSize: 11, padding: "1px 8px", borderRadius: 10, background: "#2a3a4a", color: "#6ab0de", border: "1px solid #3a4a5a" }}>{l}</span>
+                ))}
+              </div>
+            )}
+            {assignee && (
+              <div style={{ fontSize: 12, color: "#888" }}>担当: @{assignee}</div>
+            )}
+          </div>
+
+          <div className="markdown-body" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 24, background: "#161622", padding: 16, borderRadius: 8 }}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {currentDraft.draft_body ?? currentDraft.body}
+            </ReactMarkdown>
+          </div>
+
+          {fileError && (
+            <p style={{ color: "#e74c3c", fontSize: 13, marginBottom: 12 }}>{fileError}</p>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setStep("labels")} className="btn-secondary">← 戻る</button>
+            <button onClick={handleFile} disabled={filing} className="btn-primary">
+              <IconSparkles size={14} />
+              {filing ? "提出中…" : "GitHub に Issue を提出"}
+            </button>
+          </div>
+        </div>
       ) : (
-        <div style={{ ...centerStyle, flex: 1 }}>
-          ドラフトを選択するか、新規作成してください
+        /* step === "done" */
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+          <div style={{ fontSize: 48 }}>✅</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#e0e0e0" }}>Issue を提出しました！</div>
+          {filedIssue && (
+            <div style={{ color: "#888", fontSize: 14 }}>
+              #{filedIssue.github_number} {filedIssue.title}
+            </div>
+          )}
+          <button onClick={onLaunchTerminal} className="btn-primary" style={{ marginTop: 8 }}>
+            <IconSparkles size={14} />
+            LAUNCH TERMINAL
+          </button>
         </div>
       )}
     </div>
@@ -534,17 +665,6 @@ const selectStyle: React.CSSProperties = {
   padding: "4px 8px",
   fontSize: 13,
   marginRight: 8,
-};
-
-const actionBtnStyle: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid #3a3a52",
-  borderRadius: 4,
-  color: "#aaa",
-  cursor: "pointer",
-  padding: 6,
-  display: "flex",
-  alignItems: "center",
 };
 
 const labelStyle: React.CSSProperties = {

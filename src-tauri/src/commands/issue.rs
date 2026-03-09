@@ -273,6 +273,56 @@ pub async fn issue_draft_generate(
     Ok(())
 }
 
+// ─── T-R-D07: issue_create ───────────────────────────────────────────────────
+
+/// AI Wizard ドラフトから GitHub Issue を作成し、DB に upsert して返す。
+/// ドラフトの status を "submitted"、github_issue_id を更新する。
+#[tauri::command]
+pub async fn issue_create(
+    draft_id: i64,
+    state: State<'_, AppState>,
+) -> std::result::Result<Issue, AppError> {
+    // ドラフト取得
+    let draft = db::issue::draft_find(&state.db, draft_id).await?;
+
+    // プロジェクト情報・トークン取得
+    let project = db::project::find(&state.db, draft.project_id).await?;
+    let token = keychain::require_token(draft.project_id)?;
+
+    // 本文は draft_body 優先、なければ body
+    let body = draft.draft_body.as_deref().unwrap_or(&draft.body);
+
+    // labels JSON 配列をパース
+    let labels: Vec<String> = serde_json::from_str(&draft.labels).unwrap_or_default();
+
+    // GitHub API で Issue 作成
+    let client = GitHubClient::new(&token, &project.repo_owner, &project.repo_name);
+    let gh_issue = client
+        .create_issue(&draft.title, body, &labels, draft.assignee_login.as_deref())
+        .await?;
+
+    // DB に upsert
+    let now = Utc::now().to_rfc3339();
+    let issue_db_id = db::issue::upsert(&state.db, draft.project_id, &gh_issue, &now).await?;
+
+    // ドラフト status を submitted に更新
+    let patch = IssueDraftPatch {
+        id: draft_id,
+        title: None,
+        body: None,
+        draft_body: None,
+        wizard_context: None,
+        labels: None,
+        assignee_login: None,
+        status: Some("submitted".to_string()),
+        github_issue_id: Some(gh_issue.id),
+    };
+    db::issue::draft_update(&state.db, &patch).await?;
+
+    // 作成した Issue を返す
+    db::issue::find_by_id(&state.db, issue_db_id).await
+}
+
 // ─── T-R-E01: github_labels_list ─────────────────────────────────────────────
 
 /// GitHub のラベル一覧を取得する。

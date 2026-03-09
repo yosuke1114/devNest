@@ -41,6 +41,7 @@ interface IssueState {
   selectDraft: (draft: IssueDraft | null) => void;
   generateDraft: (draftId: number) => Promise<void>;
   cancelDraft: (draftId: number) => Promise<void>;
+  createIssue: (draftId: number) => Promise<Issue>;
 
   // Labels
   fetchLabels: (projectId: number) => Promise<void>;
@@ -165,6 +166,21 @@ export const useIssueStore = create<IssueState>((set, get) => ({
       drafts: s.drafts.filter((d) => d.id !== draftId),
       currentDraft: s.currentDraft?.id === draftId ? null : s.currentDraft,
     }));
+  },
+
+  createIssue: async (draftId) => {
+    const issue = await ipc.issueCreate(draftId);
+    set((s) => ({
+      drafts: s.drafts.map((d) =>
+        d.id === draftId ? { ...d, status: "submitted", github_issue_id: issue.github_id } : d
+      ),
+      currentDraft:
+        s.currentDraft?.id === draftId
+          ? { ...s.currentDraft, status: "submitted", github_issue_id: issue.github_id }
+          : s.currentDraft,
+      issues: [issue, ...s.issues],
+    }));
+    return issue;
   },
 
   fetchLabels: async (projectId) => {
