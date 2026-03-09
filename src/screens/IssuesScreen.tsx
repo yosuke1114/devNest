@@ -5,6 +5,7 @@ import {
   IconSparkles,
   IconCircleCheck,
   IconCircleDot,
+  IconFileText,
 } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -14,7 +15,8 @@ import { useDocumentStore } from "../stores/documentStore";
 import { useTerminalStore } from "../stores/terminalStore";
 import { useUiStore } from "../stores/uiStore";
 import { IssueDetail } from "../components/issues/IssueDetail";
-import type { Issue, IssueDraft, IssueDraftPatch } from "../types";
+import * as ipc from "../lib/ipc";
+import type { Issue, IssueDraft, IssueDraftPatch, IssueContextChunk } from "../types";
 
 type Tab = "list" | "wizard";
 
@@ -125,6 +127,7 @@ export function IssuesScreen() {
           </button>
         </header>
         <WizardPanel
+          projectId={currentProject.id}
           drafts={drafts}
           currentDraft={currentDraft}
           streamBuffer={draftStreamBuffer}
@@ -312,6 +315,7 @@ function IssueRow({
 // ─── AI Wizard Panel ──────────────────────────────────────────────────────────
 
 interface WizardPanelProps {
+  projectId: number;
   drafts: IssueDraft[];
   currentDraft: IssueDraft | null;
   streamBuffer: string;
@@ -328,6 +332,7 @@ interface WizardPanelProps {
 type WizardStep = "edit" | "labels" | "confirm" | "done";
 
 function WizardPanel({
+  projectId,
   drafts,
   currentDraft,
   streamBuffer,
@@ -348,6 +353,7 @@ function WizardPanel({
   const [filing, setFiling] = useState(false);
   const [filedIssue, setFiledIssue] = useState<Issue | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [contextChunks, setContextChunks] = useState<IssueContextChunk[]>([]);
 
   useEffect(() => {
     setTitle(currentDraft?.title ?? "");
@@ -483,7 +489,21 @@ function WizardPanel({
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button
-                onClick={() => onGenerate(currentDraft.id)}
+                onClick={async () => {
+                  onGenerate(currentDraft.id);
+                  // コンテキスト検索（エラーは無視）
+                  try {
+                    const query = `${title} ${context}`.trim();
+                    if (query.length >= 2) {
+                      const chunks = await ipc.documentSearchSemantic(projectId, query);
+                      setContextChunks(chunks.slice(0, 3).map((r) => ({
+                        path: r.path,
+                        section_heading: r.section_heading ?? null,
+                        content: r.content,
+                      })));
+                    }
+                  } catch { /* ignore */ }
+                }}
                 disabled={generating}
                 className="btn-primary"
               >
@@ -510,6 +530,34 @@ function WizardPanel({
                 <span style={{ color: "#555" }}>生成ボタンを押すと AI が本文を生成します</span>
               )}
             </div>
+
+            {/* セマンティック検索で見つかった関連設計書チャンク */}
+            {contextChunks.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 8, textTransform: "uppercase" }}>
+                  関連設計書
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {contextChunks.map((chunk, i) => (
+                    <div
+                      key={i}
+                      style={{ background: "#1e2030", border: "1px solid #2a2a3a", borderRadius: 6, padding: "10px 12px" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <IconFileText size={13} style={{ color: "#7c6cf2", flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, color: "#7c6cf2", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {chunk.path}
+                          {chunk.section_heading ? ` — ${chunk.section_heading}` : ""}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: "#aaa", margin: 0, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
+                        {chunk.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : step === "labels" ? (

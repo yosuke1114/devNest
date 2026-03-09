@@ -3,6 +3,7 @@ use crate::db::DbPool;
 use crate::error::Result;
 use crate::models::search::{SearchHistory, SearchResult};
 use crate::services::chunker::Chunk;
+use crate::services::embedding::{deserialize_embedding, serialize_embedding};
 
 /// ドキュメントの既存チャンク + FTS エントリを削除する。
 pub async fn delete_document_index(pool: &DbPool, document_id: i64) -> Result<()> {
@@ -218,6 +219,101 @@ pub async fn add_history(
     Ok(())
 }
 
+/// チャンクの埋め込みベクトルを保存する。
+pub async fn save_embedding(pool: &DbPool, chunk_id: i64, embedding: &[f32]) -> Result<()> {
+    let blob = serialize_embedding(embedding);
+    sqlx::query(
+        r#"INSERT INTO chunk_embeddings (chunk_id, embedding)
+           VALUES (?, ?)
+           ON CONFLICT(chunk_id) DO UPDATE SET embedding = excluded.embedding"#,
+    )
+    .bind(chunk_id)
+    .bind(&blob)
+    .execute(pool)
+    .await?;
+
+    // embedding_status を 'indexed' に更新
+    sqlx::query(
+        "UPDATE document_chunks SET embedding_status = 'indexed' WHERE id = ?",
+    )
+    .bind(chunk_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// プロジェクトの全チャンク埋め込みを取得する（ベクトル類似度計算用）。
+/// 戻り値: Vec<(chunk_id, document_id, embedding)>
+pub async fn get_all_embeddings_for_project(
+    pool: &DbPool,
+    project_id: i64,
+) -> Result<Vec<(i64, i64, Vec<f32>)>> {
+    let rows: Vec<(i64, i64, Vec<u8>)> = sqlx::query_as(
+        r#"SELECT ce.chunk_id, dc.document_id, ce.embedding
+           FROM chunk_embeddings ce
+           JOIN document_chunks dc ON dc.id = ce.chunk_id
+           JOIN documents d ON d.id = dc.document_id
+           WHERE d.project_id = ?"#,
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(cid, did, bytes)| (cid, did, deserialize_embedding(&bytes)))
+        .collect())
+}
+
+/// chunk_id リストから SearchResult を取得する。
+pub async fn get_chunks_by_ids(
+    pool: &DbPool,
+    chunk_ids: &[i64],
+    scores: &[f64],
+) -> Result<Vec<SearchResult>> {
+    let mut results = Vec::new();
+    for (&chunk_id, &score) in chunk_ids.iter().zip(scores.iter()) {
+        type Row = (i64, String, Option<String>, Option<String>, String, i64);
+        let row: Option<Row> = sqlx::query_as(
+            r#"SELECT dc.document_id, d.path, d.title, dc.section_heading, dc.content, dc.start_line
+               FROM document_chunks dc
+               JOIN documents d ON d.id = dc.document_id
+               WHERE dc.id = ?"#,
+        )
+        .bind(chunk_id)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some((document_id, path, title, section_heading, content, start_line)) = row {
+            results.push(SearchResult {
+                document_id,
+                chunk_id,
+                path,
+                title,
+                section_heading,
+                content,
+                start_line,
+                score,
+            });
+        }
+    }
+    Ok(results)
+}
+
+/// 埋め込みステータスが 'pending' または 'stale' のチャンク ID を返す。
+pub async fn get_pending_chunks(pool: &DbPool, document_id: i64) -> Result<Vec<(i64, String)>> {
+    let rows: Vec<(i64, String)> = sqlx::query_as(
+        r#"SELECT id, content FROM document_chunks
+           WHERE document_id = ?
+             AND (embedding_status = 'pending' OR embedding_status = 'stale')"#,
+    )
+    .bind(document_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
 /// 検索履歴を新しい順で返す。
 pub async fn list_history(
     pool: &DbPool,
@@ -423,5 +519,140 @@ mod tests {
         // FTS も空になっていること
         let results = search_keyword(&pool, pid, "content", 10).await.unwrap();
         assert!(results.is_empty());
+    }
+
+    // ─── 埋め込み保存・取得 ────────────────────────────────────────────────────
+
+    // 🔴 Red: save_embedding → get_all_embeddings_for_project でラウンドトリップできること
+    #[tokio::test]
+    async fn test_save_and_retrieve_embedding() {
+        let (pool, _dir) = setup().await;
+        let (pid, did) = insert_project_and_document(&pool).await;
+
+        let md = "## Auth\nOAuth flow design.";
+        let chunks = chunk_document(md);
+        index_document(&pool, did, "docs/arch.md", &chunks).await.unwrap();
+
+        // chunk_id を取得
+        let (chunk_id,): (i64,) = sqlx::query_as("SELECT id FROM document_chunks WHERE document_id = ? LIMIT 1")
+            .bind(did)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        // 埋め込みを保存
+        let embedding: Vec<f32> = (0..1536).map(|i| i as f32 * 0.001).collect();
+        save_embedding(&pool, chunk_id, &embedding).await.unwrap();
+
+        // 取得
+        let all = get_all_embeddings_for_project(&pool, pid).await.unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].0, chunk_id);
+        assert_eq!(all[0].1, did);
+        assert_eq!(all[0].2.len(), 1536);
+        assert!((all[0].2[0] - embedding[0]).abs() < 1e-5, "embedding値が一致する");
+    }
+
+    // 🔴 Red: save_embedding 後に embedding_status が 'indexed' になること
+    #[tokio::test]
+    async fn test_save_embedding_updates_status() {
+        let (pool, _dir) = setup().await;
+        let (_pid, did) = insert_project_and_document(&pool).await;
+
+        let chunks = chunk_document("## Test\nContent.");
+        index_document(&pool, did, "docs/test.md", &chunks).await.unwrap();
+
+        let (chunk_id,): (i64,) = sqlx::query_as("SELECT id FROM document_chunks WHERE document_id = ? LIMIT 1")
+            .bind(did).fetch_one(&pool).await.unwrap();
+
+        // 保存前は 'pending'
+        let (status_before,): (String,) = sqlx::query_as("SELECT embedding_status FROM document_chunks WHERE id = ?")
+            .bind(chunk_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(status_before, "pending");
+
+        save_embedding(&pool, chunk_id, &vec![0.1f32; 1536]).await.unwrap();
+
+        // 保存後は 'indexed'
+        let (status_after,): (String,) = sqlx::query_as("SELECT embedding_status FROM document_chunks WHERE id = ?")
+            .bind(chunk_id).fetch_one(&pool).await.unwrap();
+        assert_eq!(status_after, "indexed");
+    }
+
+    // 🔴 Red: get_pending_chunks が 'pending' チャンクのみ返すこと
+    #[tokio::test]
+    async fn test_get_pending_chunks() {
+        let (pool, _dir) = setup().await;
+        let (_pid, did) = insert_project_and_document(&pool).await;
+
+        let chunks = chunk_document("## A\nFirst.\n\n## B\nSecond.");
+        index_document(&pool, did, "docs/test.md", &chunks).await.unwrap();
+
+        let pending_before = get_pending_chunks(&pool, did).await.unwrap();
+        assert_eq!(pending_before.len(), 2, "最初は全チャンクが pending");
+
+        // 1つ indexed にする
+        let chunk_id = pending_before[0].0;
+        save_embedding(&pool, chunk_id, &vec![0.1f32; 1536]).await.unwrap();
+
+        let pending_after = get_pending_chunks(&pool, did).await.unwrap();
+        assert_eq!(pending_after.len(), 1, "indexed にしたチャンクは pending から除外される");
+    }
+
+    // 🔴 Red: get_chunks_by_ids がチャンク情報を返すこと
+    #[tokio::test]
+    async fn test_get_chunks_by_ids() {
+        let (pool, _dir) = setup().await;
+        let (pid, did) = insert_project_and_document(&pool).await;
+
+        let chunks = chunk_document("## Design\nWe use git2-rs for git operations.");
+        index_document(&pool, did, "docs/arch.md", &chunks).await.unwrap();
+
+        let (chunk_id,): (i64,) = sqlx::query_as("SELECT id FROM document_chunks WHERE document_id = ? LIMIT 1")
+            .bind(did).fetch_one(&pool).await.unwrap();
+
+        let results = get_chunks_by_ids(&pool, &[chunk_id], &[0.95]).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].chunk_id, chunk_id);
+        assert!(results[0].content.contains("git2-rs"), "チャンクの内容が正しい");
+        assert!((results[0].score - 0.95).abs() < 1e-9, "スコアが正しく設定される");
+        let _ = pid;
+    }
+
+    // 🔴 Red: get_all_embeddings_for_project が別プロジェクトのデータを返さないこと
+    #[tokio::test]
+    async fn test_embeddings_are_project_scoped() {
+        let (pool, _dir) = setup().await;
+
+        // 2つのプロジェクトを作成
+        let now = chrono::Utc::now().to_rfc3339();
+        let (pid1,): (i64,) = sqlx::query_as(
+            "INSERT INTO projects (name, repo_owner, repo_name, local_path, created_at, updated_at)
+             VALUES ('P1','o','r','/tmp/p1', ?, ?) RETURNING id",
+        ).bind(&now).bind(&now).fetch_one(&pool).await.unwrap();
+
+        let (pid2,): (i64,) = sqlx::query_as(
+            "INSERT INTO projects (name, repo_owner, repo_name, local_path, created_at, updated_at)
+             VALUES ('P2','o','r','/tmp/p2', ?, ?) RETURNING id",
+        ).bind(&now).bind(&now).fetch_one(&pool).await.unwrap();
+
+        // 各プロジェクトにドキュメント + チャンクを追加
+        for (pid, path) in [(pid1, "/tmp/p1"), (pid2, "/tmp/p2")] {
+            let (did,): (i64,) = sqlx::query_as(
+                "INSERT INTO documents (project_id, path, created_at, updated_at) VALUES (?, 'docs/a.md', ?, ?) RETURNING id",
+            ).bind(pid).bind(&now).bind(&now).fetch_one(&pool).await.unwrap();
+
+            let chunks = chunk_document("## Section\nContent.");
+            index_document(&pool, did, "docs/a.md", &chunks).await.unwrap();
+
+            let (cid,): (i64,) = sqlx::query_as("SELECT id FROM document_chunks WHERE document_id = ? LIMIT 1")
+                .bind(did).fetch_one(&pool).await.unwrap();
+            save_embedding(&pool, cid, &vec![0.1f32; 1536]).await.unwrap();
+            let _ = path;
+        }
+
+        let embs1 = get_all_embeddings_for_project(&pool, pid1).await.unwrap();
+        let embs2 = get_all_embeddings_for_project(&pool, pid2).await.unwrap();
+        assert_eq!(embs1.len(), 1, "プロジェクト1のembeddingのみ");
+        assert_eq!(embs2.len(), 1, "プロジェクト2のembeddingのみ");
     }
 }

@@ -198,6 +198,9 @@ export const gitPull = (projectId: number) =>
   invoke<string>("git_pull", { projectId });
 
 // ─── Search ──────────────────────────────────────────────────────────────────
+export const indexBuild = (projectId: number) =>
+  invoke<number>("index_build", { projectId });
+
 export const documentIndexBuild = (projectId: number, documentId: number) =>
   invoke<number>("document_index_build", { projectId, documentId });
 

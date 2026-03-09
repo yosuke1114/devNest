@@ -59,6 +59,7 @@ macro_rules! all_commands {
             commands::terminal::terminal_input_send,
             commands::terminal::terminal_session_list,
             // Phase 3: 検索
+            commands::search::index_build,
             commands::search::document_index_build,
             commands::search::document_search_keyword,
             commands::search::document_search_semantic,

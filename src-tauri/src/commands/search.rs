@@ -1,9 +1,86 @@
-use tauri::State;
+use tauri::{Emitter, State};
 use crate::db;
 use crate::error::{AppError, Result};
 use crate::models::search::{IssueContextChunk, SearchHistory, SearchResult};
-use crate::services::chunker;
+use crate::services::{chunker, embedding};
 use crate::state::AppState;
+
+// ─── index_build ─────────────────────────────────────────────────────────────
+
+/// プロジェクトの全ドキュメントをインデックス化する（FTS5 + ベクトル埋め込み）。
+/// 進捗は `index_progress` / `index_done` イベントで通知する。
+#[tauri::command]
+pub async fn index_build(
+    project_id: i64,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> std::result::Result<usize, AppError> {
+    // OpenAI API キーを取得
+    let api_key_row: Option<(String,)> = sqlx::query_as(
+        "SELECT value FROM app_settings WHERE key = 'app.openai_api_key'",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+    let api_key = api_key_row
+        .and_then(|(v,)| serde_json::from_str::<String>(&v).ok())
+        .unwrap_or_default();
+
+    let project = db::project::find(&state.db, project_id).await?;
+    let docs = db::document::list_by_project(&state.db, project_id).await?;
+    let total = docs.len();
+    let mut indexed_count = 0usize;
+
+    for (i, doc) in docs.iter().enumerate() {
+        let _ = app.emit(
+            "index_progress",
+            serde_json::json!({
+                "done": i,
+                "total": total,
+                "current_path": doc.path
+            }),
+        );
+
+        // ファイル読み込み
+        let file_path = std::path::PathBuf::from(&project.local_path).join(&doc.path);
+        let content = match tokio::fs::read_to_string(&file_path).await {
+            Ok(c) => c,
+            Err(_) => continue, // 読めないファイルはスキップ
+        };
+
+        // チャンク生成 + FTS インデックス
+        let chunks = chunker::chunk_document(&content);
+        db::search::delete_document_index(&state.db, doc.id).await?;
+        db::search::index_document(&state.db, doc.id, &doc.path, &chunks).await?;
+
+        // ベクトル埋め込み（API キーがあるときのみ）
+        if !api_key.is_empty() {
+            let pending = db::search::get_pending_chunks(&state.db, doc.id).await?;
+            for (chunk_id, chunk_content) in &pending {
+                match embedding::embed_text(chunk_content, &api_key).await {
+                    Ok(vec) => {
+                        let _ = db::search::save_embedding(&state.db, *chunk_id, &vec).await;
+                    }
+                    Err(_) => {} // レート制限等はスキップ
+                }
+                // レート制限対策: 200ms 待機
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+        }
+
+        indexed_count += 1;
+    }
+
+    let _ = app.emit(
+        "index_done",
+        serde_json::json!({
+            "project_id": project_id,
+            "indexed": indexed_count
+        }),
+    );
+
+    Ok(indexed_count)
+}
 
 // ─── document_index_build ────────────────────────────────────────────────────
 
@@ -64,7 +141,9 @@ pub async fn document_search_keyword(
 
 // ─── document_search_semantic ─────────────────────────────────────────────────
 
-/// セマンティック検索：Anthropic API でクエリを拡張してから FTS5 で検索する。
+/// セマンティック検索：
+/// - OpenAI API キーあり + 埋め込みインデックスあり → ベクトル類似度検索
+/// - それ以外 → AI クエリ拡張 + FTS5 フォールバック
 #[tauri::command]
 pub async fn document_search_semantic(
     project_id: i64,
@@ -75,9 +154,9 @@ pub async fn document_search_semantic(
         return Ok(vec![]);
     }
 
-    // Anthropic API キーを取得（なければ keyword search に fallback）
+    // OpenAI API キーを取得
     let api_key_row: Option<(String,)> = sqlx::query_as(
-        "SELECT value FROM app_settings WHERE key = 'app.anthropic_api_key'",
+        "SELECT value FROM app_settings WHERE key = 'app.openai_api_key'",
     )
     .fetch_optional(&state.db)
     .await
@@ -86,15 +165,19 @@ pub async fn document_search_semantic(
         .and_then(|(v,)| serde_json::from_str::<String>(&v).ok())
         .unwrap_or_default();
 
-    let expanded = if api_key.is_empty() {
-        query.clone()
+    let results = if !api_key.is_empty() {
+        // ベクトル類似度検索を試みる
+        match vector_search(&state.db, project_id, &query, &api_key, 20).await {
+            Ok(r) if !r.is_empty() => r,
+            _ => {
+                // フォールバック: FTS5
+                db::search::search_keyword(&state.db, project_id, &query, 20).await?
+            }
+        }
     } else {
-        expand_query_with_ai(&query, &api_key)
-            .await
-            .unwrap_or_else(|_| query.clone())
+        // API キーなし: FTS5 のみ
+        db::search::search_keyword(&state.db, project_id, &query, 20).await?
     };
-
-    let results = db::search::search_keyword(&state.db, project_id, &expanded, 20).await?;
 
     let _ = db::search::add_history(
         &state.db,
@@ -138,8 +221,9 @@ pub async fn index_reset(
 
 // ─── search_context_for_issue ────────────────────────────────────────────────
 
-/// Issue のタイトル + 本文をクエリとして設計書を FTS5 検索し、
+/// Issue のタイトル + 本文をクエリとして設計書を検索し、
 /// 関連チャンク上位 5 件を返す。Claude Code の context として使用。
+/// ベクトル埋め込みがあれば semantic 検索、なければ FTS5 にフォールバック。
 #[tauri::command]
 pub async fn search_context_for_issue(
     project_id: i64,
@@ -156,10 +240,30 @@ pub async fn search_context_for_issue(
         issue.body.as_deref().unwrap_or("").chars().take(300).collect::<String>()
     );
 
-    // 3. FTS5 で検索（上位 5 件）
-    let results = db::search::search_keyword(&state.db, project_id, &query, 5)
-        .await
-        .unwrap_or_default(); // インデックスなしの場合は空を返す
+    // 3. OpenAI API キーを取得
+    let api_key_row: Option<(String,)> = sqlx::query_as(
+        "SELECT value FROM app_settings WHERE key = 'app.openai_api_key'",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+    let api_key = api_key_row
+        .and_then(|(v,)| serde_json::from_str::<String>(&v).ok())
+        .unwrap_or_default();
+
+    // 4. ベクトル検索を試み、失敗/空なら FTS5 にフォールバック
+    let results = if !api_key.is_empty() {
+        match vector_search(&state.db, project_id, &query, &api_key, 5).await {
+            Ok(r) if !r.is_empty() => r,
+            _ => db::search::search_keyword(&state.db, project_id, &query, 5)
+                .await
+                .unwrap_or_default(),
+        }
+    } else {
+        db::search::search_keyword(&state.db, project_id, &query, 5)
+            .await
+            .unwrap_or_default()
+    };
 
     Ok(results
         .into_iter()
@@ -173,56 +277,40 @@ pub async fn search_context_for_issue(
 
 // ─── ヘルパー ─────────────────────────────────────────────────────────────────
 
-/// Anthropic claude-haiku にクエリを渡し、FTS5 用の拡張キーワードリストを得る。
-async fn expand_query_with_ai(query: &str, api_key: &str) -> Result<String> {
-    let client = reqwest::Client::builder()
-        .user_agent("DevNest/0.1")
-        .build()
-        .unwrap_or_default();
+/// クエリをベクトル化してコサイン類似度でチャンクをランク付けする。
+async fn vector_search(
+    pool: &crate::db::DbPool,
+    project_id: i64,
+    query: &str,
+    api_key: &str,
+    limit: usize,
+) -> Result<Vec<SearchResult>> {
+    // クエリのベクトル埋め込みを取得
+    let query_vec = embedding::embed_text(query, api_key).await?;
 
-    let prompt = format!(
-        "You are a search assistant. Given the search query, return 3-5 related English/Japanese keywords \
-         that would help find relevant documentation. Output ONLY the keywords separated by spaces, \
-         no explanation.\n\nQuery: {}",
-        query
-    );
-
-    let resp = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", "2023-06-01")
-        .json(&serde_json::json!({
-            "model": "claude-haiku-4-5-20251001",
-            "max_tokens": 100,
-            "messages": [{ "role": "user", "content": prompt }]
-        }))
-        .send()
-        .await
-        .map_err(|e| AppError::Anthropic(e.to_string()))?;
-
-    if !resp.status().is_success() {
-        return Err(AppError::Anthropic(format!(
-            "API error: {}",
-            resp.status()
-        )));
+    // プロジェクト内の全チャンク埋め込みを取得
+    let all_embeddings = db::search::get_all_embeddings_for_project(pool, project_id).await?;
+    if all_embeddings.is_empty() {
+        return Ok(vec![]);
     }
 
-    let body: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| AppError::Anthropic(e.to_string()))?;
+    // コサイン類似度でランク付け
+    let mut scored: Vec<(i64, f64)> = all_embeddings
+        .iter()
+        .map(|(chunk_id, _doc_id, vec)| {
+            let sim = embedding::cosine_similarity(&query_vec, vec) as f64;
+            (*chunk_id, sim)
+        })
+        .collect();
 
-    let expanded = body
-        .get("content")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("text"))
-        .and_then(|t| t.as_str())
-        .unwrap_or(query)
-        .trim()
-        .to_string();
+    // 降順ソート
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(limit);
 
-    // 元のクエリ + 拡張キーワードを組み合わせる
-    Ok(format!("{} {}", query, expanded))
+    let chunk_ids: Vec<i64> = scored.iter().map(|(id, _)| *id).collect();
+    let scores: Vec<f64> = scored.iter().map(|(_, s)| *s).collect();
+
+    db::search::get_chunks_by_ids(pool, &chunk_ids, &scores).await
 }
 
 #[cfg(test)]

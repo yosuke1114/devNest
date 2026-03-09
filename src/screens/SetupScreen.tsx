@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   IconFolder,
   IconPlus,
@@ -6,13 +6,16 @@ import {
   IconCheck,
   IconChevronRight,
   IconChevronLeft,
+  IconDatabase,
 } from "@tabler/icons-react";
+import { listen } from "@tauri-apps/api/event";
 import { useProjectStore } from "../stores/projectStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useNotificationsStore } from "../stores/notificationsStore";
 import { useUiStore } from "../stores/uiStore";
 import { SetupStepDots } from "../components/shared/SetupStepDots";
 import { FilePicker } from "../components/shared/FilePicker";
+import * as ipc from "../lib/ipc";
 import type { Project } from "../types";
 
 // ─── ステップ定義 ──────────────────────────────────────────────────────────────
@@ -209,19 +212,105 @@ function Step2Sync({
 // ─── ステップ 3: Index ────────────────────────────────────────────────────────
 
 function Step3Index({
+  projectId,
   onNext,
   onBack,
 }: {
+  projectId: number;
   onNext: () => void;
   onBack: () => void;
 }) {
+  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [progress, setProgress] = useState<{ done: number; total: number; currentPath?: string } | null>(null);
+  const [indexed, setIndexed] = useState<number | null>(null);
+  const unlistenRef = useRef<(() => void)[]>([]);
+
+  useEffect(() => {
+    // イベントリスナーを登録
+    const setupListeners = async () => {
+      const unlisten1 = await listen<{ done: number; total: number; current_path?: string }>(
+        "index_progress",
+        (e) => setProgress({ done: e.payload.done, total: e.payload.total, currentPath: e.payload.current_path })
+      );
+      const unlisten2 = await listen<{ project_id: number; indexed: number }>(
+        "index_done",
+        (e) => {
+          setIndexed(e.payload.indexed);
+          setStatus("done");
+        }
+      );
+      unlistenRef.current = [unlisten1, unlisten2];
+    };
+    setupListeners();
+    return () => unlistenRef.current.forEach((u) => u());
+  }, []);
+
+  const handleBuild = async () => {
+    if (!projectId) return;
+    setStatus("running");
+    setProgress(null);
+    try {
+      await ipc.indexBuild(projectId);
+    } catch (e) {
+      setStatus("error");
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-400">
         設計書をインデックス化すると AI Issue 作成時にコンテキスト検索が利用できます。
-        後から Settings &gt; 検索インデックスで実行できます。
+        後から Settings でも実行できます。
       </p>
-      <NavButtons onBack={onBack} onNext={onNext} nextLabel="SKIP" />
+
+      {status === "idle" && (
+        <button
+          onClick={handleBuild}
+          className="flex items-center gap-2 px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
+        >
+          <IconDatabase size={15} />
+          BUILD INDEX
+        </button>
+      )}
+
+      {status === "running" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm text-purple-300">
+            <IconDatabase size={15} className="animate-pulse" />
+            インデックス構築中…
+          </div>
+          {progress && (
+            <>
+              <div className="w-full bg-white/10 rounded-full h-1.5">
+                <div
+                  className="bg-purple-500 h-1.5 rounded-full transition-all"
+                  style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 truncate">
+                {progress.done}/{progress.total}{progress.currentPath ? ` — ${progress.currentPath}` : ""}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {status === "done" && (
+        <div className="flex items-center gap-2 p-3 rounded-lg border border-green-700/50 bg-green-900/20">
+          <IconCheck size={16} className="text-green-400" />
+          <span className="text-sm text-green-300">{indexed} ファイルをインデックス化しました</span>
+        </div>
+      )}
+
+      {status === "error" && (
+        <p className="text-xs text-red-400">インデックス構築に失敗しました。後から Settings で再試行できます。</p>
+      )}
+
+      <NavButtons
+        onBack={onBack}
+        onNext={onNext}
+        nextLabel={status === "done" ? "NEXT" : "SKIP"}
+      />
     </div>
   );
 }
@@ -389,7 +478,7 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
             />
           )}
           {step === 3 && (
-            <Step3Index onNext={() => advance(3)} onBack={() => setStep(2)} />
+            <Step3Index projectId={projectId} onNext={() => advance(3)} onBack={() => setStep(2)} />
           )}
           {step === 4 && (
             <Step4Notify onNext={() => advance(4)} onBack={() => setStep(3)} />
