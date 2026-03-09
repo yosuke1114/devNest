@@ -277,4 +277,107 @@ describe("prStore", () => {
 
     expect(usePrStore.getState().createStatus).toBe("error");
   });
+
+  // ─── submitReview ─────────────────────────────────────────────────────────
+
+  it("submitReview() が prReviewSubmit を呼ぶ", async () => {
+    const pr = makePr({ id: 5 });
+    const detail = makePrDetail(pr);
+    mockIpc.prReviewSubmit.mockResolvedValueOnce(undefined);
+    mockIpc.prGetDetail.mockResolvedValueOnce(detail);
+
+    await usePrStore.getState().submitReview(1, 5, "approved", "LGTM");
+
+    expect(mockIpc.prReviewSubmit).toHaveBeenCalledWith(1, {
+      pr_id: 5,
+      state: "approved",
+      body: "LGTM",
+    });
+  });
+
+  it("submitReview() 成功後に reviewStatus が 'success' になり detail が更新される", async () => {
+    const pr = makePr({ id: 5 });
+    const detail = makePrDetail(pr);
+    mockIpc.prReviewSubmit.mockResolvedValueOnce(undefined);
+    mockIpc.prGetDetail.mockResolvedValueOnce(detail);
+
+    await usePrStore.getState().submitReview(1, 5, "approved", "");
+
+    expect(usePrStore.getState().reviewStatus).toBe("success");
+    expect(usePrStore.getState().detail).toEqual(detail);
+  });
+
+  it("submitReview() 失敗時に reviewStatus が 'error' になる", async () => {
+    mockIpc.prReviewSubmit.mockRejectedValueOnce(new Error("network error"));
+
+    await usePrStore.getState().submitReview(1, 5, "approved", "");
+
+    expect(usePrStore.getState().reviewStatus).toBe("error");
+  });
+
+  // ─── addComment ───────────────────────────────────────────────────────────
+
+  it("addComment() が prAddComment を呼ぶ", async () => {
+    const pr = makePr({ id: 5 });
+    const detail = makePrDetail(pr);
+    mockIpc.prAddComment.mockResolvedValueOnce(undefined);
+    mockIpc.prGetDetail.mockResolvedValueOnce(detail);
+
+    await usePrStore.getState().addComment(1, 5, "Nice change", "src/main.rs", 42);
+
+    expect(mockIpc.prAddComment).toHaveBeenCalledWith(1, 5, "Nice change", "src/main.rs", 42);
+  });
+
+  it("addComment() 成功後に detail が更新される", async () => {
+    const pr = makePr({ id: 5 });
+    const detail = makePrDetail(pr);
+    mockIpc.prAddComment.mockResolvedValueOnce(undefined);
+    mockIpc.prGetDetail.mockResolvedValueOnce(detail);
+
+    await usePrStore.getState().addComment(1, 5, "comment", "file.rs", 1);
+
+    expect(usePrStore.getState().detail).toEqual(detail);
+  });
+
+  it("addComment() 失敗時に error がセットされる", async () => {
+    mockIpc.prAddComment.mockRejectedValueOnce(new Error("forbidden"));
+
+    await usePrStore.getState().addComment(1, 5, "comment", "file.rs", 1);
+
+    expect(usePrStore.getState().error).toMatch(/forbidden/);
+  });
+
+  // ─── requestChanges ───────────────────────────────────────────────────────
+
+  it("requestChanges() が prReviewSubmit を changes_requested で呼ぶ", async () => {
+    const pr = makePr({ id: 5, head_branch: "feat/x" });
+    usePrStore.setState({ prs: [pr] });
+    mockIpc.prReviewSubmit.mockResolvedValueOnce(undefined);
+
+    await usePrStore.getState().requestChanges(1, 5, "Please fix the bug");
+
+    expect(mockIpc.prReviewSubmit).toHaveBeenCalledWith(1, {
+      pr_id: 5,
+      state: "changes_requested",
+      body: "Please fix the bug",
+    });
+  });
+
+  it("requestChanges() 成功後に requestChangesStatus が 'success' になる", async () => {
+    const pr = makePr({ id: 5 });
+    usePrStore.setState({ prs: [pr] });
+    mockIpc.prReviewSubmit.mockResolvedValueOnce(undefined);
+
+    await usePrStore.getState().requestChanges(1, 5, "fix it");
+
+    expect(usePrStore.getState().requestChangesStatus).toBe("success");
+  });
+
+  it("requestChanges() 失敗時に requestChangesStatus が 'error' になる", async () => {
+    mockIpc.prReviewSubmit.mockRejectedValueOnce(new Error("unauthorized"));
+
+    await usePrStore.getState().requestChanges(1, 5, "fix it");
+
+    expect(usePrStore.getState().requestChangesStatus).toBe("error");
+  });
 });

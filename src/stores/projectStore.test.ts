@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjectStore } from "./projectStore";
-import type { Project } from "../types";
+import type { Project, ProjectStatus } from "../types";
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -165,5 +165,96 @@ describe("projectStore", () => {
     await useProjectStore.getState().fetchProjects();
 
     expect(useProjectStore.getState().currentProject?.name).toBe("Updated Name");
+  });
+
+  // ─── updateProject ────────────────────────────────────────────────────────
+
+  it("updateProject() が invoke('project_update') を呼ぶ", async () => {
+    const project = makeProject({ id: 3 });
+    useProjectStore.setState({ projects: [project], currentProject: project });
+    const updated = makeProject({ id: 3, name: "Renamed" });
+    mockInvoke.mockResolvedValueOnce(updated);
+
+    await useProjectStore.getState().updateProject({ id: 3, name: "Renamed" });
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "project_update",
+      { patch: expect.objectContaining({ id: 3, name: "Renamed" }) }
+    );
+  });
+
+  it("updateProject() 成功後に projects と currentProject が更新される", async () => {
+    const project = makeProject({ id: 3, name: "Old" });
+    useProjectStore.setState({ projects: [project], currentProject: project });
+    const updated = makeProject({ id: 3, name: "New" });
+    mockInvoke.mockResolvedValueOnce(updated);
+
+    await useProjectStore.getState().updateProject({ id: 3, name: "New" });
+
+    expect(useProjectStore.getState().projects[0].name).toBe("New");
+    expect(useProjectStore.getState().currentProject?.name).toBe("New");
+  });
+
+  it("updateProject() 失敗時に error がセットされる", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("not found"));
+
+    await expect(
+      useProjectStore.getState().updateProject({ id: 99, name: "X" })
+    ).rejects.toBeTruthy();
+
+    expect(useProjectStore.getState().error).toBeTruthy();
+  });
+
+  // ─── fetchStatus ──────────────────────────────────────────────────────────
+
+  it("fetchStatus() が invoke('project_get_status') を呼ぶ", async () => {
+    const status: ProjectStatus = {
+      id: 1, name: "P", local_path: "/tmp", issue_count: 5, open_issue_count: 3,
+      document_count: 2, github_connected: true, last_synced_at: null,
+    };
+    mockInvoke.mockResolvedValueOnce(status);
+
+    await useProjectStore.getState().fetchStatus(1);
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "project_get_status",
+      expect.objectContaining({ projectId: 1 })
+    );
+  });
+
+  it("fetchStatus() 成功後に currentStatus がセットされる", async () => {
+    const status: ProjectStatus = {
+      id: 1, name: "P", local_path: "/tmp", issue_count: 5, open_issue_count: 3,
+      document_count: 2, github_connected: true, last_synced_at: null,
+    };
+    mockInvoke.mockResolvedValueOnce(status);
+
+    await useProjectStore.getState().fetchStatus(1);
+
+    expect(useProjectStore.getState().currentStatus?.issue_count).toBe(5);
+  });
+
+  // ─── setLastOpenedDocument ────────────────────────────────────────────────
+
+  it("setLastOpenedDocument() が invoke('project_set_last_opened_document') を呼ぶ", async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+
+    await useProjectStore.getState().setLastOpenedDocument(1, 42);
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "project_set_last_opened_document",
+      expect.objectContaining({ projectId: 1, documentId: 42 })
+    );
+  });
+
+  it("setLastOpenedDocument() に null を渡せる", async () => {
+    mockInvoke.mockResolvedValueOnce(undefined);
+
+    await useProjectStore.getState().setLastOpenedDocument(1, null);
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      "project_set_last_opened_document",
+      expect.objectContaining({ projectId: 1, documentId: null })
+    );
   });
 });
