@@ -221,6 +221,7 @@ function PRDetailPanel({ projectId }: { projectId: number }) {
   const loadDocDiff = usePrStore((s) => s.loadDocDiff);
   const requestChanges = usePrStore((s) => s.requestChanges);
   const submitReview = usePrStore((s) => s.submitReview);
+  const addComment = usePrStore((s) => s.addComment);
   const mergePr = usePrStore((s) => s.mergePr);
   const mergeStatus = usePrStore((s) => s.mergeStatus);
   const reviewStatus = usePrStore((s) => s.reviewStatus);
@@ -285,8 +286,12 @@ function PRDetailPanel({ projectId }: { projectId: number }) {
           diff={diff}
           filesStatus={filesStatus}
           diffStatus={diffStatus}
+          comments={detail.comments}
           onLoadFiles={() => fetchFiles(projectId, detail.pr.id)}
           onLoadDiff={() => fetchDiff(projectId, detail.pr.id)}
+          onAddComment={async (path, line, body) => {
+            await addComment(projectId, detail.pr.id, body, path, line);
+          }}
         />
       ) : (
         <TabDesignDocs
