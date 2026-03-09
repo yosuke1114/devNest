@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { useDocumentStore } from "./documentStore";
 import * as ipc from "../lib/ipc";
-import type { Document, DocumentWithContent, SaveResult } from "../types";
+import type { Document, DocumentWithContent, Issue, SaveResult } from "../types";
 
 vi.mock("../lib/ipc");
 const mockIpc = vi.mocked(ipc);
@@ -199,5 +199,43 @@ describe("documentStore", () => {
 
     expect(mockIpc.documentScan).toHaveBeenCalledWith(1);
     expect(count).toBe(2);
+  });
+
+  // ─── fetchLinkedIssues ───────────────────────────────────────────────────────
+
+  it("fetchLinkedIssues() が documentLinkedIssues IPC を呼ぶ", async () => {
+    mockIpc.documentLinkedIssues.mockResolvedValueOnce([]);
+    await useDocumentStore.getState().fetchLinkedIssues(10);
+    expect(mockIpc.documentLinkedIssues).toHaveBeenCalledWith(10);
+  });
+
+  it("fetchLinkedIssues() 成功時に linkedIssues がセットされる", async () => {
+    const issue: Issue = {
+      id: 5,
+      project_id: 1,
+      github_number: 10,
+      github_id: 2001,
+      title: "Fix auth",
+      body: null,
+      status: "open",
+      author_login: "alice",
+      assignee_login: null,
+      labels: "[]",
+      milestone: null,
+      linked_pr_number: null,
+      created_by: "user",
+      github_created_at: "2026-01-01T00:00:00Z",
+      github_updated_at: "2026-01-01T00:00:00Z",
+      synced_at: "2026-01-01T00:00:00Z",
+    };
+    mockIpc.documentLinkedIssues.mockResolvedValueOnce([issue]);
+    await useDocumentStore.getState().fetchLinkedIssues(10);
+    expect(useDocumentStore.getState().linkedIssues).toEqual([issue]);
+  });
+
+  it("fetchLinkedIssues() 失敗時に linkedIssues は空のまま", async () => {
+    mockIpc.documentLinkedIssues.mockRejectedValueOnce(new Error("fail"));
+    await useDocumentStore.getState().fetchLinkedIssues(10);
+    expect(useDocumentStore.getState().linkedIssues).toEqual([]);
   });
 });

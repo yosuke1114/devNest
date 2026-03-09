@@ -9,13 +9,17 @@ import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { useDocumentStore } from "../stores/documentStore";
 import { useProjectStore } from "../stores/projectStore";
-import type { Document } from "../types";
+import { useIssueStore } from "../stores/issueStore";
+import { useUiStore } from "../stores/uiStore";
+import { LinkedIssuesPanel } from "../components/editor/LinkedIssuesPanel";
+import type { Document, Issue } from "../types";
 
 export function EditorScreen() {
   const { currentProject } = useProjectStore();
   const {
     documents,
     currentDoc,
+    linkedIssues,
     saveStatus,
     saveProgress,
     fetchDocuments,
@@ -24,7 +28,11 @@ export function EditorScreen() {
     retryPush,
     setDirty,
     listenSaveProgress,
+    fetchLinkedIssues,
   } = useDocumentStore();
+
+  const selectIssue = useIssueStore((s) => s.selectIssue);
+  const navigate = useUiStore((s) => s.navigate);
 
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -84,8 +92,17 @@ export function EditorScreen() {
     async (doc: Document) => {
       setSelectedDocId(doc.id);
       await openDocument(doc.id);
+      fetchLinkedIssues(doc.id);
     },
-    [openDocument]
+    [openDocument, fetchLinkedIssues]
+  );
+
+  const handleIssueClick = useCallback(
+    (issue: Issue) => {
+      selectIssue(issue);
+      navigate("issues");
+    },
+    [selectIssue, navigate]
   );
 
   const handleSave = useCallback(async () => {
@@ -246,6 +263,25 @@ export function EditorScreen() {
           <EmptyState message="左のファイル一覧からドキュメントを選択" />
         )}
       </div>
+
+      {/* 右サイドバー: Linked Issues */}
+      <aside
+        style={{
+          width: 240,
+          flexShrink: 0,
+          borderLeft: "1px solid #2a2a3a",
+          background: "#161622",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <LinkedIssuesPanel
+          issues={linkedIssues}
+          loading={false}
+          onIssueClick={handleIssueClick}
+        />
+      </aside>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
-import type { AppError, AsyncStatus, Document, DocumentWithContent, SaveResult } from "../types";
+import type { AppError, AsyncStatus, Document, DocumentWithContent, Issue, SaveResult } from "../types";
 
 interface DocSaveProgressPayload {
   document_id: number;
@@ -12,6 +12,7 @@ interface DocSaveProgressPayload {
 interface DocumentState {
   documents: Document[];
   currentDoc: DocumentWithContent | null;
+  linkedIssues: Issue[];
   saveStatus: AsyncStatus;
   saveProgress: DocSaveProgressPayload | null;
   error: AppError | null;
@@ -23,11 +24,13 @@ interface DocumentState {
   retryPush: (documentId: number) => Promise<void>;
   setDirty: (documentId: number, dirty: boolean) => void;
   listenSaveProgress: () => Promise<() => void>;
+  fetchLinkedIssues: (documentId: number) => Promise<void>;
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
   documents: [],
   currentDoc: null,
+  linkedIssues: [],
   saveStatus: "idle",
   saveProgress: null,
   error: null,
@@ -118,5 +121,14 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       }
     );
     return unlisten;
+  },
+
+  fetchLinkedIssues: async (documentId) => {
+    try {
+      const issues = await ipc.documentLinkedIssues(documentId);
+      set({ linkedIssues: issues });
+    } catch {
+      set({ linkedIssues: [] });
+    }
   },
 }));
