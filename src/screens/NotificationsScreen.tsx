@@ -4,13 +4,22 @@ import { useProjectStore } from "../stores/projectStore";
 import { useNotificationsStore } from "../stores/notificationsStore";
 import { NotificationItem } from "../components/notifications/NotificationItem";
 import { EmptyState } from "../components/notifications/EmptyState";
+import { PermissionBanner } from "../components/notifications/PermissionBanner";
 
 // ─── NotificationsScreen ───────────────────────────────────────────────────────
 
 export function NotificationsScreen() {
   const currentProject = useProjectStore((s) => s.currentProject);
-  const { notifications, unreadCount, listStatus, loadNotifications, markAllRead, navigateTo } =
-    useNotificationsStore();
+  const {
+    notifications,
+    unreadCount,
+    listStatus,
+    permissionStatus,
+    loadNotifications,
+    markAllRead,
+    navigateTo,
+    requestPermission,
+  } = useNotificationsStore();
 
   useEffect(() => {
     if (currentProject) {
@@ -49,6 +58,12 @@ export function NotificationsScreen() {
           </button>
         )}
       </div>
+
+      {/* Permission banner */}
+      <PermissionBanner
+        permissionStatus={permissionStatus}
+        onRequestPermission={requestPermission}
+      />
 
       {/* リスト */}
       <div className="flex-1 overflow-y-auto">
