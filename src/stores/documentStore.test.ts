@@ -6,6 +6,10 @@ import type { Document, DocumentWithContent, Issue, SaveResult } from "../types"
 vi.mock("../lib/ipc");
 const mockIpc = vi.mocked(ipc);
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+}));
+
 function makeDocument(overrides: Partial<Document> = {}): Document {
   return {
     id: 1,
@@ -237,5 +241,38 @@ describe("documentStore", () => {
     mockIpc.documentLinkedIssues.mockRejectedValueOnce(new Error("fail"));
     await useDocumentStore.getState().fetchLinkedIssues(10);
     expect(useDocumentStore.getState().linkedIssues).toEqual([]);
+  });
+
+  // ─── retryPush ────────────────────────────────────────────────────────────
+
+  it("retryPush() が documentPushRetry を呼ぶ", async () => {
+    mockIpc.documentPushRetry.mockResolvedValueOnce(undefined);
+    await useDocumentStore.getState().retryPush(7);
+    expect(mockIpc.documentPushRetry).toHaveBeenCalledWith(7);
+  });
+
+  it("retryPush() 失敗時に error がセットされる", async () => {
+    mockIpc.documentPushRetry.mockRejectedValueOnce(new Error("push failed"));
+    await useDocumentStore.getState().retryPush(7);
+    expect(useDocumentStore.getState().error).toBeTruthy();
+  });
+
+  // ─── listenSaveProgress ───────────────────────────────────────────────────
+
+  it("listenSaveProgress() が doc_save_progress イベントをリッスンし cleanup 関数を返す", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const cleanup = await useDocumentStore.getState().listenSaveProgress();
+    expect(listen).toHaveBeenCalledWith("doc_save_progress", expect.any(Function));
+    expect(typeof cleanup).toBe("function");
+  });
+
+  it("listenSaveProgress() のクリーンアップを呼ぶと unlisten が実行される", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const mockUnlisten = vi.fn();
+    vi.mocked(listen).mockResolvedValueOnce(mockUnlisten);
+
+    const cleanup = await useDocumentStore.getState().listenSaveProgress();
+    cleanup();
+    expect(mockUnlisten).toHaveBeenCalled();
   });
 });
