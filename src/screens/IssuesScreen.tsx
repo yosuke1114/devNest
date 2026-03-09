@@ -85,95 +85,100 @@ export function IssuesScreen() {
     navigate("terminal");
   };
 
+  const headerStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 0,
+    padding: "0 16px",
+    borderBottom: "1px solid #2a2a3a",
+    background: "#1a1a2e",
+    height: 48,
+    flexShrink: 0,
+  };
+
+  if (tab === "wizard") {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header style={headerStyle}>
+          <TabBtn active={false} onClick={() => setTab("list")}>
+            Issue 一覧
+          </TabBtn>
+          <TabBtn active={true} onClick={() => setTab("wizard")}>
+            <IconSparkles size={14} style={{ marginRight: 4 }} />
+            AI Wizard
+          </TabBtn>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={async () => {
+              const draft = await createDraft(currentProject.id);
+              selectDraft(draft);
+            }}
+            style={{ ...actionBtnStyle, gap: 4, display: "flex", alignItems: "center" }}
+          >
+            <IconPlus size={16} />
+            新規
+          </button>
+        </header>
+        <WizardPanel
+          drafts={drafts}
+          currentDraft={currentDraft}
+          streamBuffer={draftStreamBuffer}
+          generating={generateStatus === "loading"}
+          onSelectDraft={selectDraft}
+          onUpdateDraft={updateDraft}
+          onGenerate={generateDraft}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* 左ペイン: リスト + タブヘッダー */}
       <div className="w-72 shrink-0 flex flex-col border-r border-white/10">
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 0,
-            padding: "0 16px",
-            borderBottom: "1px solid #2a2a3a",
-            background: "#1a1a2e",
-            height: 48,
-          }}
-        >
-          <TabBtn active={tab === "list"} onClick={() => setTab("list")}>
+        <header style={headerStyle}>
+          <TabBtn active={true} onClick={() => setTab("list")}>
             Issue 一覧
           </TabBtn>
-          <TabBtn active={tab === "wizard"} onClick={() => setTab("wizard")}>
+          <TabBtn active={false} onClick={() => setTab("wizard")}>
             <IconSparkles size={14} style={{ marginRight: 4 }} />
             AI Wizard
           </TabBtn>
-
           <div style={{ flex: 1 }} />
-
-          {tab === "list" && (
-            <>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={selectStyle}
-              >
-                <option value="open">Open</option>
-                <option value="closed">Closed</option>
-                <option value="">すべて</option>
-              </select>
-              <button
-                onClick={() => syncIssues(currentProject.id)}
-                disabled={syncStatus === "loading"}
-                style={actionBtnStyle}
-                title="GitHub から同期"
-              >
-                <IconRefresh
-                  size={16}
-                  style={{
-                    animation:
-                      syncStatus === "loading" ? "spin 1s linear infinite" : undefined,
-                  }}
-                />
-              </button>
-            </>
-          )}
-
-          {tab === "wizard" && (
-            <button
-              onClick={async () => {
-                const draft = await createDraft(currentProject.id);
-                selectDraft(draft);
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="open">Open</option>
+            <option value="closed">Closed</option>
+            <option value="">すべて</option>
+          </select>
+          <button
+            onClick={() => syncIssues(currentProject.id)}
+            disabled={syncStatus === "loading"}
+            style={actionBtnStyle}
+            title="GitHub から同期"
+          >
+            <IconRefresh
+              size={16}
+              style={{
+                animation:
+                  syncStatus === "loading" ? "spin 1s linear infinite" : undefined,
               }}
-              style={{ ...actionBtnStyle, gap: 4, display: "flex", alignItems: "center" }}
-            >
-              <IconPlus size={16} />
-              新規
-            </button>
-          )}
+            />
+          </button>
         </header>
-
-        {tab === "list" ? (
-          <IssueList
-            issues={issues}
-            loading={listStatus === "loading"}
-            selectedId={currentIssue?.id ?? null}
-            onSelect={handleSelectIssue}
-          />
-        ) : (
-          <WizardPanel
-            drafts={drafts}
-            currentDraft={currentDraft}
-            streamBuffer={draftStreamBuffer}
-            generating={generateStatus === "loading"}
-            onSelectDraft={selectDraft}
-            onUpdateDraft={updateDraft}
-            onGenerate={generateDraft}
-          />
-        )}
+        <IssueList
+          issues={issues}
+          loading={listStatus === "loading"}
+          selectedId={currentIssue?.id ?? null}
+          onSelect={handleSelectIssue}
+        />
       </div>
 
       {/* 右ペイン: Issue 詳細 */}
-      {tab === "list" && currentIssue ? (
+      {currentIssue ? (
         <IssueDetail
           issue={currentIssue}
           links={issueLinks}
@@ -184,11 +189,11 @@ export function IssuesScreen() {
           onLaunchTerminal={handleLaunchTerminal}
           onOpenDocument={() => {}}
         />
-      ) : tab === "list" ? (
+      ) : (
         <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
           Issue を選択してください
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
