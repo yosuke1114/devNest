@@ -27,7 +27,7 @@ export function MergePanel({ canMerge, mergeStatus, onMerge, headBranch, baseBra
   }
 
   return (
-    <div className="rounded-lg border border-white/10 p-3 space-y-2">
+    <div className="rounded-lg border border-white/10 p-3 space-y-2" data-testid="merge-panel">
       <div className="text-xs font-medium text-gray-400">Merge</div>
 
       {/* ブランチ情報 */}
@@ -52,6 +52,7 @@ export function MergePanel({ canMerge, mergeStatus, onMerge, headBranch, baseBra
       <button
         onClick={onMerge}
         disabled={!canMerge || isLoading}
+        data-testid="pr-merge"
         className="flex items-center gap-1 px-3 py-1.5 rounded text-xs bg-purple-700 hover:bg-purple-600 text-white disabled:opacity-50 transition-colors"
       >
         <IconGitMerge size={12} />

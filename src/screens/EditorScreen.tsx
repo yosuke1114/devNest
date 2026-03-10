@@ -181,7 +181,7 @@ export function EditorScreen() {
         onCancel={handleModalCancel}
       />
     )}
-    <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+    <div data-testid="editor-screen" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
       {/* ファイルツリー */}
       <aside
         style={{

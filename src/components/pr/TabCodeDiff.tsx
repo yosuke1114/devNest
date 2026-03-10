@@ -105,7 +105,7 @@ export function TabCodeDiff({
   };
 
   return (
-    <div className="overflow-y-auto p-4 space-y-4">
+    <div className="overflow-y-auto p-4 space-y-4" data-testid="tab-code-diff">
       {/* File summary */}
       {files.length > 0 && (
         <div className="rounded-lg border border-white/10 p-3">

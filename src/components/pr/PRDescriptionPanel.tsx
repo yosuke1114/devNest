@@ -6,7 +6,7 @@ export function PRDescriptionPanel({ body }: PRDescriptionPanelProps) {
   const hasContent = body !== null && body !== "";
 
   return (
-    <div className="text-xs text-gray-300">
+    <div className="text-xs text-gray-300" data-testid="pr-description-panel">
       {hasContent ? (
         <p className="whitespace-pre-wrap">{body}</p>
       ) : (

@@ -11,7 +11,7 @@ export function TabOverview({ detail }: TabOverviewProps) {
   const { pr, reviews, comments } = detail;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="tab-overview">
       {/* PR メタグリッド */}
       <div className="rounded-lg border border-white/10 p-3 space-y-2">
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-400">

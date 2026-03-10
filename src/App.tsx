@@ -107,6 +107,7 @@ export default function App() {
 
   return (
     <div
+      data-testid="app-root"
       style={{
         display: "flex",
         height: "100vh",

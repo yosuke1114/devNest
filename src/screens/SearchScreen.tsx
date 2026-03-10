@@ -56,7 +56,7 @@ export function SearchScreen() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div data-testid="search-screen" className="flex-1 flex flex-col overflow-hidden">
       <SearchBar
         query={query}
         searchType={searchType}

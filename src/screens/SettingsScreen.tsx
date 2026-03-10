@@ -99,7 +99,7 @@ export function SettingsScreen() {
   };
 
   return (
-    <div style={{ padding: 32, maxWidth: 600, margin: "0 auto", overflowY: "auto", flex: 1 }}>
+    <div data-testid="settings-screen" style={{ padding: 32, maxWidth: 600, margin: "0 auto", overflowY: "auto", flex: 1 }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 32 }}>設定</h1>
 
       {/* テーマ */}

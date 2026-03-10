@@ -20,6 +20,7 @@ export function StatusPill({ status, label, className }: StatusPillProps) {
 
   return (
     <span
+      data-testid="status-pill"
       className={className}
       style={{
         fontSize: 12,

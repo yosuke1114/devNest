@@ -104,7 +104,7 @@ export function IssuesScreen() {
 
   if (tab === "wizard") {
     return (
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden" data-testid="issues-screen">
         <header style={headerStyle}>
           <TabBtn active={false} onClick={() => setTab("list")}>
             Issue 一覧
@@ -148,7 +148,7 @@ export function IssuesScreen() {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden" data-testid="issues-screen">
       {/* 左ペイン: リスト + タブヘッダー */}
       <div className="w-72 shrink-0 flex flex-col border-r border-white/10">
         <header style={headerStyle}>
@@ -472,6 +472,7 @@ function WizardPanel({
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleBlur}
               placeholder="Issue のタイトル"
+              data-testid="wizard-step1-input"
               style={inputStyle}
             />
 
@@ -484,6 +485,7 @@ function WizardPanel({
               onBlur={handleBlur}
               rows={8}
               placeholder="Issue の背景・目的・詳細を自由に記入してください"
+              data-testid="wizard-context-input"
               style={{ ...inputStyle, resize: "vertical" }}
             />
 
@@ -506,12 +508,13 @@ function WizardPanel({
                 }}
                 disabled={generating}
                 className="btn-primary"
+                data-testid="wizard-generate-draft"
               >
                 <IconSparkles size={16} />
                 {generating ? "生成中…" : "AI で本文を生成"}
               </button>
               {streamBuffer && (
-                <button onClick={handleGoToLabels} className="btn-secondary">
+                <button onClick={handleGoToLabels} className="btn-secondary" data-testid="wizard-looks-good">
                   次へ →
                 </button>
               )}
@@ -519,7 +522,7 @@ function WizardPanel({
           </div>
 
           {/* プレビュー */}
-          <div style={{ flex: 1, padding: 20, overflow: "auto", background: "#161622" }}>
+          <div style={{ flex: 1, padding: 20, overflow: "auto", background: "#161622" }} data-testid="wizard-draft-content">
             <div style={{ fontSize: 11, color: "#888", marginBottom: 12, textTransform: "uppercase" }}>
               Preview
             </div>
@@ -571,6 +574,7 @@ function WizardPanel({
             value={assignee}
             onChange={(e) => setAssignee(e.target.value)}
             placeholder="例: alice"
+            data-testid="wizard-assignee-select"
             style={{ ...inputStyle, marginBottom: 20 }}
           />
 
@@ -637,7 +641,7 @@ function WizardPanel({
 
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => setStep("labels")} className="btn-secondary">← 戻る</button>
-            <button onClick={handleFile} disabled={filing} className="btn-primary">
+            <button onClick={handleFile} disabled={filing} className="btn-primary" data-testid="wizard-file-issue">
               <IconSparkles size={14} />
               {filing ? "提出中…" : "GitHub に Issue を提出"}
             </button>
@@ -649,11 +653,11 @@ function WizardPanel({
           <div style={{ fontSize: 48 }}>✅</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#e0e0e0" }}>Issue を提出しました！</div>
           {filedIssue && (
-            <div style={{ color: "#888", fontSize: 14 }}>
+            <div style={{ color: "#888", fontSize: 14 }} data-testid="wizard-filed-number">
               #{filedIssue.github_number} {filedIssue.title}
             </div>
           )}
-          <button onClick={onLaunchTerminal} className="btn-primary" style={{ marginTop: 8 }}>
+          <button onClick={onLaunchTerminal} className="btn-primary" style={{ marginTop: 8 }} data-testid="wizard-launch-terminal">
             <IconSparkles size={14} />
             LAUNCH TERMINAL
           </button>

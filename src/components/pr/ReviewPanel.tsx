@@ -17,7 +17,7 @@ export function ReviewPanel({ reviewStatus, onSubmitReview }: ReviewPanelProps) 
   };
 
   return (
-    <div className="rounded-lg border border-white/10 p-3 space-y-3">
+    <div className="rounded-lg border border-white/10 p-3 space-y-3" data-testid="review-panel">
       <div className="text-xs font-medium text-gray-400">Submit Review</div>
 
       {/* コメント textarea */}
@@ -66,6 +66,7 @@ export function ReviewPanel({ reviewStatus, onSubmitReview }: ReviewPanelProps) 
       <button
         onClick={handleSubmit}
         disabled={isLoading}
+        data-testid="pr-approve"
         className="px-3 py-1.5 rounded text-xs bg-blue-700 hover:bg-blue-600 text-white disabled:opacity-50 transition-colors"
       >
         Submit Review{isLoading && "…"}

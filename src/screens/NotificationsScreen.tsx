@@ -36,7 +36,7 @@ export function NotificationsScreen() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div data-testid="notifications-screen" className="flex-1 flex flex-col overflow-hidden">
       {/* ヘッダー */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
         <div className="flex-1">
@@ -52,6 +52,7 @@ export function NotificationsScreen() {
         {unreadCount > 0 && (
           <button
             onClick={() => markAllRead(currentProject.id)}
+            data-testid="notifications-mark-all-read"
             className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-gray-300 transition-colors"
           >
             <IconCheck size={11} /> MARK ALL READ

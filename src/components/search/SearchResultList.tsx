@@ -33,7 +33,7 @@ export function SearchResultList({
   }
 
   return (
-    <>
+    <div data-testid="search-result-list">
       {results.length > 0 && (
         <div className="px-3 py-1.5 text-[10px] text-gray-500 border-b border-white/10">
           {results.length} 件
@@ -48,6 +48,6 @@ export function SearchResultList({
           onClick={() => onSelect(r.chunk_id)}
         />
       ))}
-    </>
+    </div>
   );
 }

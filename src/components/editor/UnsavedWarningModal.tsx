@@ -27,6 +27,7 @@ export function UnsavedWarningModal({
       <div
         role="dialog"
         aria-modal="true"
+        data-testid="unsaved-warning-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "#1e1e30",

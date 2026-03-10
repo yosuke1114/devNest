@@ -14,7 +14,7 @@ export function IndexProgressBar({
   const pct = total > 0 ? Math.round((indexed / total) * 100) : 0;
 
   return (
-    <div className={className} style={{ width: "100%" }}>
+    <div data-testid="index-progress-bar" className={className} style={{ width: "100%" }}>
       {label && (
         <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>{label}</div>
       )}

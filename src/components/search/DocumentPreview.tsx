@@ -20,7 +20,7 @@ export function DocumentPreview({ result, keyword, onOpen }: DocumentPreviewProp
   const lines = result.content.split("\n");
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div data-testid="document-preview" className="flex-1 flex flex-col overflow-hidden">
       {/* ヘッダー */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
         <div className="flex items-center gap-2">

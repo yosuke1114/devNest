@@ -16,7 +16,7 @@ export function PRReadyBanner({
   onDismiss,
 }: PRReadyBannerProps) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-green-900/40 border-b border-green-700/50">
+    <div data-testid="pr-ready-banner" className="flex items-center gap-3 px-4 py-2.5 bg-green-900/40 border-b border-green-700/50">
       <IconGitBranch size={14} className="text-green-400 shrink-0" />
       <div className="flex-1 min-w-0">
         <span className="text-xs font-medium text-green-300">PR READY: </span>
@@ -27,6 +27,7 @@ export function PRReadyBanner({
       </div>
       <button
         onClick={onCreatePR}
+        data-testid="create-pr"
         className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-green-700 hover:bg-green-600 text-white transition-colors shrink-0"
       >
         <IconGitMerge size={11} /> CREATE PR

@@ -29,6 +29,7 @@ export function AsyncButton({
   return (
     <button
       {...rest}
+      data-testid="async-button"
       className={className}
       disabled={isDisabled}
       onClick={isDisabled ? undefined : onClick}

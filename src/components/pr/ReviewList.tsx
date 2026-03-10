@@ -7,7 +7,7 @@ interface ReviewListProps {
 
 export function ReviewList({ reviews }: ReviewListProps) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" data-testid="review-list">
       <div className="text-xs font-medium text-gray-400">Reviews ({reviews.length})</div>
       {reviews.length === 0 ? (
         <p className="text-xs text-gray-500">No reviews yet</p>
