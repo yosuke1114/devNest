@@ -5,7 +5,14 @@ use crate::error::{AppError, Result};
 
 /// テキストの埋め込みベクトルを取得する（OpenAI Embeddings API）。
 /// api_key: OpenAI API キー
+///
+/// `DEVNEST_TEST_MODE` 環境変数が設定されている場合は、API を呼ばずに
+/// テキストハッシュから決定論的にダミーベクトル（1536 次元）を返す。
 pub async fn embed_text(text: &str, api_key: &str) -> Result<Vec<f32>> {
+    if std::env::var("DEVNEST_TEST_MODE").is_ok() {
+        return Ok(mock_embedding(text));
+    }
+
     let client = reqwest::Client::builder()
         .user_agent("DevNest/0.1")
         .build()
@@ -66,6 +73,26 @@ pub fn deserialize_embedding(bytes: &[u8]) -> Vec<f32> {
         .chunks_exact(4)
         .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
         .collect()
+}
+
+/// DEVNEST_TEST_MODE 用ダミー埋め込みベクトルを生成する。
+/// テキストのバイト列から決定論的に 1536 次元のベクトルを生成するため、
+/// 同じテキストからは常に同じベクトルが得られる。
+fn mock_embedding(text: &str) -> Vec<f32> {
+    let bytes = text.as_bytes();
+    let mut embedding = Vec::with_capacity(1536);
+    for i in 0..1536 {
+        let b = bytes.get(i % bytes.len().max(1)).copied().unwrap_or(0) as f32;
+        embedding.push((b / 255.0) * 2.0 - 1.0);
+    }
+    // 正規化
+    let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for v in &mut embedding {
+            *v /= norm;
+        }
+    }
+    embedding
 }
 
 /// コサイン類似度 ∈ [-1.0, 1.0] を計算する。
