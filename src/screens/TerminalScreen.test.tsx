@@ -19,6 +19,9 @@ vi.mock("@xterm/addon-fit", () => {
   return { FitAddon };
 });
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
 
 // ─── store モック ──────────────────────────────────────────────────────────────
 const mockProjectStore = {

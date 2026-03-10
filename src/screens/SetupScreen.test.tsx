@@ -49,6 +49,9 @@ vi.mock("../lib/ipc", () => ({
 vi.mock("../components/shared/SetupStepDots", () => ({
   SetupStepDots: () => <div data-testid="setup-step-dots" />,
 }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
 vi.mock("../components/shared/FilePicker", () => ({
   FilePicker: ({ onPick }: { onPick: (v: string) => void }) => (
     <button data-testid="file-picker" onClick={() => onPick("/test/path")}>

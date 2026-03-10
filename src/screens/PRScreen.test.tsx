@@ -70,8 +70,21 @@ vi.mock("../stores/prStore", () => ({
     sel ? sel(mockPrStore) : mockPrStore,
 }));
 vi.mock("../components/pr/PRFilterBar", () => ({
-  PRFilterBar: ({ onSync, syncing }: { onSync: () => void; syncing: boolean }) => (
+  PRFilterBar: ({
+    filter,
+    onChange,
+    onSync,
+    syncing,
+  }: {
+    filter: string;
+    onChange: (f: string) => void;
+    onSync: () => void;
+    syncing: boolean;
+  }) => (
     <div data-testid="pr-filter-bar">
+      <span data-testid="pr-filter-value">{filter}</span>
+      <button data-testid="pr-filter-open" onClick={() => onChange("open")}>Open</button>
+      <button data-testid="pr-filter-closed" onClick={() => onChange("closed")}>Closed</button>
       <button data-testid="pr-sync" onClick={onSync} disabled={syncing}>
         Sync
       </button>
@@ -152,6 +165,12 @@ describe("PRScreen", () => {
   it("PR 一覧が表示される", () => {
     render(<PRScreen />);
     expect(screen.getByText("Add auto commit")).toBeInTheDocument();
+  });
+
+  it("フィルタ切り替えで setStateFilter が呼ばれる", () => {
+    render(<PRScreen />);
+    fireEvent.click(screen.getByTestId("pr-filter-closed"));
+    expect(mockPrStore.setStateFilter).toHaveBeenCalledWith("closed");
   });
 
   it("PR をクリックすると selectPr が呼ばれる", () => {

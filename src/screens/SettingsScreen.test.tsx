@@ -115,7 +115,7 @@ describe("SettingsScreen", () => {
     expect(screen.getByText("GitHub で認証する")).toBeInTheDocument();
   });
 
-  it("GitHub 接続済み時に「接続済み」表示とユーザー名が表示される", () => {
+  it("GitHub 接続済み時に「接続済み」表示とユーザー名と解除ボタンが表示される", () => {
     mockSettingsStore.authStatus = {
       connected: true,
       user_login: "testuser",
@@ -124,6 +124,7 @@ describe("SettingsScreen", () => {
     render(<SettingsScreen />);
     expect(screen.getByText("接続済み")).toBeInTheDocument();
     expect(screen.getByText("@testuser")).toBeInTheDocument();
+    expect(screen.getByText(/認証を解除/)).toBeInTheDocument();
   });
 
   it("GitHub 認証確認中は「確認中…」が表示される", () => {
