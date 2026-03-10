@@ -10,7 +10,7 @@ import type {
 } from "../types";
 import { parseDiff, type FileDiffResult } from "../lib/diffParser";
 import { useUiStore } from "./uiStore";
-import { useTerminalStore } from "./terminalStore";
+
 
 interface PrState {
   prs: PullRequest[];
@@ -71,6 +71,9 @@ interface PrState {
     body?: string
   ) => Promise<PullRequest>;
   listenSyncDone: () => () => void;
+  openPrByGithubNumber: (projectId: number, githubNumber: number) => Promise<void>;
+  commentsForLine: (path: string, line: number) => PrComment[];
+  reset: () => void;
 }
 
 export const usePrStore = create<PrState>((set, get) => ({
@@ -223,7 +226,11 @@ export const usePrStore = create<PrState>((set, get) => ({
       // Terminal 画面に遷移して Claude Code に再実装を依頼
       useUiStore.getState().navigate("terminal");
       if (pr) {
-        useTerminalStore.getState().startSession(projectId, `${pr.head_branch}: ${comment}`);
+        // terminal_session_start に branch_name と request_changes_comment を渡す
+        ipc.terminalSessionStart(projectId, `${pr.head_branch}: ${comment}`, {
+          branchName: pr.head_branch,
+          requestChangesComment: comment,
+        }).catch(() => {});
       }
     } catch (e) {
       set({ requestChangesStatus: "error", error: String(e) });
@@ -255,4 +262,48 @@ export const usePrStore = create<PrState>((set, get) => ({
     });
     return () => unlistenFn?.();
   },
+
+  openPrByGithubNumber: async (projectId: number, githubNumber: number) => {
+    // PR 一覧から GitHub number で検索 → selectPr で開く
+    let { prs } = get();
+    if (prs.length === 0) {
+      await get().fetchPrs(projectId);
+      prs = get().prs;
+    }
+    const pr = prs.find((p) => p.github_number === githubNumber);
+    if (pr) {
+      await get().selectPr(pr.id, projectId);
+    }
+  },
+
+  commentsForLine: (path: string, line: number) => {
+    const { detail } = get();
+    if (!detail) return [];
+    return detail.comments.filter(
+      (c) => c.path === path && c.line === line
+    );
+  },
+
+  reset: () =>
+    set({
+      prs: [],
+      selectedPrId: null,
+      detail: null,
+      files: [],
+      diff: "",
+      docDiffs: [],
+      stateFilter: "open",
+      activeTab: "overview",
+      fetchStatus: "idle",
+      detailStatus: "idle",
+      filesStatus: "idle",
+      diffStatus: "idle",
+      docDiffStatus: "idle",
+      syncStatus: "idle",
+      mergeStatus: "idle",
+      reviewStatus: "idle",
+      requestChangesStatus: "idle",
+      createStatus: "idle",
+      error: null,
+    }),
 }));

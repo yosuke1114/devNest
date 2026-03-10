@@ -15,6 +15,7 @@ import { useProjectStore } from "./stores/projectStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
 import { useNotificationsStore } from "./stores/notificationsStore";
+import { useConflictStore } from "./stores/conflictStore";
 import { usePrStore } from "./stores/prStore";
 import { useTerminalStore } from "./stores/terminalStore";
 import type { TerminalDonePayload } from "./types";
@@ -36,6 +37,24 @@ export default function App() {
     const unlistenNotifications = listenNotificationEvents();
     const unlistenTerminal = listenTerminalEvents();
     const unlistenPrSync = listenPrSyncDone();
+
+    // git_pull_done → コンフリクト自動検出
+    let unlistenGitPullDone: (() => void) | undefined;
+    listen<{ project_id: number; has_conflicts: boolean }>("git_pull_done", (ev) => {
+      const projectId = useProjectStore.getState().currentProject?.id;
+      if (ev.payload.has_conflicts && ev.payload.project_id === projectId) {
+        useUiStore.getState().setConflictBadge(true);
+        useConflictStore.getState().scanConflicts(ev.payload.project_id);
+        // 通知を作成
+        ipc.notificationPush(
+          ev.payload.project_id,
+          "conflict",
+          "コンフリクトが検出されました",
+          "git pull でコンフリクトが発生しました。解決してください。",
+          "conflict",
+        ).catch(() => {});
+      }
+    }).then((fn) => { unlistenGitPullDone = fn; });
 
     // terminal_done → has_doc_changes なら選択中 PR を自動更新（U-05）
     let unlistenTerminalDone: (() => void) | undefined;
@@ -64,6 +83,7 @@ export default function App() {
       unlistenTerminal();
       unlistenPrSync();
       unlistenTerminalDone?.();
+      unlistenGitPullDone?.();
     };
   }, []);
 

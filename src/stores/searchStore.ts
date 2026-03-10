@@ -53,6 +53,19 @@ export const useSearchStore = create<SearchState>((set, get) => ({
       let results: SearchResult[];
       if (searchType === "semantic") {
         results = await ipc.documentSearchSemantic(projectId, query);
+      } else if (searchType === "both") {
+        const [keyword, semantic] = await Promise.all([
+          ipc.documentSearchKeyword(projectId, query),
+          ipc.documentSearchSemantic(projectId, query),
+        ]);
+        const seen = new Set<number>();
+        results = [...keyword, ...semantic]
+          .sort((a, b) => b.score - a.score)
+          .filter((r) => {
+            if (seen.has(r.chunk_id)) return false;
+            seen.add(r.chunk_id);
+            return true;
+          });
       } else {
         results = await ipc.documentSearchKeyword(projectId, query);
       }

@@ -18,7 +18,8 @@ interface NotificationsState {
   navigateTo: (projectId: number, notificationId: number) => Promise<void>;
   requestPermission: () => Promise<void>;
   listenEvents: () => () => void;
-  onNotificationNew: (payload: { notificationId: number; title: string }) => void;
+  onNotificationNew: (payload: { notificationId: number; title: string; eventType?: string }) => void;
+  reset: () => void;
 }
 
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
@@ -74,22 +75,24 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const ui = useUiStore.getState();
     if (target.screen === "pr" && target.resource_id != null) {
       const prStore = usePrStore.getState();
-      const prs = await ipc.prList(projectId).catch(() => []);
-      const pr = prs.find((p) => p.github_number === target.resource_id);
-      if (pr) await prStore.selectPr(pr.id, projectId);
+      await prStore.openPrByGithubNumber(projectId, target.resource_id);
+      if (target.tab) {
+        prStore.setActiveTab(target.tab as "overview" | "code-diff" | "design-docs");
+      }
     }
 
-    ui.navigate(target.screen as Parameters<typeof ui.navigate>[0]);
+    ui.navigate(target.screen as Parameters<typeof ui.navigate>[0], {
+      tab: target.tab ?? undefined,
+    });
   },
 
   onNotificationNew: (payload) => {
     set((s) => ({ unreadCount: s.unreadCount + 1 }));
-    // 一覧先頭に仮エントリとして追加（詳細は次回 loadNotifications で補完）
     const now = new Date().toISOString();
     const stub: Notification = {
       id: payload.notificationId,
       project_id: 0,
-      event_type: "ai_edit",
+      event_type: (payload.eventType as Notification["event_type"]) ?? "ai_edit",
       title: payload.title,
       body: null,
       dest_screen: null,
@@ -99,6 +102,13 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       created_at: now,
     };
     set((s) => ({ notifications: [stub, ...s.notifications] }));
+
+    // OS 通知送信
+    if (get().permissionStatus === "granted") {
+      import("@tauri-apps/plugin-notification").then((mod) => {
+        mod.sendNotification({ title: payload.title });
+      }).catch(() => {});
+    }
   },
 
   requestPermission: async () => {
@@ -109,10 +119,18 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   listenEvents: () => {
     const unlisteners: (() => void)[] = [];
 
-    listen<{ notificationId: number; title: string }>("notification_new", (ev) => {
+    listen<{ notificationId: number; title: string; eventType?: string }>("notification_new", (ev) => {
       get().onNotificationNew(ev.payload);
     }).then((fn) => unlisteners.push(fn));
 
     return () => unlisteners.forEach((f) => f());
   },
+
+  reset: () =>
+    set({
+      notifications: [],
+      unreadCount: 0,
+      listStatus: "idle",
+      error: null,
+    }),
 }));

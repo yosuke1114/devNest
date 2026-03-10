@@ -29,6 +29,7 @@ interface SettingsState {
   saveGithubCredentials: (projectId: number) => Promise<void>;
   saveAnthropicKey: () => Promise<void>;
   loadCredentials: () => Promise<void>;
+  reset: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -139,6 +140,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       anthropicApiKey: apiKeyRaw ? JSON.parse(apiKeyRaw) : "",
     });
   },
+
+  reset: () =>
+    set({
+      theme: "system",
+      authStatus: null,
+      authStatus2: "idle",
+      clientId: "",
+      clientSecret: "",
+      anthropicApiKey: "",
+      error: null,
+    }),
 }));
 
 function applyTheme(theme: "system" | "light" | "dark") {

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ConflictFile, ConflictBlock } from "../types";
 
@@ -7,13 +7,20 @@ const mockBlock: ConflictBlock = {
   index: 0,
   ours: "our content",
   theirs: "their content",
-  base: "base content",
 };
 
 const mockFile: ConflictFile = {
   id: 1,
   project_id: 1,
-  path: "docs/architecture.md",
+  file_path: "docs/architecture.md",
+  is_managed: true,
+  sync_log_id: null,
+  document_id: null,
+  our_content: null,
+  their_content: null,
+  merged_content: null,
+  resolution: null,
+  resolved_at: null,
   blocks: [mockBlock],
 };
 
@@ -80,7 +87,7 @@ vi.mock("../components/conflict/ConflictFileListItem", () => ({
       data-active={isActive}
       onClick={onClick}
     >
-      {file.path}
+      {file.file_path}
     </button>
   ),
 }));

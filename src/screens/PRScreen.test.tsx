@@ -7,7 +7,7 @@ const mockPr: PullRequest = {
   id: 1,
   project_id: 1,
   github_id: 200,
-  number: 10,
+  github_number: 10,
   title: "Add auto commit",
   body: "PR body",
   state: "open",
@@ -15,10 +15,13 @@ const mockPr: PullRequest = {
   head_branch: "feature/auto-commit",
   base_branch: "main",
   checks_status: "passing",
-  mergeable: true,
-  html_url: "https://github.com/test/repo/pull/10",
-  created_at: "2024-01-01T00:00:00Z",
-  updated_at: "2024-01-01T00:00:00Z",
+  linked_issue_number: null,
+  created_by: "user",
+  draft: false,
+  merged_at: null,
+  github_created_at: "2024-01-01T00:00:00Z",
+  github_updated_at: "2024-01-01T00:00:00Z",
+  synced_at: "2024-01-01T00:00:00Z",
 };
 
 const mockProjectStore = {
@@ -101,7 +104,7 @@ vi.mock("../components/pr/PRDetailHeader", () => ({
   ),
 }));
 vi.mock("../components/pr/PRDetailTabs", () => ({
-  PRDetailTabs: ({ activeTab, onChange }: { activeTab: string; onChange: (t: string) => void }) => (
+  PRDetailTabs: ({ onChange }: { activeTab: string; onChange: (t: string) => void }) => (
     <div data-testid="pr-detail-tabs">
       <button onClick={() => onChange("overview")}>Overview</button>
       <button onClick={() => onChange("code-diff")}>Code Diff</button>

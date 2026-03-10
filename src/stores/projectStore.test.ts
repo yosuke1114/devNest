@@ -213,6 +213,8 @@ describe("projectStore", () => {
     const status: ProjectStatus = {
       id: 1, name: "P", local_path: "/tmp", issue_count: 5, open_issue_count: 3,
       document_count: 2, github_connected: true, last_synced_at: null,
+      syncStatus: "idle", dirtyCount: 0, pendingPushCount: 0, branch: "main",
+      hasUnresolvedConflict: false, pendingAiReviewCount: 0,
     };
     mockInvoke.mockResolvedValueOnce(status);
 
@@ -228,6 +230,8 @@ describe("projectStore", () => {
     const status: ProjectStatus = {
       id: 1, name: "P", local_path: "/tmp", issue_count: 5, open_issue_count: 3,
       document_count: 2, github_connected: true, last_synced_at: null,
+      syncStatus: "idle", dirtyCount: 0, pendingPushCount: 0, branch: "main",
+      hasUnresolvedConflict: false, pendingAiReviewCount: 0,
     };
     mockInvoke.mockResolvedValueOnce(status);
 

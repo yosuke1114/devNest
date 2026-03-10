@@ -181,10 +181,10 @@ export function SettingsScreen() {
           GitHub の CI 結果・PR 更新を自動的にポーリングします。
         </p>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={async () => { await ipc.pollingStart(); }} className="btn-secondary">
+          <button onClick={async () => { if (currentProject) await ipc.pollingStart(currentProject.id); }} className="btn-secondary">
             有効にする
           </button>
-          <button onClick={async () => { await ipc.pollingStop(); }} className="btn-secondary">
+          <button onClick={async () => { if (currentProject) await ipc.pollingStop(currentProject.id); }} className="btn-secondary">
             無効にする
           </button>
         </div>

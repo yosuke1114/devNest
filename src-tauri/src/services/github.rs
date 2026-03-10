@@ -527,6 +527,46 @@ impl GitHubClient {
         Ok(comment.id)
     }
 
+    /// POST /repos/{owner}/{repo}/pulls/{number}/comments — PR inline review comment
+    pub async fn add_pr_review_comment(
+        &self,
+        number: i64,
+        body: &str,
+        path: &str,
+        line: i64,
+        commit_id: &str,
+    ) -> Result<i64> {
+        let url = format!(
+            "{}/repos/{}/{}/pulls/{}/comments",
+            self.base_url, self.owner, self.repo, number
+        );
+        #[derive(serde::Deserialize)]
+        struct CommentResp {
+            id: i64,
+        }
+        let resp = self
+            .http
+            .post(&url)
+            .header("Authorization", self.auth_header())
+            .header("Accept", "application/vnd.github+json")
+            .json(&serde_json::json!({
+                "body": body,
+                "path": path,
+                "line": line,
+                "commit_id": commit_id,
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))?;
+
+        self.check_rate_limit(&resp)?;
+        let comment: CommentResp = resp
+            .json()
+            .await
+            .map_err(|e| AppError::GitHub(e.to_string()))?;
+        Ok(comment.id)
+    }
+
     /// POST /repos/{owner}/{repo}/pulls — PR 作成
     pub async fn create_pull_request(
         &self,

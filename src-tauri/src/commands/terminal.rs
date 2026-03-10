@@ -12,6 +12,11 @@ use crate::state::{AppState, PtySessionHandle};
 pub async fn terminal_session_start(
     project_id: i64,
     _prompt_summary: Option<String>,
+    issue_number: Option<i64>,
+    issue_id: Option<i64>,
+    context_doc_ids: Option<Vec<i64>>,
+    branch_name: Option<String>,
+    request_changes_comment: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> std::result::Result<TerminalSession, AppError> {
@@ -65,6 +70,14 @@ pub async fn terminal_session_start(
 
         let mut cmd = CommandBuilder::new("claude");
         cmd.cwd(&local_path);
+
+        // If re-running for request changes, checkout the specified branch first
+        if let Some(ref branch) = branch_name {
+            let _ = std::process::Command::new("git")
+                .args(["checkout", branch])
+                .current_dir(&local_path)
+                .output();
+        }
 
         let mut child = match pair.slave.spawn_command(cmd) {
             Ok(c) => c,

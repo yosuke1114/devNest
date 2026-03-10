@@ -10,7 +10,7 @@ CREATE TABLE pull_requests (
   title               TEXT    NOT NULL,
   body                TEXT    NULLABLE,
   state               TEXT    NOT NULL
-                        CHECK(state IN ('open','closed','merged')),
+                        CHECK(state IN ('open','closed','merged','draft')),
   head_branch         TEXT    NOT NULL,
   base_branch         TEXT    NOT NULL DEFAULT 'main',
   author_login        TEXT    NOT NULL,
@@ -18,6 +18,8 @@ CREATE TABLE pull_requests (
                         CHECK(checks_status IN ('pending','passing','failing','unknown')),
   linked_issue_number INTEGER NULLABLE,
   draft               INTEGER NOT NULL DEFAULT 0,
+  created_by          TEXT    NOT NULL DEFAULT 'user'
+                        CHECK(created_by IN ('user','claude_code')),
   merged_at           TEXT    NULLABLE,
   github_created_at   TEXT    NOT NULL,
   github_updated_at   TEXT    NOT NULL,
@@ -47,6 +49,11 @@ CREATE TABLE pr_comments (
   body          TEXT    NOT NULL,
   path          TEXT    NULLABLE,
   line          INTEGER NULLABLE,
+  comment_type  TEXT    NOT NULL DEFAULT 'issue_comment'
+                  CHECK(comment_type IN ('inline','review','issue_comment')),
+  diff_hunk     TEXT    NULLABLE,
+  resolved      INTEGER NOT NULL DEFAULT 0,
+  in_reply_to_id INTEGER NULLABLE,
   author_login  TEXT    NOT NULL,
   is_pending    INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT    NOT NULL,
@@ -63,4 +70,4 @@ CREATE INDEX idx_pr_reviews_pr
   ON pr_reviews(pr_id);
 
 CREATE INDEX idx_pr_comments_pr
-  ON pr_comments(pr_id);
+  ON pr_comments(pr_id, path, line);

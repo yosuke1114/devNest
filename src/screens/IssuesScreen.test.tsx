@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Issue, IssueDraft, GitHubLabel } from "../types";
 
@@ -15,9 +15,11 @@ const mockIssue: Issue = {
   labels: "[]",
   milestone: null,
   github_id: 100,
-  html_url: "https://github.com/test/repo/issues/42",
-  created_at: "2024-01-01T00:00:00Z",
-  updated_at: "2024-01-01T00:00:00Z",
+  linked_pr_number: null,
+  created_by: "user",
+  github_created_at: "2024-01-01T00:00:00Z",
+  github_updated_at: "2024-01-01T00:00:00Z",
+  synced_at: "2024-01-01T00:00:00Z",
 };
 
 const mockIssueStore = {

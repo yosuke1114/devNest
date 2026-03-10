@@ -25,6 +25,7 @@ interface TerminalState {
 
   // terminal イベントハンドラ（外部から呼べるようにexport）
   onTerminalDone: (payload: TerminalDonePayload) => void;
+  reset: () => void;
 }
 
 export const useTerminalStore = create<TerminalState>((set, get) => ({
@@ -96,4 +97,17 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
 
   // terminal_done の listen は App.tsx で一本化（prStore との連携のため）
   listenEvents: () => () => {},
+
+  reset: () =>
+    set({
+      session: null,
+      sessions: [],
+      startStatus: "idle",
+      showPrReadyBanner: false,
+      readyBranch: "",
+      hasDocChanges: false,
+      changedFiles: [],
+      error: null,
+      contextChunks: [],
+    }),
 }));

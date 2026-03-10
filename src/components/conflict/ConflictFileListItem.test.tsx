@@ -9,6 +9,11 @@ function makeFile(overrides: Partial<ConflictFile> = {}): ConflictFile {
     project_id: 1,
     file_path: "docs/design/overview.md",
     is_managed: true,
+    sync_log_id: null,
+    document_id: null,
+    our_content: null,
+    their_content: null,
+    merged_content: null,
     resolution: null,
     resolved_at: null,
     blocks: [

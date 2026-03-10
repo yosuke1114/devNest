@@ -17,6 +17,7 @@ function makePr(overrides: Partial<PullRequest> = {}): PullRequest {
     author_login: "alice",
     checks_status: "passing",
     linked_issue_number: null,
+    created_by: "user",
     draft: false,
     merged_at: null,
     github_created_at: "2026-01-01T00:00:00Z",

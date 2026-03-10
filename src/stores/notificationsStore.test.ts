@@ -10,6 +10,8 @@ vi.mock("./prStore", () => ({
   usePrStore: {
     getState: vi.fn(() => ({
       selectPr: vi.fn(),
+      openPrByGithubNumber: vi.fn().mockResolvedValue(undefined),
+      setActiveTab: vi.fn(),
     })),
   },
 }));
@@ -290,6 +292,7 @@ describe("notificationsStore", () => {
         author_login: "user",
         checks_status: "passing",
         linked_issue_number: null,
+        created_by: "user",
         draft: false,
         merged_at: null,
         github_created_at: "2026-01-01T00:00:00Z",
@@ -298,17 +301,17 @@ describe("notificationsStore", () => {
       },
     ]);
 
-    // prStore mock の selectPr を確認できるよう取得
+    // prStore mock の openPrByGithubNumber を確認できるよう取得
     const { usePrStore } = await import("./prStore");
-    const mockSelectPr = vi.fn();
-    vi.mocked(usePrStore.getState).mockReturnValueOnce({
-      selectPr: mockSelectPr,
+    const mockOpenPr = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(usePrStore.getState).mockReturnValue({
+      openPrByGithubNumber: mockOpenPr,
+      setActiveTab: vi.fn(),
     } as never);
 
     await useNotificationsStore.getState().navigateTo(1, 11);
 
-    expect(mockIpc.prList).toHaveBeenCalledWith(1);
-    expect(mockSelectPr).toHaveBeenCalledWith(1, 1);
+    expect(mockOpenPr).toHaveBeenCalledWith(1, 44);
     expect(useUiStore.getState().currentScreen).toBe("pr");
   });
 });
