@@ -51,6 +51,8 @@ interface IssueState {
   listenSyncDone: (projectId: number) => Promise<() => void>;
   listenDraftChunk: () => Promise<() => void>;
   listenDraftDone: () => Promise<() => void>;
+
+  reset: () => void;
 }
 
 export const useIssueStore = create<IssueState>((set, get) => ({
@@ -93,7 +95,9 @@ export const useIssueStore = create<IssueState>((set, get) => ({
 
   fetchIssueLinks: async (issueId) => {
     try {
-      const links = await ipc.issueDocLinkList(issueId);
+      const issue = get().currentIssue;
+      const projectId = issue?.project_id ?? 0;
+      const links = await ipc.issueDocLinkList(projectId, issueId);
       set({ issueLinks: links });
     } catch (e) {
       set({ error: e as AppError });
@@ -239,4 +243,19 @@ export const useIssueStore = create<IssueState>((set, get) => ({
     );
     return unlisten;
   },
+
+  reset: () =>
+    set({
+      issues: [],
+      currentIssue: null,
+      issueLinks: [],
+      drafts: [],
+      currentDraft: null,
+      draftStreamBuffer: "",
+      labels: [],
+      listStatus: "idle",
+      syncStatus: "idle",
+      generateStatus: "idle",
+      error: null,
+    }),
 }));

@@ -8,6 +8,7 @@ interface MarkdownPreviewProps {
 export function MarkdownPreview({ content }: MarkdownPreviewProps) {
   return (
     <div
+      data-testid="markdown-preview"
       style={{
         display: "flex",
         flexDirection: "column",

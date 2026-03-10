@@ -25,6 +25,7 @@ interface DocumentState {
   setDirty: (documentId: number, dirty: boolean) => void;
   listenSaveProgress: () => Promise<() => void>;
   fetchLinkedIssues: (documentId: number) => Promise<void>;
+  reset: () => void;
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -94,7 +95,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   retryPush: async (documentId) => {
     try {
-      await ipc.documentPushRetry(documentId);
+      const projectId = get().currentDoc?.project_id ?? 0;
+      await ipc.documentPushRetry(projectId, documentId);
     } catch (e) {
       set({ error: e as AppError });
     }
@@ -110,7 +112,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
           ? { ...s.currentDoc, is_dirty: dirty }
           : s.currentDoc,
     }));
-    ipc.documentSetDirty(documentId, dirty).catch(() => {});
+    const projectId = get().currentDoc?.project_id ?? 0;
+    ipc.documentSetDirty(projectId, documentId, dirty).catch(() => {});
   },
 
   listenSaveProgress: async () => {
@@ -125,10 +128,26 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   fetchLinkedIssues: async (documentId) => {
     try {
-      const issues = await ipc.documentLinkedIssues(documentId);
+      const projectId = get().currentDoc?.project_id;
+      if (!projectId) {
+        const issues = await ipc.documentLinkedIssues(0, documentId);
+        set({ linkedIssues: issues });
+        return;
+      }
+      const issues = await ipc.documentLinkedIssues(projectId, documentId);
       set({ linkedIssues: issues });
     } catch {
       set({ linkedIssues: [] });
     }
   },
+
+  reset: () =>
+    set({
+      documents: [],
+      currentDoc: null,
+      linkedIssues: [],
+      saveStatus: "idle",
+      saveProgress: null,
+      error: null,
+    }),
 }));

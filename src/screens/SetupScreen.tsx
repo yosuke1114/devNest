@@ -57,6 +57,7 @@ function Step0Project({
       <div>
         <label className="block text-sm text-gray-400 mb-1">プロジェクト名</label>
         <input
+          data-testid="setup-project-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="MyApp"
@@ -69,6 +70,7 @@ function Step0Project({
         </label>
         <div className="flex gap-2">
           <input
+            data-testid="setup-local-dir"
             value={localPath}
             onChange={(e) => setLocalPath(e.target.value)}
             placeholder="/Users/you/projects/myapp"
@@ -89,6 +91,7 @@ function Step0Project({
       )}
       <div className="flex justify-end pt-2">
         <button
+          data-testid="setup-next"
           onClick={handleNext}
           disabled={loading || !name.trim() || !localPath.trim()}
           className="flex items-center gap-2 px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium disabled:opacity-50 transition-colors"
@@ -129,7 +132,7 @@ function Step1GitHub({
       {authStatus2 === "loading" ? (
         <div className="text-xs text-gray-500">確認中…</div>
       ) : connected ? (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-green-700/50 bg-green-900/20">
+        <div data-testid="setup-github-status" className="flex items-center gap-2 p-3 rounded-lg border border-green-700/50 bg-green-900/20">
           <IconCheck size={16} className="text-green-400" />
           <div>
             <div className="text-sm font-medium text-green-300">接続済み</div>
@@ -140,6 +143,7 @@ function Step1GitHub({
         </div>
       ) : (
         <button
+          data-testid="setup-connect-github"
           onClick={() => startAuth(projectId)}
           className="flex items-center gap-2 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm text-gray-200 border border-white/10 transition-colors"
         >
@@ -172,6 +176,7 @@ function Step2Sync({
           {(["auto", "manual"] as const).map((m) => (
             <button
               key={m}
+              data-testid={`setup-sync-${m}`}
               onClick={() => setSyncMode(m)}
               className={`px-4 py-2 rounded text-sm border transition-colors ${
                 syncMode === m
@@ -265,6 +270,7 @@ function Step3Index({
 
       {status === "idle" && (
         <button
+          data-testid="setup-build-index"
           onClick={handleBuild}
           className="flex items-center gap-2 px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
         >
@@ -274,7 +280,7 @@ function Step3Index({
       )}
 
       {status === "running" && (
-        <div className="space-y-2">
+        <div data-testid="setup-index-status" className="space-y-2">
           <div className="flex items-center gap-2 text-sm text-purple-300">
             <IconDatabase size={15} className="animate-pulse" />
             インデックス構築中…
@@ -296,7 +302,7 @@ function Step3Index({
       )}
 
       {status === "done" && (
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-green-700/50 bg-green-900/20">
+        <div data-testid="setup-index-status" className="flex items-center gap-2 p-3 rounded-lg border border-green-700/50 bg-green-900/20">
           <IconCheck size={16} className="text-green-400" />
           <span className="text-sm text-green-300">{indexed} ファイルをインデックス化しました</span>
         </div>
@@ -369,6 +375,7 @@ function Step5Done({
         <p className="text-sm text-gray-400">DevNest でプロジェクト管理を始めましょう。</p>
       </div>
       <button
+        data-testid="setup-open-editor"
         onClick={onFinish}
         className="flex items-center gap-2 mx-auto px-6 py-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-medium transition-colors"
       >
@@ -393,6 +400,7 @@ function NavButtons({
     <div className="flex items-center justify-between pt-2">
       {onBack ? (
         <button
+          data-testid="setup-back"
           onClick={onBack}
           className="flex items-center gap-1 px-3 py-2 rounded text-sm text-gray-400 hover:text-gray-200 transition-colors"
         >
@@ -445,7 +453,7 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
   const projectId = currentProject?.id ?? 0;
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8">
+    <div data-testid="setup-screen" className="flex-1 flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-lg">
         {/* ヘッダー */}
         <div className="text-center mb-6">
@@ -537,7 +545,7 @@ export function SetupScreen() {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8">
+    <div data-testid="setup-screen" className="flex-1 flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-lg">
         <h1 className="text-2xl font-bold text-white mb-2">プロジェクト管理</h1>
         <p className="text-sm text-gray-500 mb-8">

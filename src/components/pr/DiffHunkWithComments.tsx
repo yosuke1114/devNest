@@ -10,7 +10,7 @@ interface DiffHunkWithCommentsProps {
 
 export function DiffHunkWithComments({ hunk, comments, onAddComment }: DiffHunkWithCommentsProps) {
   return (
-    <div>
+    <div data-testid="diff-hunk">
       <div className="px-3 py-1 bg-blue-950/40 text-[10px] font-mono text-blue-300">
         {hunk.header}
       </div>

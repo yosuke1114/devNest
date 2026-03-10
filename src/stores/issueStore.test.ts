@@ -159,9 +159,10 @@ describe("issueStore", () => {
   // ─── fetchIssueLinks ───────────────────────────────────────────────────────
 
   it("fetchIssueLinks() が issueDocLinkList を呼ぶ", async () => {
+    useIssueStore.setState({ currentIssue: makeIssue({ id: 1, project_id: 2 }) });
     mockIpc.issueDocLinkList.mockResolvedValueOnce([]);
     await useIssueStore.getState().fetchIssueLinks(1);
-    expect(mockIpc.issueDocLinkList).toHaveBeenCalledWith(1);
+    expect(mockIpc.issueDocLinkList).toHaveBeenCalledWith(2, 1);
   });
 
   it("fetchIssueLinks() 成功時に issueLinks がセットされる", async () => {
@@ -273,13 +274,14 @@ describe("issueStore", () => {
   });
 
   it("addIssueLink() 後に issueLinks が再フェッチされる", async () => {
+    useIssueStore.setState({ currentIssue: makeIssue({ id: 1, project_id: 2 }) });
     const link = makeDocLink({ issue_id: 1, document_id: 10 });
     mockIpc.issueDocLinkAdd.mockResolvedValueOnce(undefined);
     mockIpc.issueDocLinkList.mockResolvedValueOnce([link]);
 
     await useIssueStore.getState().addIssueLink(1, 10);
 
-    expect(mockIpc.issueDocLinkList).toHaveBeenCalledWith(1);
+    expect(mockIpc.issueDocLinkList).toHaveBeenCalledWith(2, 1);
     expect(useIssueStore.getState().issueLinks).toHaveLength(1);
   });
 

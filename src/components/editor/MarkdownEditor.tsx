@@ -85,6 +85,7 @@ export function MarkdownEditor({
 
   return (
     <div
+      data-testid="markdown-editor"
       ref={containerRef}
       style={{
         flex: 1,

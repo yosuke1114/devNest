@@ -190,7 +190,19 @@ describe("documentStore", () => {
 
     useDocumentStore.getState().setDirty(1, true);
 
-    expect(mockIpc.documentSetDirty).toHaveBeenCalledWith(1, true);
+    expect(mockIpc.documentSetDirty).toHaveBeenCalledWith(0, 1, true);
+  });
+
+  it("setDirty() が currentDoc がある場合 projectId を使う", () => {
+    useDocumentStore.setState({
+      documents: [makeDocument({ id: 1 })],
+      currentDoc: makeDocWithContent({ id: 1, project_id: 3 }),
+    });
+    mockIpc.documentSetDirty.mockResolvedValue(undefined);
+
+    useDocumentStore.getState().setDirty(1, true);
+
+    expect(mockIpc.documentSetDirty).toHaveBeenCalledWith(3, 1, true);
   });
 
   // ─── scanDocuments ─────────────────────────────────────────────────────────
@@ -210,7 +222,7 @@ describe("documentStore", () => {
   it("fetchLinkedIssues() が documentLinkedIssues IPC を呼ぶ", async () => {
     mockIpc.documentLinkedIssues.mockResolvedValueOnce([]);
     await useDocumentStore.getState().fetchLinkedIssues(10);
-    expect(mockIpc.documentLinkedIssues).toHaveBeenCalledWith(10);
+    expect(mockIpc.documentLinkedIssues).toHaveBeenCalledWith(0, 10);
   });
 
   it("fetchLinkedIssues() 成功時に linkedIssues がセットされる", async () => {
@@ -248,7 +260,7 @@ describe("documentStore", () => {
   it("retryPush() が documentPushRetry を呼ぶ", async () => {
     mockIpc.documentPushRetry.mockResolvedValueOnce(undefined);
     await useDocumentStore.getState().retryPush(7);
-    expect(mockIpc.documentPushRetry).toHaveBeenCalledWith(7);
+    expect(mockIpc.documentPushRetry).toHaveBeenCalledWith(0, 7);
   });
 
   it("retryPush() 失敗時に error がセットされる", async () => {

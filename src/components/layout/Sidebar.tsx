@@ -117,6 +117,7 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => (
           <button
             key={item.screen}
+            data-testid={`nav-${item.screen}`}
             onClick={() => navigate(item.screen)}
             style={{
               display: "flex",
@@ -142,6 +143,7 @@ export function Sidebar() {
               {item.icon}
               {item.screen === "notifications" && unreadCount > 0 && (
                 <span
+                  data-testid="nav-notifications-badge-dot"
                   style={{
                     position: "absolute",
                     top: -4,
@@ -158,6 +160,7 @@ export function Sidebar() {
             {!sidebarCollapsed && item.label}
             {!sidebarCollapsed && item.screen === "notifications" && unreadCount > 0 && (
               <span
+                data-testid="nav-notifications-badge"
                 style={{
                   marginLeft: "auto",
                   padding: "1px 5px",

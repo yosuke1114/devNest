@@ -16,7 +16,7 @@ export function PRCreatedBanner({
   onDismiss,
 }: PRCreatedBannerProps) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-purple-900/40 border-b border-purple-700/50">
+    <div data-testid="pr-created-banner" className="flex items-center gap-3 px-4 py-2.5 bg-purple-900/40 border-b border-purple-700/50">
       <IconCheck size={14} className="text-purple-400 shrink-0" />
       <div className="flex-1 min-w-0 text-xs text-purple-200">
         <span className="font-medium">PR #{prNumber}</span> を作成しました — {title}

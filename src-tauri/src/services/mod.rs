@@ -1,3 +1,4 @@
+pub mod anthropic;
 pub mod chunker;
 pub mod embedding;
 pub mod git;

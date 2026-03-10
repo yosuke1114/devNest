@@ -192,62 +192,82 @@ pub async fn issue_draft_generate(
         if doc_context.is_empty() { "（なし）".to_string() } else { doc_context },
     );
 
-    // Anthropic Messages API リクエスト（streaming）
-    let http = reqwest::Client::new();
-    let resp = http
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", &api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&serde_json::json!({
-            "model": "claude-sonnet-4-6",
-            "max_tokens": 2048,
-            "stream": true,
-            "system": system_prompt,
-            "messages": [{ "role": "user", "content": user_content }]
-        }))
-        .send()
-        .await
-        .map_err(|e| AppError::Anthropic(e.to_string()))?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        return Err(AppError::Anthropic(format!("API エラー {}: {}", status, body)));
-    }
-
-    // SSE ストリームを処理
-    use eventsource_stream::Eventsource;
-    use futures_util::StreamExt;
-
+    // DEVNEST_TEST_MODE が設定されている場合は固定レスポンスを返す
     let mut full_body = String::new();
-    let mut stream = resp.bytes_stream().eventsource();
 
-    while let Some(event) = stream.next().await {
-        let event = event.map_err(|e| AppError::Anthropic(e.to_string()))?;
-
-        if event.event == "message_stop" {
-            break;
-        }
-        if event.event != "content_block_delta" {
-            continue;
-        }
-
-        // {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"..."}}
-        let val: serde_json::Value = serde_json::from_str(&event.data)
-            .unwrap_or(serde_json::Value::Null);
-        let delta = val
-            .get("delta")
-            .and_then(|d| d.get("text"))
-            .and_then(|t| t.as_str())
-            .unwrap_or("");
-
-        if !delta.is_empty() {
-            full_body.push_str(delta);
+    if std::env::var("DEVNEST_TEST_MODE").is_ok() {
+        let mock_chunks = [
+            "## 概要\n\n",
+            &format!("{} に関する Issue です。\n\n", draft.title),
+            "## 詳細\n\n",
+            "テストモードにより自動生成されたモックレスポンスです。\n\n",
+            "## 期待する動作\n\n",
+            "正常に動作すること。\n",
+        ];
+        for chunk in &mock_chunks {
+            full_body.push_str(chunk);
             let _ = app.emit(
                 "issue_draft_chunk",
-                DraftChunkPayload { draft_id, delta: delta.to_string() },
+                DraftChunkPayload { draft_id, delta: chunk.to_string() },
             );
+        }
+    } else {
+        // Anthropic Messages API リクエスト（streaming）
+        let http = reqwest::Client::new();
+        let resp = http
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&serde_json::json!({
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 2048,
+                "stream": true,
+                "system": system_prompt,
+                "messages": [{ "role": "user", "content": user_content }]
+            }))
+            .send()
+            .await
+            .map_err(|e| AppError::Anthropic(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AppError::Anthropic(format!("API エラー {}: {}", status, body)));
+        }
+
+        // SSE ストリームを処理
+        use eventsource_stream::Eventsource;
+        use futures_util::StreamExt;
+
+        let mut stream = resp.bytes_stream().eventsource();
+
+        while let Some(event) = stream.next().await {
+            let event = event.map_err(|e| AppError::Anthropic(e.to_string()))?;
+
+            if event.event == "message_stop" {
+                break;
+            }
+            if event.event != "content_block_delta" {
+                continue;
+            }
+
+            // {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"..."}}
+            let val: serde_json::Value = serde_json::from_str(&event.data)
+                .unwrap_or(serde_json::Value::Null);
+            let delta = val
+                .get("delta")
+                .and_then(|d| d.get("text"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+
+            if !delta.is_empty() {
+                full_body.push_str(delta);
+                let _ = app.emit(
+                    "issue_draft_chunk",
+                    DraftChunkPayload { draft_id, delta: delta.to_string() },
+                );
+            }
         }
     }
 

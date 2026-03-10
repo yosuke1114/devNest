@@ -18,7 +18,7 @@ export function PRList({ prs, loading, selectedPrId, onSelect }: PRListProps) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto" data-testid="pr-list">
       {prs.map((pr) => (
         <PRListItem
           key={pr.id}

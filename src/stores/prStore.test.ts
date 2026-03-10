@@ -32,6 +32,7 @@ function makePr(overrides: Partial<PullRequest> = {}): PullRequest {
     author_login: "dev",
     checks_status: "passing",
     linked_issue_number: null,
+    created_by: "user",
     draft: false,
     merged_at: null,
     github_created_at: "2026-01-01T00:00:00Z",
@@ -48,6 +49,8 @@ function makePrDetail(pr: PullRequest): PrDetail {
 describe("prStore", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // terminalSessionStart is called with .catch() so it must return a Promise
+    mockIpc.terminalSessionStart.mockResolvedValue({ id: 1, project_id: 1, branch_name: null, has_doc_changes: false, prompt_summary: null, output_log: null, exit_code: null, status: "running", started_at: "2026-01-01T00:00:00Z", ended_at: null } as never);
     usePrStore.setState({
       prs: [],
       selectedPrId: null,

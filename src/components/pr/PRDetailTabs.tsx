@@ -32,6 +32,7 @@ export function PRDetailTabs({ activeTab, onChange, codeFileCount = 0 }: PRDetai
             disabled={!isEnabled}
             aria-selected={isActive}
             data-active={isActive ? "true" : "false"}
+            data-testid={`pr-tab-${tab.id}`}
             title={!isEnabled ? "Phase 4 から利用可能" : undefined}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
               isActive

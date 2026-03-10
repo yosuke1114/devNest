@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import * as ipc from "../lib/ipc";
 import type { AppError, AsyncStatus, Project, ProjectPatch, ProjectStatus } from "../types";
+import { useDocumentStore } from "./documentStore";
+import { useIssueStore } from "./issueStore";
+import { usePrStore } from "./prStore";
+import { useConflictStore } from "./conflictStore";
+import { useSearchStore } from "./searchStore";
+import { useTerminalStore } from "./terminalStore";
+import { useNotificationsStore } from "./notificationsStore";
+import { useUiStore } from "./uiStore";
 
 interface ProjectState {
   projects: Project[];
@@ -10,12 +18,13 @@ interface ProjectState {
   error: AppError | null;
 
   fetchProjects: () => Promise<void>;
-  selectProject: (project: Project) => void;
+  selectProject: (project: Project) => Promise<void>;
   createProject: (name: string, localPath: string) => Promise<void>;
   updateProject: (patch: ProjectPatch) => Promise<void>;
   deleteProject: (projectId: number) => Promise<void>;
   fetchStatus: (projectId: number) => Promise<void>;
   setLastOpenedDocument: (projectId: number, documentId: number | null) => Promise<void>;
+  reset: () => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -30,7 +39,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       const projects = await ipc.projectList();
       const current = get().currentProject;
-      // 現在のプロジェクトを最新データで更新
       const updated = current
         ? (projects.find((p) => p.id === current.id) ?? null)
         : null;
@@ -40,10 +48,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  selectProject: (project) => {
+  selectProject: async (project) => {
+    const prev = get().currentProject;
+
+    // プロジェクト切替フラグ
+    useUiStore.getState().setProjectSwitching(true);
+
+    // 前のプロジェクトのポーリングを停止
+    if (prev && prev.id !== project.id) {
+      ipc.pollingStop(prev.id).catch(() => {});
+    }
+
+    // ドメインストアをリセット
+    _resetDomainStores();
+
     set({ currentProject: project });
-    // F-P02: プロジェクト選択時にポーリングを自動起動
-    ipc.pollingStart().catch(() => {});
+
+    // 新プロジェクトのポーリングを開始
+    ipc.pollingStart(project.id).catch(() => {});
+
+    // ステータス取得
+    get().fetchStatus(project.id).catch(() => {});
+
+    useUiStore.getState().setProjectSwitching(false);
   },
 
   createProject: async (name, localPath) => {
@@ -101,4 +128,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setLastOpenedDocument: async (projectId, documentId) => {
     await ipc.projectSetLastOpenedDocument(projectId, documentId);
   },
+
+  reset: () =>
+    set({
+      projects: [],
+      currentProject: null,
+      currentStatus: null,
+      listStatus: "idle",
+      error: null,
+    }),
 }));
+
+/** プロジェクト切替時に全ドメインストアをリセットする */
+function _resetDomainStores() {
+  useDocumentStore.getState().reset();
+  useIssueStore.getState().reset();
+  usePrStore.getState().reset();
+  useConflictStore.getState().reset();
+  useSearchStore.getState().reset();
+  useTerminalStore.getState().reset();
+  useNotificationsStore.getState().reset();
+}

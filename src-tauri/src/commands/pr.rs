@@ -302,6 +302,7 @@ pub(crate) fn build_doc_diff(files: &[crate::models::pr::PrFile]) -> String {
 #[tauri::command]
 pub async fn git_pull(
     project_id: i64,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> std::result::Result<String, AppError> {
     let project = db::project::find(&state.db, project_id).await?;
@@ -335,6 +336,12 @@ pub async fn git_pull(
                 .ok();
         }
     }
+
+    let has_conflicts = status == PullStatus::Conflict;
+    let _ = app.emit(
+        "git_pull_done",
+        serde_json::json!({ "project_id": project_id, "has_conflicts": has_conflicts }),
+    );
 
     Ok(match status {
         PullStatus::Success => "success",

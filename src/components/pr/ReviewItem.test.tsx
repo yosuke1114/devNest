@@ -11,6 +11,7 @@ function makePrReview(overrides: Partial<PrReview> = {}): PrReview {
     reviewer_login: "alice",
     state: "approved",
     body: null,
+    submit_status: "submitted",
     submitted_at: "2026-01-01T00:00:00Z",
     synced_at: "2026-01-01T00:00:00Z",
     ...overrides,

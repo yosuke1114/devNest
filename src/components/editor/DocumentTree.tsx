@@ -21,12 +21,14 @@ export function DocumentTree({ documents, onSelect, selectedId }: DocumentTreePr
       {documents.map((doc) => {
         const isSelected = selectedId === doc.id;
         const label = doc.path.replace(/^docs\//, "");
+        const filename = doc.path.split("/").pop() ?? doc.path;
 
         return (
           <button
             key={doc.id}
             role="button"
             aria-selected={isSelected}
+            data-testid={`tree-node-${filename}`}
             onClick={() => onSelect(doc)}
             title={doc.path}
             style={{

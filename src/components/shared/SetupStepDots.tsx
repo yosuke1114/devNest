@@ -12,7 +12,7 @@ export function SetupStepDots({
   onGoTo,
 }: SetupStepDotsProps) {
   return (
-    <div className="flex items-center gap-2 justify-center py-4">
+    <div data-testid="setup-step-dots" className="flex items-center gap-2 justify-center py-4">
       {Array.from({ length: totalSteps }, (_, i) => {
         const isCompleted = completedSteps.includes(i);
         const isCurrent = i === currentStep;

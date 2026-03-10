@@ -84,6 +84,7 @@ function TerminalPane({
   return (
     <div
       ref={termRef}
+      data-testid="terminal-xterm"
       style={{ height, background: "#0d0d1a" }}
       className="overflow-hidden"
     />
@@ -180,7 +181,7 @@ export function TerminalScreen() {
   const isIdle = !session || session.status === "aborted" || session.status === "failed";
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div data-testid="terminal-screen" className="flex-1 flex flex-col overflow-hidden">
       {/* PR 作成モーダル */}
       {showCreateModal && currentProject && (
         <PRCreateModal
@@ -204,7 +205,7 @@ export function TerminalScreen() {
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/10">
         <div className="flex-1">
           <div className="text-sm font-medium text-white">Claude Code Terminal</div>
-          <div className="flex items-center gap-2 text-[11px]">
+          <div data-testid="terminal-status" className="flex items-center gap-2 text-[11px]">
             {isRunning ? (
               <span className="text-yellow-400">◌ running…</span>
             ) : session?.status === "completed" ? (

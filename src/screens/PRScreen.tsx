@@ -343,7 +343,7 @@ export function PRScreen() {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden" data-testid="pr-screen">
       {/* PR List panel */}
       <div className="w-72 shrink-0 flex flex-col border-r border-white/10 overflow-hidden">
         <PRFilterBar

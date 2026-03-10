@@ -185,7 +185,7 @@ export function ConflictScreen() {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden relative">
+    <div data-testid="conflict-screen" className="flex-1 flex flex-col overflow-hidden relative">
       {/* 解消完了オーバーレイ */}
       {resolveAllStatus === "success" && resolveAllResult && (
         <ResolvedOverlay result={resolveAllResult} onClose={reset} />

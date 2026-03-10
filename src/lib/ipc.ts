@@ -73,14 +73,14 @@ export const documentScan = (projectId: number) =>
 export const documentSave = (projectId: number, documentId: number, content: string) =>
   invoke<SaveResult>("document_save", { projectId, documentId, content });
 
-export const documentSetDirty = (documentId: number, dirty: boolean) =>
-  invoke<void>("document_set_dirty", { documentId, dirty });
+export const documentSetDirty = (projectId: number, documentId: number, dirty: boolean) =>
+  invoke<void>("document_set_dirty", { projectId, documentId, dirty });
 
-export const documentPushRetry = (documentId: number) =>
-  invoke<void>("document_push_retry", { documentId });
+export const documentPushRetry = (projectId: number, documentId: number) =>
+  invoke<void>("document_push_retry", { projectId, documentId });
 
-export const documentLinkedIssues = (documentId: number) =>
-  invoke<Issue[]>("document_linked_issues", { documentId });
+export const documentLinkedIssues = (projectId: number, documentId: number) =>
+  invoke<Issue[]>("document_linked_issues", { projectId, documentId });
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const settingsGet = (key: string) =>
@@ -115,8 +115,8 @@ export const issueSync = (projectId: number, stateFilter?: string) =>
 export const issueList = (projectId: number, statusFilter?: string) =>
   invoke<Issue[]>("issue_list", { projectId, statusFilter });
 
-export const issueDocLinkList = (issueId: number) =>
-  invoke<IssueDocLink[]>("issue_doc_link_list", { issueId });
+export const issueDocLinkList = (projectId: number, issueId: number) =>
+  invoke<IssueDocLink[]>("issue_doc_link_list", { projectId, issueId });
 
 export const issueDocLinkAdd = (
   issueId: number,
@@ -223,8 +223,26 @@ export const searchContextForIssue = (projectId: number, issueId: number) =>
   invoke<IssueContextChunk[]>("search_context_for_issue", { projectId, issueId });
 
 // ─── Terminal ────────────────────────────────────────────────────────────────
-export const terminalSessionStart = (projectId: number, promptSummary?: string) =>
-  invoke<TerminalSession>("terminal_session_start", { projectId, promptSummary });
+export const terminalSessionStart = (
+  projectId: number,
+  promptSummary?: string,
+  options?: {
+    issueNumber?: number;
+    issueId?: number;
+    contextDocIds?: number[];
+    branchName?: string;
+    requestChangesComment?: string;
+  }
+) =>
+  invoke<TerminalSession>("terminal_session_start", {
+    projectId,
+    promptSummary,
+    issueNumber: options?.issueNumber,
+    issueId: options?.issueId,
+    contextDocIds: options?.contextDocIds,
+    branchName: options?.branchName,
+    requestChangesComment: options?.requestChangesComment,
+  });
 
 export const terminalSessionStop = (sessionId: number) =>
   invoke<void>("terminal_session_stop", { sessionId });
@@ -272,9 +290,12 @@ export const notificationPermissionRequest = () =>
   invoke<string>("notification_permission_request");
 
 // ─── Polling ─────────────────────────────────────────────────────────────────
-export const pollingStart = () => invoke<void>("polling_start");
-export const pollingStop = () => invoke<void>("polling_stop");
-export const pollingStatus = () => invoke<boolean>("polling_status");
+export const pollingStart = (projectId: number) =>
+  invoke<void>("polling_start", { projectId });
+export const pollingStop = (projectId: number) =>
+  invoke<void>("polling_stop", { projectId });
+export const pollingStatus = (projectId?: number) =>
+  invoke<boolean>("polling_status", { projectId });
 
 // ─── Conflict ─────────────────────────────────────────────────────────────────
 export const conflictScan = (projectId: number) =>

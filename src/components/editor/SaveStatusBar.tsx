@@ -39,6 +39,7 @@ export function SaveStatusBar({
 
   return (
     <div
+      data-testid="save-status-bar"
       style={{
         display: "flex",
         alignItems: "center",

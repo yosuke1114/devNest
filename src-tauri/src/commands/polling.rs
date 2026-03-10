@@ -5,21 +5,24 @@ use crate::state::AppState;
 
 /// バックグラウンドポーリングを有効にする。
 #[tauri::command]
-pub async fn polling_start(state: State<'_, AppState>) -> Result<()> {
+pub async fn polling_start(project_id: Option<i64>, state: State<'_, AppState>) -> Result<()> {
+    let _ = project_id; // reserved for per-project polling
     state.polling_active.store(true, Ordering::Relaxed);
     Ok(())
 }
 
 /// バックグラウンドポーリングを無効にする。
 #[tauri::command]
-pub async fn polling_stop(state: State<'_, AppState>) -> Result<()> {
+pub async fn polling_stop(project_id: Option<i64>, state: State<'_, AppState>) -> Result<()> {
+    let _ = project_id;
     state.polling_active.store(false, Ordering::Relaxed);
     Ok(())
 }
 
 /// バックグラウンドポーリングの現在の状態を返す。
 #[tauri::command]
-pub async fn polling_status(state: State<'_, AppState>) -> Result<bool> {
+pub async fn polling_status(project_id: Option<i64>, state: State<'_, AppState>) -> Result<bool> {
+    let _ = project_id;
     Ok(state.polling_active.load(Ordering::Relaxed))
 }
 

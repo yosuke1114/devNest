@@ -27,6 +27,7 @@ export function FilePicker({
   return (
     <button
       type="button"
+      data-testid="file-picker"
       className={className}
       disabled={disabled}
       onClick={handleClick}

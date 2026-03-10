@@ -19,7 +19,7 @@ export function ConflictBlockItem({
   onManualChange,
 }: ConflictBlockItemProps) {
   return (
-    <div className="border border-white/10 rounded-lg overflow-hidden mb-3">
+    <div data-testid="conflict-block-item" className="border border-white/10 rounded-lg overflow-hidden mb-3">
       {/* ブロックヘッダー */}
       <div className="flex items-center gap-3 px-3 py-2 bg-white/5 border-b border-white/10">
         <IconAlertTriangle size={13} className="text-yellow-400 shrink-0" />

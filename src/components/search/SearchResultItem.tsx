@@ -15,6 +15,7 @@ export function SearchResultItem({ result, isActive, keyword, onClick }: SearchR
   return (
     <button
       onClick={onClick}
+      data-testid="search-result-item"
       data-active={isActive ? "true" : "false"}
       className={`w-full text-left px-3 py-2.5 border-b border-white/5 transition-colors hover:bg-white/5 ${
         isActive ? "bg-white/10 border-l-2 border-l-blue-500" : "border-l-2 border-l-transparent"

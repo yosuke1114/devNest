@@ -45,6 +45,13 @@ export interface ProjectStatus {
   document_count: number;
   github_connected: boolean;
   last_synced_at: string | null;
+  // 設計書追加フィールド
+  syncStatus: "idle" | "syncing" | "error";
+  dirtyCount: number;
+  pendingPushCount: number;
+  branch: string | null;
+  hasUnresolvedConflict: boolean;
+  pendingAiReviewCount: number;
 }
 
 export interface ProjectPatch {
@@ -172,12 +179,13 @@ export interface PullRequest {
   github_id: number;
   title: string;
   body: string | null;
-  state: "open" | "closed" | "merged";
+  state: "open" | "closed" | "merged" | "draft";
   head_branch: string;
   base_branch: string;
   author_login: string;
   checks_status: "pending" | "passing" | "failing" | "unknown";
   linked_issue_number: number | null;
+  created_by: "user" | "claude_code";
   draft: boolean;
   merged_at: string | null;
   github_created_at: string;
@@ -190,7 +198,8 @@ export interface PrReview {
   pr_id: number;
   github_id: number | null;
   reviewer_login: string;
-  state: "approved" | "changes_requested" | "commented" | "dismissed";
+  state: "pending" | "approved" | "changes_requested" | "commented" | "dismissed";
+  submit_status: "pending_submit" | "submitted";
   body: string | null;
   submitted_at: string | null;
   synced_at: string;
@@ -204,6 +213,10 @@ export interface PrComment {
   body: string;
   path: string | null;
   line: number | null;
+  comment_type: "inline" | "review" | "issue_comment";
+  diff_hunk: string | null;
+  resolved: boolean;
+  in_reply_to_id: number | null;
   is_pending: boolean;
   synced_at: string | null;
   created_at: string;
@@ -331,6 +344,11 @@ export interface ConflictFile {
   project_id: number;
   file_path: string;
   is_managed: boolean;
+  sync_log_id: number | null;
+  document_id: number | null;
+  our_content: string | null;
+  their_content: string | null;
+  merged_content: string | null;
   resolution: string | null;
   resolved_at: string | null;
   blocks: ConflictBlock[];
@@ -367,6 +385,8 @@ export interface Notification {
 export interface NavigationTarget {
   screen: string;
   resource_id: number | null;
+  tab?: string | null;
+  anchor?: string | null;
 }
 
 // ─── Document save progress ──────────────────────────────────────────────────
@@ -386,3 +406,19 @@ export type ScreenName =
   | "search"
   | "notifications"
   | "conflict";
+
+export interface NavigateParams {
+  prId?: number;
+  issueId?: number;
+  documentId?: number;
+  tab?: string;
+  anchor?: string;
+  scrollToLine?: number;
+}
+
+export type SetupStep = 0 | 1 | 2 | 3 | 4 | 5;
+
+export interface Modal {
+  id: string;
+  props?: Record<string, unknown>;
+}

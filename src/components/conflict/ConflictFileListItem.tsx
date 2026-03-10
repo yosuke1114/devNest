@@ -20,6 +20,7 @@ export function ConflictFileListItem({
   return (
     <button
       onClick={onClick}
+      data-testid="conflict-file-list-item"
       data-active={isActive ? "true" : "false"}
       className={`w-full text-left px-3 py-2.5 border-b border-white/5 hover:bg-white/5 transition-colors ${
         isActive ? "bg-white/10" : ""
