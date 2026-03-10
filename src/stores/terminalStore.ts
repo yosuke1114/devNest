@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import type { AsyncStatus, IssueContextChunk, TerminalDonePayload, TerminalSession } from "../types";
 import { useIssueStore } from "./issueStore";
@@ -95,8 +96,22 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }));
   },
 
+  // terminal_error をリッスンして PTY 起動失敗をユーザーに通知
   // terminal_done の listen は App.tsx で一本化（prStore との連携のため）
-  listenEvents: () => () => {},
+  listenEvents: () => {
+    let unlisten: (() => void) | undefined;
+    listen<{ session_id: number; error: string }>("terminal_error", (ev) => {
+      const { session } = get();
+      if (session && ev.payload.session_id === session.id) {
+        set({
+          error: ev.payload.error,
+          startStatus: "error",
+          session: { ...session, status: "failed" },
+        });
+      }
+    }).then((fn) => { unlisten = fn; });
+    return () => unlisten?.();
+  },
 
   reset: () =>
     set({
