@@ -417,7 +417,11 @@ export type ScreenName =
   | "search"
   | "notifications"
   | "conflict"
-  | "maintenance";
+  | "maintenance"
+  | "analytics"
+  | "kanban"
+  | "mcp"
+  | "collaboration";
 
 export interface NavigateParams {
   prId?: number;
@@ -666,3 +670,56 @@ export interface CodegenResult {
   mapping_updates: MappingUpdate[];
   warnings: string[];
 }
+
+// ─── Phase 7: Analytics ───────────────────────────────────────────────────────
+export interface DateRange { start: string; end: string; }
+export interface CommitMetrics { total: number; by_author: Record<string, number>; average_per_day: number; streak_days: number; }
+export interface CodeChangeMetrics { lines_added: number; lines_deleted: number; files_changed: number; net_growth: number; }
+export interface DailyMetrics { date: string; commits: number; lines_added: number; lines_deleted: number; }
+export interface VelocityMetrics { period: DateRange; commits: CommitMetrics; code_changes: CodeChangeMetrics; daily_breakdown: DailyMetrics[]; }
+export interface AgentTaskMetrics { total_executed: number; by_type: Record<string, number>; success_rate: number; approval_rate: number; }
+export interface AiCodeContribution { lines_generated: number; lines_accepted: number; acceptance_rate: number; tests_generated: number; }
+export interface TimeSavings { estimated_manual_hours: number; actual_ai_minutes: number; savings_ratio: number; }
+export interface AiDocMaintenance { docs_auto_updated: number; avg_staleness_before: number; avg_staleness_after: number; }
+export interface AiImpactMetrics { period: DateRange; agent_tasks: AgentTaskMetrics; code_contribution: AiCodeContribution; time_savings: TimeSavings; doc_maintenance: AiDocMaintenance; }
+export interface SprintInfo { name: string; start: string; end: string; duration_days: number; }
+export interface MaintenanceDelta { debt_score_start: number; debt_score_end: number; coverage_start: number; coverage_end: number; stale_docs_start: number; stale_docs_end: number; }
+export interface SprintAnalysis { sprint: SprintInfo; velocity: VelocityMetrics; ai_impact: AiImpactMetrics; maintenance_delta: MaintenanceDelta; highlights: unknown[]; concerns: unknown[]; }
+
+// ─── Phase 8: Agile ───────────────────────────────────────────────────────────
+export type KanbanPriority = "critical" | "high" | "medium" | "low";
+export interface KanbanColumn { id: string; name: string; order: number; wip_limit?: number; }
+export interface KanbanCard { id: string; title: string; description?: string; column_id: string; priority: KanbanPriority; labels: string[]; linked_issue?: number; linked_doc?: string; created_at: string; moved_at: string; estimated_effort_hours?: number; }
+export interface KanbanBoard { id: string; product_id: string; columns: KanbanColumn[]; cards: KanbanCard[]; }
+export interface NewCard { title: string; description?: string; column_id: string; priority: KanbanPriority; labels: string[]; linked_issue?: number; linked_doc?: string; estimated_effort_hours?: number; }
+export interface PlannedCard { card: KanbanCard; suggested_order: number; ai_notes: string; }
+export interface SprintPlan { sprint_info: SprintInfo; selected_cards: PlannedCard[]; estimated_velocity: number; rationale: string; }
+export interface RetroItem { category: string; description: string; evidence: string; }
+export interface ActionItem { description: string; priority: string; }
+export interface YearRingEntry { sprint_name: string; theme: string; growth_areas: string[]; ring_width: number; }
+export interface Retrospective { sprint: SprintInfo; went_well: RetroItem[]; could_improve: RetroItem[]; action_items: ActionItem[]; year_ring?: YearRingEntry; }
+export interface UserStory { id: string; title: string; description?: string; release_id: string; linked_kanban_card?: string; linked_docs: string[]; acceptance_criteria: string[]; estimated_points?: number; }
+export interface Activity { id: string; name: string; order: number; stories: UserStory[]; }
+export interface Release { id: string; name: string; order: number; }
+export interface StoryMap { id: string; product_id: string; activities: Activity[]; releases: Release[]; }
+export interface CycleTimeMetrics { average_days: number; median_days: number; p95_days: number; }
+export interface Bottleneck { column_id: string; column_name: string; avg_days_stuck: number; cards_count: number; }
+export interface WipSuggestion { column_id: string; current_limit?: number; suggested_limit: number; reason: string; }
+export interface FlowAnalysis { cycle_time: CycleTimeMetrics; bottlenecks: Bottleneck[]; wip_suggestions: WipSuggestion[]; throughput_per_week: number; }
+
+// ─── Phase 9: MCP ─────────────────────────────────────────────────────────────
+export type TransportType = "stdio" | "sse";
+export interface McpServerConfig { name: string; transport: TransportType; endpoint: string; args: string[]; enabled: boolean; }
+export type ConnectionStatus = { type: "connected" } | { type: "disconnected" } | { type: "error"; message: string };
+export interface McpServerStatus { name: string; status: ConnectionStatus; tools: string[]; }
+export interface McpHubStatus { servers: McpServerStatus[]; total_tools: number; }
+export type ToolPolicy = "allow" | "require_approval" | "deny";
+export interface PolicyConfig { default_policy: ToolPolicy; tool_overrides: Record<string, ToolPolicy>; }
+
+// ─── Phase 10: Collaboration ──────────────────────────────────────────────────
+export interface TeamMember { github_username: string; display_name: string; recent_commits: number; open_prs: number; review_requests: number; active_cards: number; }
+export interface PendingReview { pr_number: number; title: string; author: string; requested_reviewers: string[]; created_at: string; }
+export interface TeamDashboard { members: TeamMember[]; pending_reviews: PendingReview[]; total_open_prs: number; total_open_issues: number; }
+export type KnowledgeType = "design_decision" | "retro_learning" | "tech_note" | "postmortem";
+export interface KnowledgeComment { id: string; author: string; content: string; created_at: string; }
+export interface KnowledgeEntry { id: string; entry_type: KnowledgeType; title: string; content: string; author: string; product_id: string; linked_docs: string[]; tags: string[]; created_at: string; comments: KnowledgeComment[]; }

@@ -10,7 +10,12 @@ import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { PRScreen } from "./screens/PRScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { MaintenanceScreen } from "./screens/MaintenanceScreen";
 import { TerminalScreen } from "./screens/TerminalScreen";
+import { AnalyticsScreen } from "./screens/AnalyticsScreen";
+import { KanbanScreen } from "./screens/KanbanScreen";
+import { McpScreen } from "./screens/McpScreen";
+import { CollaborationScreen } from "./screens/CollaborationScreen";
 import { useProjectStore } from "./stores/projectStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
@@ -99,14 +104,22 @@ export default function App() {
         return <PRScreen />;
       case "search":
         return <SearchScreen />;
-      case "terminal":
-        return <TerminalScreen />;
       case "settings":
         return <SettingsScreen />;
       case "conflict":
         return <ConflictScreen />;
       case "notifications":
         return <NotificationsScreen />;
+      case "maintenance":
+        return <MaintenanceScreen />;
+      case "analytics":
+        return <AnalyticsScreen />;
+      case "kanban":
+        return <KanbanScreen />;
+      case "mcp":
+        return <McpScreen />;
+      case "collaboration":
+        return <CollaborationScreen />;
       default:
         return (
           <div
@@ -139,7 +152,11 @@ export default function App() {
     >
       <Sidebar />
       <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {renderScreen()}
+        {/* TerminalScreen は常時マウント（xterm バッファ保持のため CSS で表示制御） */}
+        <div style={{ flex: 1, display: currentScreen === "terminal" ? "flex" : "none", flexDirection: "column", overflow: "hidden" }}>
+          <TerminalScreen />
+        </div>
+        {currentScreen !== "terminal" && renderScreen()}
       </main>
     </div>
   );

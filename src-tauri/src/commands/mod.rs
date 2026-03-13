@@ -1,4 +1,7 @@
+pub mod agile;
 pub mod ai;
+pub mod analytics;
+pub mod collaboration;
 pub mod conflict;
 pub mod doc_mapping;
 pub mod document;
@@ -6,6 +9,7 @@ pub mod maintenance;
 pub mod file_viewer;
 pub mod github_auth;
 pub mod issue;
+pub mod mcp;
 pub mod notifications;
 pub mod polling;
 pub mod pr;
@@ -120,6 +124,34 @@ macro_rules! all_commands {
             commands::ai::ai_get_context,
             commands::ai::ai_review_changes,
             commands::ai::ai_generate_code,
+            // Phase 7: Analytics
+            commands::analytics::get_velocity_metrics,
+            commands::analytics::get_ai_impact,
+            commands::analytics::get_sprint_analysis,
+            commands::analytics::get_sprint_history,
+            // Phase 8: Agile
+            commands::agile::kanban_get_board,
+            commands::agile::kanban_move_card,
+            commands::agile::kanban_create_card,
+            commands::agile::kanban_delete_card,
+            commands::agile::sprint_suggest_plan,
+            commands::agile::sprint_generate_retro,
+            commands::agile::story_map_get,
+            commands::agile::story_map_save,
+            commands::agile::flow_analyze,
+            // Phase 9: MCP
+            commands::mcp::mcp_get_status,
+            commands::mcp::mcp_add_server,
+            commands::mcp::mcp_remove_server,
+            commands::mcp::mcp_list_servers,
+            commands::mcp::mcp_get_policy,
+            commands::mcp::mcp_save_policy,
+            // Phase 10: Collaboration
+            commands::collaboration::team_get_dashboard,
+            commands::collaboration::knowledge_list,
+            commands::collaboration::knowledge_search,
+            commands::collaboration::knowledge_add,
+            commands::collaboration::knowledge_add_comment,
         ]
     };
 }

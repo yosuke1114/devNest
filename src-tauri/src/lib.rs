@@ -1,9 +1,13 @@
+pub mod agile;
 pub mod ai;
+pub mod analytics;
+pub mod collaboration;
 pub mod commands;
 pub mod db;
 pub mod doc_mapping;
 pub mod error;
 pub mod maintenance;
+pub mod mcp;
 pub mod models;
 pub mod services;
 pub mod state;

@@ -375,3 +375,59 @@ export const aiGenerateCode = (
   projectPath: string,
   request: import("../types").CodegenRequest,
 ) => invoke<import("../types").CodegenResult>("ai_generate_code", { projectPath, request });
+
+// Phase 7: Analytics
+export const getVelocityMetrics = (projectPath: string, period: import("../types").DateRange) =>
+  invoke<import("../types").VelocityMetrics>("get_velocity_metrics", { projectPath, period });
+export const getAiImpact = (projectPath: string, period: import("../types").DateRange) =>
+  invoke<import("../types").AiImpactMetrics>("get_ai_impact", { projectPath, period });
+export const getSprintAnalysis = (projectPath: string, sprint: import("../types").SprintInfo) =>
+  invoke<import("../types").SprintAnalysis>("get_sprint_analysis", { projectPath, sprint });
+export const getSprintHistory = (projectPath: string, count: number) =>
+  invoke<import("../types").SprintAnalysis[]>("get_sprint_history", { projectPath, count });
+
+// Phase 8: Agile
+export const kanbanGetBoard = (projectPath: string, productId: string) =>
+  invoke<import("../types").KanbanBoard>("kanban_get_board", { projectPath, productId });
+export const kanbanMoveCard = (projectPath: string, productId: string, cardId: string, toColumn: string) =>
+  invoke<import("../types").KanbanBoard>("kanban_move_card", { projectPath, productId, cardId, toColumn });
+export const kanbanCreateCard = (projectPath: string, productId: string, card: import("../types").NewCard) =>
+  invoke<import("../types").KanbanCard>("kanban_create_card", { projectPath, productId, card });
+export const kanbanDeleteCard = (projectPath: string, productId: string, cardId: string) =>
+  invoke<import("../types").KanbanBoard>("kanban_delete_card", { projectPath, productId, cardId });
+export const sprintSuggestPlan = (projectPath: string, sprintInfo: import("../types").SprintInfo) =>
+  invoke<import("../types").SprintPlan>("sprint_suggest_plan", { projectPath, sprintInfo });
+export const sprintGenerateRetro = (projectPath: string, sprintInfo: import("../types").SprintInfo) =>
+  invoke<import("../types").Retrospective>("sprint_generate_retro", { projectPath, sprintInfo });
+export const storyMapGet = (projectPath: string, productId: string) =>
+  invoke<import("../types").StoryMap>("story_map_get", { projectPath, productId });
+export const storyMapSave = (projectPath: string, map: import("../types").StoryMap) =>
+  invoke<void>("story_map_save", { projectPath, map });
+export const flowAnalyze = (projectPath: string, productId: string) =>
+  invoke<import("../types").FlowAnalysis>("flow_analyze", { projectPath, productId });
+
+// Phase 9: MCP
+export const mcpGetStatus = (projectPath: string) =>
+  invoke<import("../types").McpHubStatus>("mcp_get_status", { projectPath });
+export const mcpAddServer = (projectPath: string, config: import("../types").McpServerConfig) =>
+  invoke<void>("mcp_add_server", { projectPath, config });
+export const mcpRemoveServer = (projectPath: string, name: string) =>
+  invoke<void>("mcp_remove_server", { projectPath, name });
+export const mcpListServers = (projectPath: string) =>
+  invoke<import("../types").McpServerConfig[]>("mcp_list_servers", { projectPath });
+export const mcpGetPolicy = (projectPath: string) =>
+  invoke<import("../types").PolicyConfig>("mcp_get_policy", { projectPath });
+export const mcpSavePolicy = (projectPath: string, config: import("../types").PolicyConfig) =>
+  invoke<void>("mcp_save_policy", { projectPath, config });
+
+// Phase 10: Collaboration
+export const teamGetDashboard = (projectPath: string) =>
+  invoke<import("../types").TeamDashboard>("team_get_dashboard", { projectPath });
+export const knowledgeList = (projectPath: string) =>
+  invoke<import("../types").KnowledgeEntry[]>("knowledge_list", { projectPath });
+export const knowledgeSearch = (projectPath: string, query: string) =>
+  invoke<import("../types").KnowledgeEntry[]>("knowledge_search", { projectPath, query });
+export const knowledgeAdd = (projectPath: string, title: string, content: string, entryType: string, tags: string[], linkedDocs: string[], author: string) =>
+  invoke<import("../types").KnowledgeEntry>("knowledge_add", { projectPath, title, content, entryType, tags, linkedDocs, author });
+export const knowledgeAddComment = (projectPath: string, entryId: string, author: string, content: string) =>
+  invoke<import("../types").KnowledgeEntry>("knowledge_add_comment", { projectPath, entryId, author, content });
