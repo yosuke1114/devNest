@@ -3,6 +3,14 @@ import {
   IconDeviceFloppy,
   IconRefresh,
   IconAlertTriangle,
+  IconFilePlus,
+  IconPencil,
+  IconCheck,
+  IconX,
+  IconCode,
+  IconEye,
+  IconLayoutColumns,
+  IconBrain,
 } from "@tabler/icons-react";
 import { EditorView, basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
@@ -14,7 +22,16 @@ import { useUiStore } from "../stores/uiStore";
 import { LinkedIssuesPanel } from "../components/editor/LinkedIssuesPanel";
 import { MarkdownPreview } from "../components/editor/MarkdownPreview";
 import { UnsavedWarningModal } from "../components/editor/UnsavedWarningModal";
+import { CodeViewer } from "../components/editor/CodeViewer";
+import { FileTreePanel } from "../components/editor/FileTreePanel";
+import { AiAssistant } from "../components/ai/AiAssistant";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { cn } from "../lib/utils";
 import type { Document, Issue } from "../types";
+
+// Hoisted outside component to avoid recreating on every render
+const DOCS_PREFIX_RE = /^docs\//;
 
 export function EditorScreen() {
   const { currentProject, setLastOpenedDocument } = useProjectStore();
@@ -31,6 +48,17 @@ export function EditorScreen() {
     setDirty,
     listenSaveProgress,
     fetchLinkedIssues,
+    createDocument,
+    renameDocument,
+    openedFile,
+    fileTreeNodes,
+    fileTreeLoading,
+    fetchFileTree,
+    openCodeFile,
+    saveCodeFile,
+    listenCodeSaveProgress,
+    codeSaveStatus,
+    codeSaveProgress,
   } = useDocumentStore();
 
   const selectIssue = useIssueStore((s) => s.selectIssue);
@@ -41,33 +69,95 @@ export function EditorScreen() {
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [pendingDoc, setPendingDoc] = useState<Document | null>(null);
   const [previewContent, setPreviewContent] = useState("");
+  const [previewWidth, setPreviewWidth] = useState(280);
+  const [editorMode, setEditorMode] = useState<"preview" | "md" | "split">("preview");
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const isDraggingRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartWidthRef = useRef(0);
 
-  // イベントリスナー登録
+  const [treeMode, setTreeMode] = useState<"docs" | "all">("docs");
+
+  const handleSelectCodeFile = useCallback((path: string) => {
+    if (!currentProject) return;
+    openCodeFile(currentProject.id, path);
+  }, [currentProject, openCodeFile]);
+
+  const handleCodeSave = useCallback(async (content: string) => {
+    if (!currentProject || openedFile?.type !== "code") return;
+    await saveCodeFile(currentProject.id, openedFile.path, content);
+  }, [currentProject, openedFile, saveCodeFile]);
+
+  const handleTreeModeAll = useCallback(() => {
+    setTreeMode("all");
+    if (currentProject && fileTreeNodes.length === 0) {
+      fetchFileTree(currentProject.id);
+    }
+  }, [currentProject, fileTreeNodes.length, fetchFileTree]);
+
+  const [isCreating, setIsCreating] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const newFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [renamingDocId, setRenamingDocId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    dragStartXRef.current = e.clientX;
+    dragStartWidthRef.current = previewWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const delta = dragStartXRef.current - ev.clientX;
+      const newWidth = Math.max(160, Math.min(600, dragStartWidthRef.current + delta));
+      setPreviewWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      isDraggingRef.current = false;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let cleanup: (() => void) | undefined;
     listenSaveProgress().then((fn) => { cleanup = fn; });
     return () => cleanup?.();
   }, [listenSaveProgress]);
 
-  // プロジェクト切り替え時にドキュメント一覧を取得
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    listenCodeSaveProgress().then((fn) => { cleanup = fn; });
+    return () => cleanup?.();
+  }, [listenCodeSaveProgress]);
+
   useEffect(() => {
     if (currentProject) {
       fetchDocuments(currentProject.id).then(() => {
-        // last_opened_document_id を選択
-        const lastId = currentProject.last_opened_document_id;
-        if (lastId) {
-          setSelectedDocId(lastId);
-          openDocument(lastId);
+        if (currentDoc) {
+          // 画面遷移後も store に currentDoc が残っていればそのまま選択状態を復元
+          setSelectedDocId(currentDoc.id);
+        } else {
+          const lastId = currentProject.last_opened_document_id;
+          if (lastId) {
+            setSelectedDocId(lastId);
+            openDocument(lastId);
+          }
         }
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id]);
 
-  // ドキュメント選択時に CodeMirror を初期化
   useEffect(() => {
     if (!editorRef.current || !currentDoc) return;
 
-    // 既存の editor を破棄
     viewRef.current?.destroy();
 
     setPreviewContent(currentDoc.content);
@@ -153,7 +243,51 @@ export function EditorScreen() {
     await retryPush(currentDoc.id);
   }, [currentDoc, retryPush]);
 
-  // Ctrl/Cmd+S
+  const handleCreateStart = useCallback(() => {
+    setIsCreating(true);
+    setNewFileName("");
+    setTimeout(() => newFileInputRef.current?.focus(), 50);
+  }, []);
+
+  const handleCreateConfirm = useCallback(async () => {
+    if (!currentProject || !newFileName.trim()) { setIsCreating(false); return; }
+    const name = newFileName.trim().endsWith(".md") ? newFileName.trim() : newFileName.trim() + ".md";
+    const relPath = `docs/${name}`;
+    try {
+      const doc = await createDocument(currentProject.id, relPath);
+      setSelectedDocId(doc.id);
+      openDocument(doc.id);
+      if (currentProject) setLastOpenedDocument(currentProject.id, doc.id);
+    } catch (e: unknown) {
+      alert((e as { message?: string })?.message ?? String(e));
+    }
+    setIsCreating(false);
+  }, [currentProject, newFileName, createDocument, openDocument, setLastOpenedDocument]);
+
+  const handleRenameStart = useCallback((doc: Document, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const basename = doc.path.replace(DOCS_PREFIX_RE, "");
+    setRenamingDocId(doc.id);
+    setRenameValue(basename.replace(/\.md$/, ""));
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  }, []);
+
+  const handleRenameConfirm = useCallback(async (docId: number) => {
+    if (!currentProject || !renameValue.trim()) { setRenamingDocId(null); return; }
+    const name = renameValue.trim().endsWith(".md") ? renameValue.trim() : renameValue.trim() + ".md";
+    const newRelPath = `docs/${name}`;
+    try {
+      await renameDocument(currentProject.id, docId, newRelPath);
+    } catch (e: unknown) {
+      alert((e as { message?: string })?.message ?? String(e));
+    }
+    setRenamingDocId(null);
+  }, [currentProject, renameValue, renameDocument]);
+
+  useEffect(() => {
+    if (renamingDocId !== null) renameInputRef.current?.select();
+  }, [renamingDocId]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -181,90 +315,143 @@ export function EditorScreen() {
         onCancel={handleModalCancel}
       />
     )}
-    <div data-testid="editor-screen" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+    <div data-testid="editor-screen" className="flex flex-1 overflow-hidden">
       {/* ファイルツリー */}
-      <aside
-        style={{
-          width: 240,
-          background: "#161622",
-          borderRight: "1px solid #2a2a3a",
-          overflow: "auto",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            padding: "12px 16px",
-            fontSize: 11,
-            color: "#888",
-            borderBottom: "1px solid #2a2a3a",
-            textTransform: "uppercase",
-            letterSpacing: 1,
-          }}
-        >
-          Documents
+      <aside className="w-[240px] bg-card border-r border-border overflow-auto shrink-0">
+        {/* ヘッダー */}
+        <div className="border-b border-border shrink-0">
+          {/* モード切替 */}
+          <div className="flex gap-0.5 p-1.5">
+            {(["docs", "all"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => mode === "all" ? handleTreeModeAll() : setTreeMode("docs")}
+                className={cn(
+                  "flex-1 py-0.5 text-[10px] rounded border transition-colors uppercase tracking-wide",
+                  treeMode === mode
+                    ? "bg-secondary border-primary text-primary"
+                    : "bg-transparent border-border text-muted-foreground hover:bg-secondary/50"
+                )}
+              >
+                {mode === "docs" ? "設計書" : "全ファイル"}
+              </button>
+            ))}
+          </div>
+          {/* 設計書モード時のみ + ボタン */}
+          {treeMode === "docs" && (
+            <div className="flex items-center justify-between px-4 pb-1.5 pt-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Documents</span>
+              <button
+                onClick={handleCreateStart}
+                title="新規ファイル"
+                className="text-muted-foreground hover:text-foreground cursor-pointer p-0.5 flex"
+              >
+                <IconFilePlus size={13} />
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* 全ファイルモード */}
+        {treeMode === "all" && (
+          <FileTreePanel
+            nodes={fileTreeNodes}
+            loading={fileTreeLoading}
+            selectedPath={openedFile?.type === "code" ? openedFile.path : null}
+            onSelect={handleSelectCodeFile}
+          />
+        )}
+
+        {/* 設計書モード */}
+        {treeMode === "docs" && <>
+        {/* 新規ファイル入力 */}
+        {isCreating && (
+          <div className="flex items-center p-2 border-b border-border">
+            <input
+              ref={newFileInputRef}
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateConfirm();
+                if (e.key === "Escape") setIsCreating(false);
+              }}
+              placeholder="ファイル名.md"
+              className="flex-1 bg-background border border-primary rounded text-foreground text-xs px-1.5 py-0.5 outline-none"
+            />
+            <button onClick={handleCreateConfirm} className="text-green-400 cursor-pointer px-1"><IconCheck size={13} /></button>
+            <button onClick={() => setIsCreating(false)} className="text-destructive cursor-pointer px-0.5"><IconX size={13} /></button>
+          </div>
+        )}
+
         {documents.length === 0 ? (
-          <div style={{ padding: 16, color: "#666", fontSize: 13 }}>
+          <div className="p-4 text-muted-foreground text-[13px]">
             設計書ファイルがありません
           </div>
         ) : (
           documents.map((doc) => (
-            <button
+            <div
               key={doc.id}
-              onClick={() => handleSelectDoc(doc)}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "8px 16px",
-                background:
-                  selectedDocId === doc.id ? "#2a2a42" : "transparent",
-                border: "none",
-                borderLeft:
-                  selectedDocId === doc.id
-                    ? "2px solid #7c6cf2"
-                    : "2px solid transparent",
-                color: selectedDocId === doc.id ? "#e0e0e0" : "#aaa",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: 13,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-              title={doc.path}
+              className={cn(
+                "flex items-center border-l-2 transition-colors",
+                selectedDocId === doc.id
+                  ? "bg-secondary border-primary"
+                  : "border-transparent"
+              )}
             >
-              {doc.is_dirty && (
-                <span style={{ color: "#f0a500", marginRight: 4 }}>●</span>
+              {renamingDocId === doc.id ? (
+                <div className="flex items-center flex-1 px-2 py-1">
+                  <input
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRenameConfirm(doc.id);
+                      if (e.key === "Escape") setRenamingDocId(null);
+                    }}
+                    className="flex-1 bg-background border border-primary rounded text-foreground text-xs px-1.5 py-0.5 outline-none"
+                  />
+                  <button onClick={() => handleRenameConfirm(doc.id)} className="text-green-400 cursor-pointer px-1"><IconCheck size={13} /></button>
+                  <button onClick={() => setRenamingDocId(null)} className="text-destructive cursor-pointer px-0.5"><IconX size={13} /></button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleSelectDoc(doc)}
+                    className={cn(
+                      "flex-1 min-w-0 py-2 pl-3.5 pr-1 text-left text-[13px] whitespace-nowrap overflow-hidden text-ellipsis transition-colors",
+                      selectedDocId === doc.id ? "text-foreground" : "text-muted-foreground"
+                    )}
+                    title={doc.path}
+                  >
+                    {doc.is_dirty && <span className="text-yellow-400 mr-1">●</span>}
+                    {doc.path.replace(DOCS_PREFIX_RE, "")}
+                    {doc.push_status === "push_failed" && (
+                      <IconAlertTriangle size={12} className="text-destructive ml-1 inline align-middle" />
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => handleRenameStart(doc, e)}
+                    title="リネーム"
+                    className={cn(
+                      "text-muted-foreground cursor-pointer px-2 shrink-0 hover:text-foreground transition-colors",
+                      selectedDocId === doc.id ? "opacity-100" : "opacity-0"
+                    )}
+                  >
+                    <IconPencil size={11} />
+                  </button>
+                </>
               )}
-              {doc.path.replace(/^docs\//, "")}
-              {doc.push_status === "push_failed" && (
-                <IconAlertTriangle
-                  size={12}
-                  color="#e74c3c"
-                  style={{ marginLeft: 4, verticalAlign: "middle" }}
-                />
-              )}
-            </button>
+            </div>
           ))
         )}
+      </>}
       </aside>
 
       {/* エディタ本体 */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      <div className="flex-1 min-w-0 flex flex-col">
         {/* ツールバー */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 16px",
-            background: "#1a1a2e",
-            borderBottom: "1px solid #2a2a3a",
-            height: 44,
-          }}
-        >
-          <span style={{ flex: 1, fontSize: 14, color: "#aaa" }}>
+        <div className="flex items-center gap-2 px-4 bg-background border-b border-border h-11">
+          <span className="flex-1 text-sm text-muted-foreground truncate">
             {currentDoc?.path ?? "ファイルを選択"}
           </span>
 
@@ -274,53 +461,119 @@ export function EditorScreen() {
           )}
 
           {currentDoc?.push_status === "push_failed" && (
-            <button onClick={handleRetry} className="btn-icon" title="再プッシュ">
+            <Button variant="ghost" size="icon" onClick={handleRetry} title="再プッシュ" className="h-8 w-8">
               <IconRefresh size={16} />
-            </button>
+            </Button>
           )}
 
-          <button
+          {/* 表示モード切替（MD ファイル表示中のみ） */}
+          {currentDoc && (
+            <div className="flex gap-0.5 bg-popover rounded-md p-0.5">
+              {(["preview", "md", "split"] as const).map((mode) => {
+                const Icon = mode === "md" ? IconCode : mode === "preview" ? IconEye : IconLayoutColumns;
+                const label = mode === "md" ? "MD" : mode === "preview" ? "Preview" : "Split";
+                const active = editorMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => setEditorMode(mode)}
+                    title={label}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-0.5 rounded text-[11px] border transition-colors",
+                      active
+                        ? "bg-secondary border-primary text-primary"
+                        : "bg-transparent border-transparent text-muted-foreground hover:bg-secondary/50"
+                    )}
+                  >
+                    <Icon size={12} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowAiPanel((v) => !v)}
+            title="AI アシスタント"
+            className={cn("h-8 w-8", showAiPanel && "text-primary")}
+          >
+            <IconBrain size={16} />
+          </Button>
+
+          <Button
             onClick={handleSave}
             disabled={saveStatus === "loading" || !currentDoc}
-            className="btn-primary"
+            size="sm"
           >
             <IconDeviceFloppy size={15} />
             {saveStatus === "loading" ? "保存中…" : "保存"}
-          </button>
+          </Button>
         </div>
 
-        {/* CodeMirror */}
-        {currentDoc ? (
-          <div
-            ref={editorRef}
-            style={{ flex: 1, overflow: "auto", fontSize: 14 }}
+        {/* コンテンツエリア */}
+        {openedFile?.type === "code" ? (
+          <CodeViewer
+            path={openedFile.path}
+            content={openedFile.content}
+            truncated={openedFile.truncated}
+            totalLines={openedFile.totalLines}
+            onSave={handleCodeSave}
+            saveStatus={codeSaveStatus}
+            saveProgress={codeSaveProgress ?? undefined}
           />
+        ) : openedFile?.type === "code-error" ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-destructive gap-2 p-8">
+            <span className="text-[13px]">{openedFile.path}</span>
+            <span className="text-xs text-muted-foreground">{openedFile.error}</span>
+          </div>
+        ) : openedFile?.type === "doc" ? (
+          <div className="flex-1 flex overflow-hidden">
+            {/* CodeMirror */}
+            <div
+              ref={editorRef}
+              className="flex-1 overflow-auto text-sm min-w-0"
+              style={{ display: editorMode === "preview" ? "none" : "block" }}
+            />
+            {/* リサイズハンドル（split モードのみ）*/}
+            {editorMode === "split" && (
+              <div
+                onMouseDown={handleResizeMouseDown}
+                className="w-1.5 shrink-0 cursor-col-resize transition-colors border-l border-border hover:bg-primary/25"
+              />
+            )}
+            {/* プレビュー */}
+            {editorMode !== "md" && (
+              <aside
+                className="bg-card overflow-hidden flex flex-col shrink-0"
+                style={{
+                  flex: editorMode === "preview" ? 1 : undefined,
+                  width: editorMode === "split" ? previewWidth : undefined,
+                }}
+              >
+                <MarkdownPreview content={previewContent} />
+                <LinkedIssuesPanel
+                  issues={linkedIssues}
+                  loading={false}
+                  onIssueClick={handleIssueClick}
+                />
+              </aside>
+            )}
+          </div>
         ) : (
           <EmptyState message="左のファイル一覧からドキュメントを選択" />
         )}
       </div>
 
-      {/* 右サイドバー: Preview + Linked Issues */}
-      <aside
-        style={{
-          width: 280,
-          flexShrink: 0,
-          borderLeft: "1px solid #2a2a3a",
-          background: "#161622",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", borderBottom: "1px solid #2a2a3a" }}>
-          <MarkdownPreview content={previewContent} />
-        </div>
-        <LinkedIssuesPanel
-          issues={linkedIssues}
-          loading={false}
-          onIssueClick={handleIssueClick}
+      {/* AI アシスタントパネル */}
+      {showAiPanel && (
+        <AiAssistant
+          currentFilePath={currentDoc?.path}
+          onClose={() => setShowAiPanel(false)}
         />
-      </aside>
+      )}
     </div>
   </>
   );
@@ -331,41 +584,23 @@ function StatusBadge({
 }: {
   status: "committing" | "pushing" | "synced" | "push_failed";
 }) {
-  const configs: Record<typeof status, { label: string; color: string }> = {
-    committing: { label: "コミット中…", color: "#f0a500" },
-    pushing: { label: "プッシュ中…", color: "#3498db" },
-    synced: { label: "同期済み", color: "#2ecc71" },
-    push_failed: { label: "プッシュ失敗", color: "#e74c3c" },
+  const configs: Record<typeof status, { label: string; className: string }> = {
+    committing: { label: "コミット中…", className: "border-yellow-600/40 bg-yellow-500/10 text-yellow-400" },
+    pushing: { label: "プッシュ中…", className: "border-blue-600/40 bg-blue-500/10 text-blue-400" },
+    synced: { label: "同期済み", className: "border-green-600/40 bg-green-500/10 text-green-400" },
+    push_failed: { label: "プッシュ失敗", className: "border-destructive/40 bg-destructive/10 text-destructive" },
   };
   const cfg = configs[status];
   return (
-    <span
-      style={{
-        fontSize: 12,
-        color: cfg.color,
-        background: `${cfg.color}20`,
-        padding: "2px 8px",
-        borderRadius: 4,
-        border: `1px solid ${cfg.color}40`,
-      }}
-    >
+    <Badge variant="outline" className={cn("text-xs", cfg.className)}>
       {cfg.label}
-    </span>
+    </Badge>
   );
 }
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#666",
-        fontSize: 15,
-      }}
-    >
+    <div className="flex-1 flex items-center justify-center text-muted-foreground text-[15px]">
       {message}
     </div>
   );

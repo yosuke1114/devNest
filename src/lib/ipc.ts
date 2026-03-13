@@ -5,6 +5,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BlockResolutionInput,
+  FileContent,
+  FileNode,
   ConflictScanResult,
   Document,
   DocumentWithContent,
@@ -82,6 +84,22 @@ export const documentPushRetry = (projectId: number, documentId: number) =>
 
 export const documentLinkedIssues = (projectId: number, documentId: number) =>
   invoke<Issue[]>("document_linked_issues", { projectId, documentId });
+
+export const documentCreate = (projectId: number, relPath: string) =>
+  invoke<Document>("document_create", { projectId, relPath });
+
+export const documentRename = (projectId: number, documentId: number, newRelPath: string) =>
+  invoke<Document>("document_rename", { projectId, documentId, newRelPath });
+
+// ─── CodeViewer ───────────────────────────────────────────────────────────────
+export const fileTree = (projectId: number) =>
+  invoke<FileNode[]>("file_tree", { projectId });
+
+export const fileRead = (projectId: number, path: string, maxLines?: number) =>
+  invoke<FileContent>("file_read", { projectId, path, maxLines });
+
+export const fileSave = (projectId: number, path: string, content: string) =>
+  invoke<{ sha: string; push_status: string }>("file_save", { projectId, path, content });
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const settingsGet = (key: string) =>
@@ -233,6 +251,8 @@ export const terminalSessionStart = (
     contextDocIds?: number[];
     branchName?: string;
     requestChangesComment?: string;
+    cols?: number;
+    rows?: number;
   }
 ) =>
   invoke<TerminalSession>("terminal_session_start", {
@@ -243,6 +263,8 @@ export const terminalSessionStart = (
     contextDocIds: options?.contextDocIds,
     branchName: options?.branchName,
     requestChangesComment: options?.requestChangesComment,
+    cols: options?.cols,
+    rows: options?.rows,
   });
 
 export const terminalSessionStop = (sessionId: number) =>
@@ -250,6 +272,9 @@ export const terminalSessionStop = (sessionId: number) =>
 
 export const terminalInputSend = (sessionId: number, input: string) =>
   invoke<void>("terminal_input_send", { sessionId, input });
+
+export const terminalResize = (sessionId: number, cols: number, rows: number) =>
+  invoke<void>("terminal_resize", { sessionId, cols, rows });
 
 export const terminalSessionList = (projectId: number) =>
   invoke<TerminalSession[]>("terminal_session_list", { projectId });
@@ -315,3 +340,38 @@ export const conflictResolve = (
 
 export const conflictResolveAll = (projectId: number) =>
   invoke<ResolveAllResult>("conflict_resolve_all", { projectId });
+
+// ─── Maintenance ──────────────────────────────────────────────────────────────
+export const maintenanceScanDependencies = (projectPath: string) =>
+  invoke<import("../types").DependencyReport>("maintenance_scan_dependencies", { projectPath });
+
+export const maintenanceScanTechDebt = (projectPath: string) =>
+  invoke<import("../types").TechDebtReport>("maintenance_scan_tech_debt", { projectPath });
+
+export const maintenanceRunCoverage = (projectPath: string) =>
+  invoke<import("../types").CoverageReport>("maintenance_run_coverage", { projectPath });
+
+export const maintenanceRefactorCandidates = (projectPath: string, topN: number = 20) =>
+  invoke<import("../types").RefactorCandidate[]>("maintenance_refactor_candidates", { projectPath, topN });
+
+// ─── Doc Mapping ──────────────────────────────────────────────────────────────
+export const rebuildDocIndex = (projectPath: string) =>
+  invoke<import("../types").DocIndex>("rebuild_doc_index", { projectPath });
+
+export const checkDocStaleness = (projectPath: string) =>
+  invoke<import("../types").DocStaleness[]>("check_doc_staleness", { projectPath });
+
+// ─── Phase 6: AI アシスタント ─────────────────────────────────────────────────
+
+export const aiGetContext = (projectPath: string, filePath?: string) =>
+  invoke<import("../types").AiContext>("ai_get_context", { projectPath, filePath });
+
+export const aiReviewChanges = (
+  projectPath: string,
+  request: import("../types").ReviewRequest,
+) => invoke<import("../types").ReviewResult>("ai_review_changes", { projectPath, request });
+
+export const aiGenerateCode = (
+  projectPath: string,
+  request: import("../types").CodegenRequest,
+) => invoke<import("../types").CodegenResult>("ai_generate_code", { projectPath, request });

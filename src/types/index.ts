@@ -416,7 +416,8 @@ export type ScreenName =
   | "pr"
   | "search"
   | "notifications"
-  | "conflict";
+  | "conflict"
+  | "maintenance";
 
 export interface NavigateParams {
   prId?: number;
@@ -432,4 +433,236 @@ export type SetupStep = 0 | 1 | 2 | 3 | 4 | 5;
 export interface Modal {
   id: string;
   props?: Record<string, unknown>;
+}
+
+// ─── CodeViewer ───────────────────────────────────────────────────────────────
+export interface FileNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size?: number;
+  ext?: string;
+  children?: FileNode[];
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  truncated: boolean;
+  total_lines: number;
+}
+
+export type OpenedFile =
+  | { type: "doc"; docId: number }
+  | { type: "code"; path: string; content: string; truncated: boolean; totalLines: number }
+  | { type: "code-error"; path: string; error: string };
+
+// ─── Maintenance ──────────────────────────────────────────────────────────────
+
+export interface DependencyStatus {
+  name: string;
+  ecosystem: "Rust" | "Node";
+  current_version: string;
+  latest_version: string;
+  update_type: "Patch" | "Minor" | "Major" | "Unknown";
+  has_vulnerability: boolean;
+  vulnerability_severity: "Low" | "Medium" | "High" | "Critical" | null;
+  affected_sources: string[];
+}
+
+export interface DependencyReport {
+  checked_at: string;
+  rust_deps: DependencyStatus[];
+  node_deps: DependencyStatus[];
+  total_outdated: number;
+  total_vulnerable: number;
+}
+
+export interface TechDebtItem {
+  id: string;
+  category: "TodoFixme" | "LargeFile" | "CodeDuplication" | "DeadCode" | "MissingTests" | "ManualEntry";
+  file_path: string;
+  line: number | null;
+  severity: "Low" | "Medium" | "High" | "Critical";
+  description: string;
+  auto_detected: boolean;
+}
+
+export interface TechDebtReport {
+  scanned_at: string;
+  items: TechDebtItem[];
+  total_score: number;
+  by_category: Record<string, number>;
+}
+
+export interface FileCoverage {
+  path: string;
+  covered_lines: number;
+  total_lines: number;
+  coverage_pct: number;
+}
+
+export interface CoverageReport {
+  overall_pct: number;
+  files: FileCoverage[];
+  rust_available: boolean;
+  node_available: boolean;
+}
+
+export interface RefactorFactors {
+  change_frequency: number;
+  complexity: number;
+  file_size: number;
+}
+
+export interface RefactorCandidate {
+  file_path: string;
+  score: number;
+  factors: RefactorFactors;
+  estimated_impact: "Low" | "Medium" | "High";
+}
+
+// ─── Doc Mapping ──────────────────────────────────────────────────────────────
+
+export interface DocStaleness {
+  doc_path: string;
+  current_status: string;
+  staleness_score: number;
+  recommended_status: string;
+  days_since_sync: number;
+  commits_since_sync: number;
+  lines_changed_in_sources: number;
+  total_source_lines: number;
+}
+
+export interface DocIndex {
+  generated_at: string;
+  generated_from_commit: string;
+  source_index: Record<string, Array<{ doc: string; sections: string[] }>>;
+  doc_index: Record<string, { sources: string[]; depends_on: string[] }>;
+}
+
+// ─── Phase 6: AI アシスタント ─────────────────────────────────────────────────
+
+export interface FileContext {
+  path: string;
+  language: string;
+  content: string;
+  line_count: number;
+}
+
+export interface DocContext {
+  path: string;
+  title: string;
+  content_snippet: string;
+  relevance_score: number;
+}
+
+export interface MaintenanceSnapshot {
+  coverage_pct?: number;
+  debt_score?: number;
+  outdated_deps_count: number;
+  stale_docs_count: number;
+}
+
+export interface CommitSummary {
+  sha: string;
+  message: string;
+  author: string;
+  timestamp: string;
+}
+
+export interface GitContext {
+  current_branch: string;
+  recent_commits: CommitSummary[];
+  recent_changed_files: string[];
+}
+
+export interface ProductContext {
+  name: string;
+  repo_owner: string;
+  repo_name: string;
+  default_branch: string;
+  docs_root: string;
+}
+
+export interface AiContext {
+  file_context?: FileContext;
+  doc_context: DocContext[];
+  maintenance_context: MaintenanceSnapshot;
+  git_context: GitContext;
+  product_context: ProductContext;
+}
+
+export interface ReviewRequest {
+  diff: string;
+  changed_files: string[];
+  pr_description?: string;
+  review_scope: "full" | "design_consistency" | "security_focus" | "test_coverage";
+}
+
+export type FindingSeverity = "critical" | "warning" | "info" | "suggestion";
+export type FindingCategory =
+  | "design_consistency" | "security" | "performance"
+  | "test_coverage" | "code_quality" | "naming" | "documentation";
+export type Assessment = "approve" | "request_changes" | "comment";
+
+export interface ReviewFinding {
+  file: string;
+  line_start?: number;
+  line_end?: number;
+  severity: FindingSeverity;
+  category: FindingCategory;
+  message: string;
+  suggested_fix?: string;
+}
+
+export interface DesignInconsistency {
+  doc_path: string;
+  description: string;
+  severity: FindingSeverity;
+}
+
+export interface DesignConsistencyReport {
+  checked_docs: string[];
+  inconsistencies: DesignInconsistency[];
+  missing_doc_updates: string[];
+}
+
+export interface DocUpdateSuggestion {
+  doc_path: string;
+  reason: string;
+  suggested_change: string;
+}
+
+export interface ReviewResult {
+  summary: string;
+  findings: ReviewFinding[];
+  design_consistency: DesignConsistencyReport;
+  suggested_doc_updates: DocUpdateSuggestion[];
+  overall_assessment: Assessment;
+}
+
+export interface GeneratedFile {
+  path: string;
+  content: string;
+  language: string;
+  file_type: string;
+}
+
+export interface MappingUpdate {
+  doc_path: string;
+  source_path: string;
+}
+
+export interface CodegenRequest {
+  doc_path: string;
+  target_sections?: string[];
+  generation_mode: "scaffold" | "implementation" | "test_only";
+}
+
+export interface CodegenResult {
+  generated_files: GeneratedFile[];
+  mapping_updates: MappingUpdate[];
+  warnings: string[];
 }

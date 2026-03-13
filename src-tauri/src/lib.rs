@@ -1,6 +1,9 @@
+pub mod ai;
 pub mod commands;
 pub mod db;
+pub mod doc_mapping;
 pub mod error;
+pub mod maintenance;
 pub mod models;
 pub mod services;
 pub mod state;

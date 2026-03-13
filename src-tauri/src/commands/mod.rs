@@ -1,5 +1,9 @@
+pub mod ai;
 pub mod conflict;
+pub mod doc_mapping;
 pub mod document;
+pub mod maintenance;
+pub mod file_viewer;
 pub mod github_auth;
 pub mod issue;
 pub mod notifications;
@@ -30,6 +34,12 @@ macro_rules! all_commands {
             commands::document::document_set_dirty,
             commands::document::document_push_retry,
             commands::document::document_linked_issues,
+            commands::document::document_create,
+            commands::document::document_rename,
+            // CodeViewer (Phase A + B)
+            commands::file_viewer::file_tree,
+            commands::file_viewer::file_read,
+            commands::file_viewer::file_save,
             // Phase 1: settings / util
             commands::settings::settings_get,
             commands::settings::settings_set,
@@ -57,6 +67,7 @@ macro_rules! all_commands {
             commands::terminal::terminal_session_start,
             commands::terminal::terminal_session_stop,
             commands::terminal::terminal_input_send,
+            commands::terminal::terminal_resize,
             commands::terminal::terminal_session_list,
             // Phase 3: 検索
             commands::search::index_build,
@@ -95,6 +106,20 @@ macro_rules! all_commands {
             commands::polling::polling_start,
             commands::polling::polling_stop,
             commands::polling::polling_status,
+            // Maintenance
+            commands::maintenance::maintenance_scan_dependencies,
+            commands::maintenance::maintenance_scan_tech_debt,
+            commands::maintenance::maintenance_run_coverage,
+            commands::maintenance::maintenance_refactor_candidates,
+            // Doc Mapping
+            commands::doc_mapping::rebuild_doc_index,
+            commands::doc_mapping::find_affected_docs_cmd,
+            commands::doc_mapping::check_doc_staleness,
+            commands::doc_mapping::generate_update_context,
+            // Phase 6: AI アシスタント
+            commands::ai::ai_get_context,
+            commands::ai::ai_review_changes,
+            commands::ai::ai_generate_code,
         ]
     };
 }
