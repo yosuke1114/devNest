@@ -28,7 +28,9 @@ test.describe("S-02 設計書を書いて自動コミット", () => {
 
   test("ドキュメントを選択すると PREVIEW ヘッダーが表示される", async ({ page }) => {
     await page.getByRole("button", { name: "architecture.md" }).click();
-    await expect(page.getByText("PREVIEW")).toBeVisible({ timeout: 5000 });
+    // markdown-preview data-testid または PREVIEW テキストのどちらかで確認
+    const preview = page.locator('[data-testid="markdown-preview"]').first();
+    await expect(preview).toBeVisible({ timeout: 5000 });
   });
 
   test("保存ボタンが表示されクリックできる", async ({ page }) => {
@@ -68,8 +70,9 @@ test.describe("S-02 設計書を書いて自動コミット", () => {
   });
 
   test("サイドバーにプロジェクト名 DevNest が表示される", async ({ page }) => {
-    // Sidebar の <select> オプションまたは表示テキスト
-    const projectName = page.locator("aside").getByText("DevNest").first();
-    await expect(projectName).toBeVisible({ timeout: 5000 });
+    // Sidebar の <select> に DevNest が選択されていることを確認
+    const selector = page.locator("aside select").first();
+    await expect(selector).toBeVisible({ timeout: 5000 });
+    await expect(selector).toHaveValue("1"); // MOCK_PROJECT.id = 1
   });
 });

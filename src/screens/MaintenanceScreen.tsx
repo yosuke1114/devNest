@@ -6,16 +6,121 @@ import {
   IconTestPipe,
   IconRefreshDot,
   IconFileDescription,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { useProjectStore } from "../stores/projectStore";
 import { useMaintenanceStore } from "../stores/maintenanceStore";
+import { useUiStore } from "../stores/uiStore";
+import { useTerminalStore } from "../stores/terminalStore";
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
 import type {
   DependencyStatus,
   TechDebtItem,
+  DependencyReport,
+  TechDebtReport,
   RefactorCandidate,
 } from "../types";
+
+// ─── プロンプトビルダー ────────────────────────────────────────────────────────
+
+function buildDepsPrompt(report: DependencyReport): string {
+  const outdated = [...report.rust_deps, ...report.node_deps].filter(
+    (d) => d.update_type !== "Unknown"
+  );
+  if (outdated.length === 0) return "";
+  const pkgList = outdated
+    .map((d) => `- ${d.name}: ${d.current_version} → ${d.latest_version}`)
+    .join("\n");
+  const nodeNames = report.node_deps
+    .filter((d) => d.update_type !== "Unknown")
+    .map((d) => d.name)
+    .join(" ");
+  const hasNode = nodeNames.length > 0;
+  const hasRust = report.rust_deps.some((d) => d.update_type !== "Unknown");
+  const updateCmds = [
+    hasNode ? `npm update ${nodeNames}` : null,
+    hasRust ? `cargo update` : null,
+  ]
+    .filter(Boolean)
+    .join(" && ");
+
+  return `以下の依存パッケージが古くなっています。アップデートしてPRを作成してください。
+
+【対象パッケージ】
+${pkgList}
+
+【手順】
+1. \`${updateCmds}\` を実行
+2. \`npm run build\` でビルドが通ることを確認
+3. ブランチ名 \`fix/update-deps\` で commit & push
+4. GitHub PR を作成（タイトル: "chore(deps): update outdated packages"）`;
+}
+
+function buildRefactorPrompt(candidates: RefactorCandidate[]): string {
+  if (candidates.length === 0) return "";
+  const top = candidates[0];
+  const list = candidates
+    .slice(0, 3)
+    .map((c, i) => `${i + 1}. ${c.file_path} (スコア: ${c.score.toFixed(2)})`)
+    .join("\n");
+
+  return `以下のファイルがリファクタリング優先度が高いと分析されています。
+最優先の \`${top.file_path}\` をリファクタリングしてPRを作成してください。
+
+【リファクタリング候補 Top3】
+${list}
+
+【方針】
+- 重複コードの統合・関数の分割
+- 型安全性の向上
+- 可読性の改善（長い関数の分割、命名改善）
+- 既存の動作を壊さないこと（テストで確認）
+
+【手順】
+1. \`${top.file_path}\` を分析して改善点を特定
+2. リファクタリングを実施
+3. ブランチ名 \`refactor/${top.file_path.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-")}\` で commit & push
+4. GitHub PR を作成`;
+}
+
+function buildCoveragePrompt(pct: number, fileCount: number): string {
+  return `テストカバレッジが ${pct.toFixed(1)}% (${fileCount} ファイル) です。
+カバレッジを向上させるテストを追加してPRを作成してください。
+
+【方針】
+- \`src/stores/\` 配下のストアのユニットテストを優先的に追加
+- カバレッジが低いファイルから順に対応
+- 既存の \`src/**/*.test.{ts,tsx}\` の書き方に合わせる
+- vitest + @testing-library/react を使用
+
+【手順】
+1. \`npm run test:coverage\` でカバレッジレポートを確認
+2. カバレッジが低いファイルを特定して優先度順にテストを追加
+3. \`npm run test\` でテストが通ることを確認
+4. ブランチ名 \`feat/improve-test-coverage\` で commit & push
+5. GitHub PR を作成（タイトル: "test: improve test coverage"）`;
+}
+
+function buildDebtPrompt(report: TechDebtReport): string {
+  const fixmes = report.items.filter((i) => i.category === "TodoFixme");
+  if (fixmes.length === 0) return "";
+  const list = fixmes
+    .slice(0, 5)
+    .map((i) => `- ${i.file_path}:${i.line ?? "?"} (${i.description})`)
+    .join("\n");
+
+  return `以下のTODO/FIXMEコメントが残っています。対応できるものから修正してPRを作成してください。
+
+【対象項目】
+${list}
+
+【手順】
+1. 各TODO/FIXMEの内容を確認し、対応可能なものを修正
+2. 修正が難しいものはコメントを更新（理由を明記）
+3. ブランチ名 \`fix/tech-debt-todos\` で commit & push
+4. GitHub PR を作成`;
+}
 
 // ─── ヘルパー ──────────────────────────────────────────────────────────────────
 
@@ -142,14 +247,16 @@ function DebtItemRow({ item }: { item: TechDebtItem }) {
 
 // ─── Coverage パネル ───────────────────────────────────────────────────────────
 
-function CoveragePanel() {
-  const { coverageReport, coverageStatus } = useMaintenanceStore();
+function CoveragePanel({ projectPath }: { projectPath: string }) {
+  const { coverageReport, coverageStatus, generateCoverage } = useMaintenanceStore();
+  const isGenerating = coverageStatus === "loading";
 
   if (coverageStatus === "idle") return <PanelEmpty>スキャン未実行</PanelEmpty>;
-  if (coverageStatus === "loading") return <PanelLoading />;
+  if (isGenerating) return <PanelLoading />;
 
   const pct = coverageReport?.overall_pct ?? 0;
   const barWidth = Math.round(pct);
+  const noData = !coverageReport?.node_available && !coverageReport?.rust_available;
 
   return (
     <div className="flex flex-col gap-2">
@@ -169,6 +276,19 @@ function CoveragePanel() {
         {" — "}
         {coverageReport?.files.length ?? 0} ファイル
       </div>
+      <button
+        onClick={() => generateCoverage(projectPath, "node")}
+        disabled={isGenerating}
+        className={cn(
+          "mt-1 flex items-center gap-1.5 text-[10px] px-2 py-1 rounded border transition-colors w-fit",
+          isGenerating
+            ? "opacity-40 cursor-not-allowed border-border text-muted-foreground"
+            : "border-violet-700 text-violet-400 hover:bg-violet-900/30 cursor-pointer"
+        )}
+      >
+        <IconSparkles size={10} />
+        {isGenerating ? "実行中…" : noData ? "カバレッジ実行（Node）" : "再実行"}
+      </button>
     </div>
   );
 }
@@ -275,16 +395,36 @@ function PanelCard({
   title,
   icon,
   children,
+  onAiFix,
+  aiFixDisabled,
 }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  onAiFix?: () => void;
+  aiFixDisabled?: boolean;
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
         {icon}
-        {title}
+        <span className="flex-1">{title}</span>
+        {onAiFix && (
+          <button
+            onClick={onAiFix}
+            disabled={aiFixDisabled}
+            title="AIで修正PR作成"
+            className={cn(
+              "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-colors",
+              aiFixDisabled
+                ? "opacity-30 cursor-not-allowed border-border text-muted-foreground"
+                : "border-violet-700 text-violet-400 hover:bg-violet-900/30 cursor-pointer"
+            )}
+          >
+            <IconSparkles size={10} />
+            AI修正PR
+          </button>
+        )}
       </div>
       {children}
     </div>
@@ -295,7 +435,9 @@ function PanelCard({
 
 export function MaintenanceScreen() {
   const currentProject = useProjectStore((s) => s.currentProject);
-  const { scanAll, debtStatus, depStatus, coverageStatus, refactorStatus } = useMaintenanceStore();
+  const { scanAll, depReport, debtReport, coverageReport, refactorCandidates, debtStatus, depStatus, coverageStatus, refactorStatus } = useMaintenanceStore();
+  const navigate = useUiStore((s) => s.navigate);
+  const setPendingPrompt = useTerminalStore((s) => s.setPendingPrompt);
 
   const isLoading =
     depStatus === "loading" ||
@@ -306,6 +448,11 @@ export function MaintenanceScreen() {
   const handleScanAll = useCallback(() => {
     if (currentProject) scanAll(currentProject.local_path);
   }, [currentProject, scanAll]);
+
+  const handleAiFix = useCallback((prompt: string) => {
+    setPendingPrompt(prompt);
+    navigate("terminal");
+  }, [navigate, setPendingPrompt]);
 
   if (!currentProject) {
     return (
@@ -336,19 +483,47 @@ export function MaintenanceScreen() {
 
       {/* 4 パネル */}
       <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-4 content-start">
-        <PanelCard title="Dependencies" icon={<IconPackage size={14} />}>
+        <PanelCard
+          title="Dependencies"
+          icon={<IconPackage size={14} />}
+          onAiFix={depReport && depReport.total_outdated > 0
+            ? () => handleAiFix(buildDepsPrompt(depReport))
+            : undefined}
+          aiFixDisabled={isLoading}
+        >
           <DepsPanel />
         </PanelCard>
 
-        <PanelCard title="Test Coverage" icon={<IconTestPipe size={14} />}>
-          <CoveragePanel />
+        <PanelCard
+          title="Test Coverage"
+          icon={<IconTestPipe size={14} />}
+          onAiFix={coverageReport
+            ? () => handleAiFix(buildCoveragePrompt(coverageReport.overall_pct, coverageReport.files.length))
+            : undefined}
+          aiFixDisabled={isLoading}
+        >
+          <CoveragePanel projectPath={currentProject.local_path} />
         </PanelCard>
 
-        <PanelCard title="Tech Debt" icon={<IconAlertTriangle size={14} />}>
+        <PanelCard
+          title="Tech Debt"
+          icon={<IconAlertTriangle size={14} />}
+          onAiFix={debtReport && debtReport.items.some((i) => i.category === "TodoFixme")
+            ? () => handleAiFix(buildDebtPrompt(debtReport))
+            : undefined}
+          aiFixDisabled={isLoading}
+        >
           <DebtPanel />
         </PanelCard>
 
-        <PanelCard title="Refactor Candidates" icon={<IconRefreshDot size={14} />}>
+        <PanelCard
+          title="Refactor Candidates"
+          icon={<IconRefreshDot size={14} />}
+          onAiFix={refactorCandidates.length > 0
+            ? () => handleAiFix(buildRefactorPrompt(refactorCandidates))
+            : undefined}
+          aiFixDisabled={isLoading}
+        >
           <RefactorPanel />
         </PanelCard>
       </div>

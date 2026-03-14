@@ -3,9 +3,7 @@
 /// PRやローカル変更に対して、設計書の文脈を持ったAIレビューを実行する。
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-
-use crate::error::{AppError, Result};
+use crate::error::Result;
 use crate::services::anthropic::AnthropicClient;
 
 use super::context_engine::{
@@ -13,95 +11,14 @@ use super::context_engine::{
 };
 
 // ─────────────────────────────────────────────
-//  データ型
+//  型は review::engine から re-export
 // ─────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReviewRequest {
-    pub diff: String,
-    pub changed_files: Vec<String>,
-    pub pr_description: Option<String>,
-    pub review_scope: ReviewScope,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReviewScope {
-    Full,
-    DesignConsistency,
-    SecurityFocus,
-    TestCoverage,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReviewResult {
-    pub summary: String,
-    pub findings: Vec<ReviewFinding>,
-    pub design_consistency: DesignConsistencyReport,
-    pub suggested_doc_updates: Vec<DocUpdateSuggestion>,
-    pub overall_assessment: Assessment,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReviewFinding {
-    pub file: String,
-    pub line_start: Option<u32>,
-    pub line_end: Option<u32>,
-    pub severity: FindingSeverity,
-    pub category: FindingCategory,
-    pub message: String,
-    pub suggested_fix: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FindingSeverity {
-    Critical,
-    Warning,
-    Info,
-    Suggestion,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum FindingCategory {
-    DesignConsistency,
-    Security,
-    Performance,
-    TestCoverage,
-    CodeQuality,
-    Naming,
-    Documentation,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DesignConsistencyReport {
-    pub checked_docs: Vec<String>,
-    pub inconsistencies: Vec<DesignInconsistency>,
-    pub missing_doc_updates: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DesignInconsistency {
-    pub doc_path: String,
-    pub description: String,
-    pub severity: FindingSeverity,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocUpdateSuggestion {
-    pub doc_path: String,
-    pub reason: String,
-    pub suggested_change: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Assessment {
-    Approve,
-    RequestChanges,
-    Comment,
-}
+pub use crate::review::engine::{
+    Assessment, DesignConsistencyReport, DesignInconsistency, DocUpdateSuggestion, ReviewRequest,
+    ReviewResult, ReviewScope,
+};
+pub use crate::review::findings::{FindingCategory, FindingSeverity, ReviewFinding};
 
 // ─────────────────────────────────────────────
 //  ReviewAgent
@@ -165,7 +82,7 @@ impl ReviewAgent {
                  \"file\": \"...\",\
                  \"line_start\": null,\
                  \"line_end\": null,\
-                 \"severity\": \"critical|warning|info|suggestion\",\
+                 \"severity\": \"low|medium|high|critical\",\
                  \"category\": \"design_consistency|security|performance|test_coverage|code_quality|naming|documentation\",\
                  \"message\": \"...\",\
                  \"suggested_fix\": null\

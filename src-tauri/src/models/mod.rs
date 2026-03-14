@@ -1,5 +1,6 @@
 pub mod conflict;
 pub mod document;
+pub mod file_node;
 pub mod issue;
 pub mod notifications;
 pub mod pr;

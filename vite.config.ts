@@ -31,6 +31,14 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["json-summary", "text"],
+      reportsDirectory: "./coverage",
+      reportOnFailure: true,
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/test/**", "src/**/*.d.ts"],
+    },
     alias: {
       "@tauri-apps/plugin-dialog": resolve(__dirname, "src/test/__mocks__/@tauri-apps/plugin-dialog.ts"),
     },
@@ -47,7 +55,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/coverage/**", "**/.devnest/**"],
     },
   },
 }));

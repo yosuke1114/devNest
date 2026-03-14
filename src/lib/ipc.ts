@@ -351,6 +351,9 @@ export const maintenanceScanTechDebt = (projectPath: string) =>
 export const maintenanceRunCoverage = (projectPath: string) =>
   invoke<import("../types").CoverageReport>("maintenance_run_coverage", { projectPath });
 
+export const maintenanceGenerateCoverage = (projectPath: string, target: "node" | "rust" | "all" = "node") =>
+  invoke<import("../types").CoverageReport>("maintenance_generate_coverage", { projectPath, target });
+
 export const maintenanceRefactorCandidates = (projectPath: string, topN: number = 20) =>
   invoke<import("../types").RefactorCandidate[]>("maintenance_refactor_candidates", { projectPath, topN });
 

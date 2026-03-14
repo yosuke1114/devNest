@@ -20,7 +20,7 @@ interface SettingsState {
   fetchAuthStatus: (projectId: number) => Promise<void>;
   startAuth: (projectId: number) => Promise<void>;
   revokeAuth: (projectId: number) => Promise<void>;
-  listenAuthDone: (projectId: number) => Promise<() => void>;
+  listenAuthDone: (projectId: number, onError?: (msg: string) => void) => Promise<() => void>;
 
   // API キー設定
   setClientId: (value: string) => void;
@@ -85,19 +85,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  listenAuthDone: async (projectId) => {
+  listenAuthDone: async (projectId, onError) => {
     const unlisten = await listen<{ success: boolean; error?: string }>(
       "github_auth_done",
       (event) => {
         if (event.payload.success) {
           get().fetchAuthStatus(projectId);
         } else {
-          set({
-            error: {
-              code: "GitHub",
-              message: event.payload.error ?? "認証に失敗しました",
-            },
-          });
+          const msg = event.payload.error ?? "認証に失敗しました";
+          set({ error: { code: "GitHub", message: msg } });
+          onError?.(msg);
         }
       }
     );

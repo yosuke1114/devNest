@@ -28,8 +28,11 @@ pub async fn wait_for_callback(tx: oneshot::Sender<String>) -> Result<()> {
     })?;
 
     // 成功レスポンスを返す
-    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
-        <html><body><h1>認証完了</h1><p>このウィンドウを閉じてください。</p></body></html>";
+    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n\
+        <html><head><meta charset=\"utf-8\"></head><body>\
+        <h1>&#35469;&#35388;&#23436;&#20102;</h1>\
+        <p>&#12371;&#12398;&#12454;&#12451;&#12531;&#12489;&#12454;&#12434;&#38281;&#12376;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</p>\
+        </body></html>";
     let _ = stream.write_all(response.as_bytes()).await;
 
     tx.send(code)

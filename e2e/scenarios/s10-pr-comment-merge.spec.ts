@@ -21,6 +21,12 @@ test.describe("S-09 PR コメント・レビュー・マージ", () => {
   });
 
   async function navigateToPR(page: import("@playwright/test").Page) {
+    // GitHub アコーディオンを展開してから Pull Requests をクリック
+    const githubBtn = page.locator("aside").getByRole("button", { name: "GitHub" }).first();
+    if (await githubBtn.isVisible({ timeout: 3000 })) {
+      await githubBtn.click();
+      await page.waitForTimeout(150);
+    }
     const prNav = page.locator("aside").getByText("Pull Requests").first();
     if (await prNav.isVisible({ timeout: 3000 })) {
       await prNav.click();

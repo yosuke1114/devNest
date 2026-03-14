@@ -1,6 +1,8 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "./lib/ipc";
+import { Header } from "./components/layout/Header";
+import { CommandPalette } from "./components/layout/CommandPalette";
 import { Sidebar } from "./components/layout/Sidebar";
 import { SetupScreen } from "./screens/SetupScreen";
 import { EditorScreen } from "./screens/EditorScreen";
@@ -11,11 +13,17 @@ import { PRScreen } from "./screens/PRScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { MaintenanceScreen } from "./screens/MaintenanceScreen";
-import { TerminalScreen } from "./screens/TerminalScreen";
+
 import { AnalyticsScreen } from "./screens/AnalyticsScreen";
 import { KanbanScreen } from "./screens/KanbanScreen";
 import { McpScreen } from "./screens/McpScreen";
 import { CollaborationScreen } from "./screens/CollaborationScreen";
+import { HomeDashboardScreen } from "./screens/HomeDashboardScreen";
+import { ProjectViewScreen } from "./screens/ProjectViewScreen";
+import { AgentControlScreen } from "./screens/AgentControlScreen";
+import { SprintScreen } from "./screens/SprintScreen";
+import { FreshnessMapScreen } from "./screens/FreshnessMapScreen";
+import { SwarmPage } from "./components/swarm/SwarmPage";
 import { useProjectStore } from "./stores/projectStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useUiStore } from "./stores/uiStore";
@@ -29,9 +37,10 @@ export default function App() {
   const { currentScreen } = useUiStore();
   const { fetchProjects, selectProject } = useProjectStore();
   const { fetchTheme } = useSettingsStore();
-  const { listenEvents: listenNotificationEvents } = useNotificationsStore();
+  const { listenEvents: listenNotificationEvents, loadNotifications } = useNotificationsStore();
   const { listenEvents: listenTerminalEvents, onTerminalDone } = useTerminalStore();
   const { listenSyncDone: listenPrSyncDone } = usePrStore();
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   // 起動時の初期化
   useEffect(() => {
@@ -50,7 +59,6 @@ export default function App() {
       if (ev.payload.has_conflicts && ev.payload.project_id === projectId) {
         useUiStore.getState().setConflictBadge(true);
         useConflictStore.getState().scanConflicts(ev.payload.project_id);
-        // 通知を作成
         ipc.notificationPush(
           ev.payload.project_id,
           "conflict",
@@ -75,12 +83,14 @@ export default function App() {
     }).then((fn) => { unlistenTerminalDone = fn; });
 
     fetchProjects().then(() => {
-      // プロジェクトが 1 件以上あれば最初のを選択
       const { projects } = useProjectStore.getState();
       if (projects.length > 0 && !useProjectStore.getState().currentProject) {
         selectProject(projects[0]);
         useUiStore.getState().navigate("editor");
       }
+      // 通知を初期ロード（ヘッダーバッジ表示のため）
+      const projectId = useProjectStore.getState().currentProject?.id;
+      if (projectId) loadNotifications(projectId).catch(() => {});
     });
 
     return () => {
@@ -94,32 +104,25 @@ export default function App() {
 
   const renderScreen = () => {
     switch (currentScreen) {
-      case "setup":
-        return <SetupScreen />;
-      case "editor":
-        return <EditorScreen />;
-      case "issues":
-        return <IssuesScreen />;
-      case "pr":
-        return <PRScreen />;
-      case "search":
-        return <SearchScreen />;
-      case "settings":
-        return <SettingsScreen />;
-      case "conflict":
-        return <ConflictScreen />;
-      case "notifications":
-        return <NotificationsScreen />;
-      case "maintenance":
-        return <MaintenanceScreen />;
-      case "analytics":
-        return <AnalyticsScreen />;
-      case "kanban":
-        return <KanbanScreen />;
-      case "mcp":
-        return <McpScreen />;
-      case "collaboration":
-        return <CollaborationScreen />;
+      case "setup":          return <SetupScreen />;
+      case "editor":         return <EditorScreen />;
+      case "issues":         return <IssuesScreen />;
+      case "pr":             return <PRScreen />;
+      case "search":         return <SearchScreen />;
+      case "settings":       return <SettingsScreen />;
+      case "conflict":       return <ConflictScreen />;
+      case "notifications":  return <NotificationsScreen />;
+      case "maintenance":    return <MaintenanceScreen />;
+      case "analytics":      return <AnalyticsScreen />;
+      case "kanban":         return <KanbanScreen />;
+      case "mcp":            return <McpScreen />;
+      case "collaboration":  return <CollaborationScreen />;
+      case "home":           return <HomeDashboardScreen />;
+      case "project":        return <ProjectViewScreen />;
+      case "agent":          return <AgentControlScreen />;
+      case "sprint":         return <SprintScreen />;
+      case "docs-freshness": return <FreshnessMapScreen />;
+      case "swarm":          return <SwarmPage />;
       default:
         return (
           <div
@@ -143,6 +146,7 @@ export default function App() {
       data-testid="app-root"
       style={{
         display: "flex",
+        flexDirection: "column",
         height: "100vh",
         background: "#13131f",
         color: "#e0e0e0",
@@ -150,14 +154,20 @@ export default function App() {
           "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       }}
     >
-      <Sidebar />
-      <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {/* TerminalScreen は常時マウント（xterm バッファ保持のため CSS で表示制御） */}
-        <div style={{ flex: 1, display: currentScreen === "terminal" ? "flex" : "none", flexDirection: "column", overflow: "hidden" }}>
-          <TerminalScreen />
-        </div>
-        {currentScreen !== "terminal" && renderScreen()}
-      </main>
+      <Header onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        <Sidebar />
+
+        <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {renderScreen()}
+        </main>
+      </div>
+
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
     </div>
   );
 }

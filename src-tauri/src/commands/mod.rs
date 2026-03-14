@@ -5,6 +5,7 @@ pub mod collaboration;
 pub mod conflict;
 pub mod doc_mapping;
 pub mod swarm;
+pub mod browser;
 pub mod document;
 pub mod maintenance;
 pub mod file_viewer;
@@ -154,6 +155,12 @@ macro_rules! all_commands {
             commands::collaboration::knowledge_search,
             commands::collaboration::knowledge_add,
             commands::collaboration::knowledge_add_comment,
+            // Browser commands
+            commands::browser::open_browser_panel,
+            commands::browser::navigate_browser,
+            commands::browser::close_browser_panel,
+            commands::browser::get_browser_panels,
+            commands::browser::analyze_browser_context,
             // Phase 11: Swarm
             commands::swarm::spawn_worker,
             commands::swarm::kill_worker,

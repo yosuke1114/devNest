@@ -1,3 +1,20 @@
+---
+title: "EditorScreen 詳細設計"
+doc_type: screen_design
+version: "1.0.0"
+last_synced_commit: null
+status: current
+mapping:
+  sources:
+    - path: "src/screens/EditorScreen.tsx"
+      scope: file
+    - path: "src/components/editor/"
+      scope: directory
+    - path: "src-tauri/src/commands/document.rs"
+      scope: file
+tags: [screen, editor, markdown]
+---
+
 # EditorScreen 詳細設計書
 
 **バージョン**: 2.0

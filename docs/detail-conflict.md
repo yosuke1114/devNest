@@ -1,3 +1,18 @@
+---
+title: "ConflictScreen 詳細設計"
+doc_type: screen_design
+version: "1.0.0"
+last_synced_commit: null
+status: current
+mapping:
+  sources:
+    - path: "src/screens/ConflictScreen.tsx"
+      scope: file
+    - path: "src-tauri/src/commands/conflict.rs"
+      scope: file
+tags: [screen, conflict, frontend]
+---
+
 # ConflictScreen 詳細設計書
 
 **バージョン**: 1.0  

@@ -113,6 +113,48 @@ pub async fn scan_and_insert(
     Ok(count)
 }
 
+/// 新規ドキュメントを DB に挿入する
+pub async fn insert_one(
+    pool: &DbPool,
+    project_id: i64,
+    path: &str,
+) -> Result<Document> {
+    let now = Utc::now().to_rfc3339();
+    let id: (i64,) = sqlx::query_as(
+        r#"INSERT INTO documents (project_id, path, size_bytes, embedding_status, push_status, created_at, updated_at)
+           VALUES (?, ?, 0, 'pending', 'synced', ?, ?) RETURNING id"#,
+    )
+    .bind(project_id)
+    .bind(path)
+    .bind(&now)
+    .bind(&now)
+    .fetch_one(pool)
+    .await?;
+    find(pool, id.0).await
+}
+
+/// ドキュメントのパスを変更する（リネーム）
+pub async fn rename(
+    pool: &DbPool,
+    document_id: i64,
+    new_path: &str,
+) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    let affected = sqlx::query(
+        "UPDATE documents SET path = ?, updated_at = ? WHERE id = ?"
+    )
+    .bind(new_path)
+    .bind(&now)
+    .bind(document_id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        return Err(AppError::NotFound(format!("document id={}", document_id)));
+    }
+    Ok(())
+}
+
 pub async fn sync_log_list(pool: &DbPool, project_id: i64, limit: i64) -> Result<Vec<SyncLog>> {
     let rows = sqlx::query_as::<_, SyncLog>(
         "SELECT * FROM sync_logs WHERE project_id = ? ORDER BY created_at DESC LIMIT ?"

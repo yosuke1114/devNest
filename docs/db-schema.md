@@ -1,3 +1,20 @@
+---
+title: "データベーススキーマ設計"
+doc_type: architecture
+version: "1.0.0"
+last_synced_commit: null
+status: current
+mapping:
+  sources:
+    - path: "src-tauri/src/db/"
+      scope: directory
+      description: "DB アクセス層"
+    - path: "src-tauri/migrations/"
+      scope: directory
+      description: "マイグレーションファイル"
+tags: [database, sqlite, schema]
+---
+
 # DevNest — DB スキーマ詳細設計書
 
 **バージョン**: 2.0

@@ -18,6 +18,18 @@ const mockDocumentStore = {
   setDirty: vi.fn(),
   listenSaveProgress: vi.fn().mockResolvedValue(() => {}),
   fetchLinkedIssues: vi.fn().mockResolvedValue(undefined),
+  // CodeViewer / FileTree 関連（EditorScreen Phase 11 追加分）
+  createDocument: vi.fn().mockResolvedValue(undefined),
+  renameDocument: vi.fn().mockResolvedValue(undefined),
+  openedFile: null as null | { path: string; type: string },
+  fileTreeNodes: [] as unknown[],
+  fileTreeLoading: false,
+  fetchFileTree: vi.fn().mockResolvedValue(undefined),
+  openCodeFile: vi.fn().mockResolvedValue(undefined),
+  saveCodeFile: vi.fn().mockResolvedValue(undefined),
+  listenCodeSaveProgress: vi.fn().mockResolvedValue(() => {}),
+  codeSaveStatus: "idle" as const,
+  codeSaveProgress: null,
 };
 
 const mockProjectStore = {
@@ -67,6 +79,7 @@ describe("EditorScreen — UnsavedWarningModal wire-up", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDocumentStore.currentDoc = null;
+    mockDocumentStore.openedFile = null;
     mockDocumentStore.saveStatus = "idle";
     mockDocumentStore.documents = [
       { id: 1, project_id: 1, path: "docs/a.md", is_dirty: false, push_status: "synced" },
@@ -103,6 +116,7 @@ describe("EditorScreen — UnsavedWarningModal wire-up", () => {
     mockDocumentStore.currentDoc = {
       id: 1, project_id: 1, path: "docs/a.md", content: "# A", is_dirty: true,
     };
+    mockDocumentStore.openedFile = { path: "docs/a.md", type: "doc" };
     render(<EditorScreen />);
     fireEvent.click(screen.getByRole("button", { name: /b\.md/ }));
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
@@ -152,6 +166,7 @@ describe("EditorScreen — setLastOpenedDocument wire-up", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockDocumentStore.currentDoc = null;
+    mockDocumentStore.openedFile = null;
     mockDocumentStore.saveStatus = "idle";
     mockDocumentStore.documents = [
       { id: 1, project_id: 1, path: "docs/a.md", is_dirty: false, push_status: "synced" },
@@ -171,6 +186,7 @@ describe("EditorScreen — setLastOpenedDocument wire-up", () => {
     mockDocumentStore.currentDoc = {
       id: 1, project_id: 1, path: "docs/a.md", content: "# A", is_dirty: true,
     };
+    mockDocumentStore.openedFile = { path: "docs/a.md", type: "doc" };
     render(<EditorScreen />);
     fireEvent.click(screen.getByRole("button", { name: /b\.md/ }));
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, TimeZone, Utc};
 use std::collections::HashMap;
+use crate::core::git_analysis::GitAnalysis;
 use crate::error::{AppError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,16 +43,16 @@ pub struct DailyMetrics {
 }
 
 pub fn compute_velocity(project_path: &std::path::Path, period: &DateRange) -> Result<VelocityMetrics> {
-    let repo = git2::Repository::open(project_path)
-        .map_err(|e| AppError::Git(e.to_string()))?;
-
     let start = NaiveDate::parse_from_str(&period.start, "%Y-%m-%d")
         .map_err(|e| AppError::Validation(e.to_string()))?;
     let end = NaiveDate::parse_from_str(&period.end, "%Y-%m-%d")
         .map_err(|e| AppError::Validation(e.to_string()))?;
 
-    let mut revwalk = repo.revwalk().map_err(|e| AppError::Git(e.to_string()))?;
-    revwalk.push_head().ok();
+    let since_dt = Utc.from_utc_datetime(&start.and_hms_opt(0, 0, 0).unwrap_or_default());
+    let until_dt = Utc.from_utc_datetime(&end.and_hms_opt(23, 59, 59).unwrap_or_default());
+
+    // core::git_analysis 経由でコミット情報を取得
+    let commit_infos = GitAnalysis::get_commit_metrics(project_path, since_dt, until_dt);
 
     let mut total_commits = 0u32;
     let mut by_author: HashMap<String, u32> = HashMap::new();
@@ -61,63 +62,20 @@ pub fn compute_velocity(project_path: &std::path::Path, period: &DateRange) -> R
     let mut daily: HashMap<String, DailyMetrics> = HashMap::new();
     let mut commit_dates = std::collections::HashSet::new();
 
-    for oid_result in revwalk {
-        let Ok(oid) = oid_result else { continue };
-        let Ok(commit) = repo.find_commit(oid) else { continue };
-
-        let ts = commit.time().seconds();
-        let dt = chrono::DateTime::from_timestamp(ts, 0)
-            .unwrap_or_default()
-            .naive_utc()
-            .date();
-
-        if dt < start || dt > end {
-            continue;
-        }
-
+    for info in &commit_infos {
         total_commits += 1;
-        let author = commit.author().name().unwrap_or("unknown").to_string();
-        *by_author.entry(author).or_insert(0) += 1;
+        *by_author.entry(info.author.clone()).or_insert(0) += 1;
 
-        let date_str = dt.format("%Y-%m-%d").to_string();
-        commit_dates.insert(date_str.clone());
-
-        // Diff stats
-        let (added, deleted, files) = if let Ok(parent) = commit.parent(0) {
-            if let (Ok(t1), Ok(t2)) = (commit.tree(), parent.tree()) {
-                if let Ok(diff) = repo.diff_tree_to_tree(Some(&t2), Some(&t1), None) {
-                    let (ins, del) = if let Ok(stats) = diff.stats() {
-                        (stats.insertions() as u32, stats.deletions() as u32)
-                    } else {
-                        (0, 0)
-                    };
-                    let mut fset = std::collections::HashSet::new();
-                    diff.foreach(
-                        &mut |d, _| {
-                            if let Some(p) = d.new_file().path() {
-                                fset.insert(p.to_string_lossy().to_string());
-                            }
-                            true
-                        },
-                        None,
-                        None,
-                        None,
-                    )
-                    .ok();
-                    (ins, del, fset)
-                } else {
-                    (0, 0, std::collections::HashSet::new())
-                }
-            } else {
-                (0, 0, std::collections::HashSet::new())
-            }
-        } else {
-            (0, 0, std::collections::HashSet::new())
-        };
-
+        let added = info.insertions as u32;
+        let deleted = info.deletions as u32;
         lines_added += added;
         lines_deleted += deleted;
-        files_changed_set.extend(files);
+        for f in &info.files_changed {
+            files_changed_set.insert(f.clone());
+        }
+
+        let date_str = info.timestamp.format("%Y-%m-%d").to_string();
+        commit_dates.insert(date_str.clone());
 
         let entry = daily.entry(date_str.clone()).or_insert(DailyMetrics {
             date: date_str,
@@ -130,9 +88,7 @@ pub fn compute_velocity(project_path: &std::path::Path, period: &DateRange) -> R
         entry.lines_deleted += deleted;
     }
 
-    // Streak: consecutive days with commits
     let streak_days = compute_streak(&commit_dates, &end);
-
     let days = ((end - start).num_days() + 1).max(1) as f64;
     let avg_per_day = total_commits as f64 / days;
 

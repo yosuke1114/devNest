@@ -3,7 +3,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::db;
 use crate::error::AppError;
 use crate::models::terminal::{TerminalDonePayload, TerminalSession};
-use crate::state::{AppState, PtySessionHandle};
+use crate::state::{AppState, PtyMaster, PtySessionHandle};
 
 // ─── terminal_session_start ───────────────────────────────────────────────────
 
@@ -17,6 +17,8 @@ pub async fn terminal_session_start(
     context_doc_ids: Option<Vec<i64>>,
     branch_name: Option<String>,
     request_changes_comment: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> std::result::Result<TerminalSession, AppError> {
@@ -54,8 +56,8 @@ pub async fn terminal_session_start(
 
         let pty_system = NativePtySystem::default();
         let pair = match pty_system.openpty(PtySize {
-            rows: 24,
-            cols: 200,
+            rows: rows.unwrap_or(50),
+            cols: cols.unwrap_or(220),
             pixel_width: 0,
             pixel_height: 0,
         }) {
@@ -94,6 +96,18 @@ pub async fn terminal_session_start(
         // slave は子プロセスが継承したので drop して良い
         drop(pair.slave);
 
+        // reader を先に取得（master を move する前に）
+        let mut reader = match pair.master.try_clone_reader() {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = app.emit(
+                    "terminal_error",
+                    serde_json::json!({ "session_id": session_id, "error": e.to_string() }),
+                );
+                return;
+            }
+        };
+
         let writer = match pair.master.take_writer() {
             Ok(w) => w,
             Err(e) => {
@@ -105,11 +119,14 @@ pub async fn terminal_session_start(
             }
         };
 
-        // コンテキスト（prompt_summary）があれば Claude CLI 起動後に stdin へ注入
-        // ライターを AppState に格納
+        // ライターと master を AppState に格納（master はリサイズ用）
         {
             if let Ok(mut guard) = pty_arc.lock() {
-                *guard = Some(PtySessionHandle { session_id, writer });
+                *guard = Some(PtySessionHandle {
+                    session_id,
+                    writer,
+                    master: PtyMaster(pair.master),
+                });
             }
         }
 
@@ -130,10 +147,6 @@ pub async fn terminal_session_start(
         }
 
         // PTY 出力を読み取って frontend にストリーミング
-        let mut reader = match pair.master.try_clone_reader() {
-            Ok(r) => r,
-            Err(_) => return,
-        };
         let mut buf = [0u8; 4096];
         let mut output_log = String::new();
 
@@ -256,6 +269,32 @@ pub async fn terminal_input_send(
         }
     }
     Err(AppError::NotFound(format!("session id={}", session_id)))
+}
+
+// ─── terminal_resize ─────────────────────────────────────────────────────────
+
+/// xterm.js のリサイズを PTY に反映する。
+#[tauri::command]
+pub async fn terminal_resize(
+    session_id: i64,
+    cols: u16,
+    rows: u16,
+    state: State<'_, AppState>,
+) -> std::result::Result<(), AppError> {
+    use portable_pty::PtySize;
+    let guard = state
+        .pty_session
+        .lock()
+        .map_err(|_| AppError::Internal("PTY lock".to_string()))?;
+    if let Some(ref handle) = *guard {
+        if handle.session_id == session_id {
+            handle
+                .master
+                .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+    }
+    Ok(())
 }
 
 // ─── terminal_session_list ────────────────────────────────────────────────────

@@ -22,9 +22,10 @@ test.describe("S-11 OS 通知 → 画面遷移（notification_navigate）", () =
   });
 
   async function goToNotifications(page: import("@playwright/test").Page) {
-    const notifNav = page.locator("aside").getByText(/通知|notifications/i).first();
-    if (await notifNav.isVisible({ timeout: 3000 })) {
-      await notifNav.click();
+    // ヘッダーの通知ベルをクリックしてドロップダウンを開く
+    const bell = page.locator('[data-testid="notification-bell"]').first();
+    if (await bell.isVisible({ timeout: 3000 })) {
+      await bell.click();
       await page.waitForTimeout(300);
     }
   }
@@ -203,7 +204,7 @@ test.describe("S-11 OS 通知 → 画面遷移（notification_navigate）", () =
   test("MARK ALL READ で全通知が既読になる", async ({ page }) => {
     await goToNotifications(page);
     const markAllBtn = page
-      .getByRole("button", { name: /mark all read/i })
+      .getByRole("button", { name: /既読|mark all read/i })
       .first();
     if (await markAllBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await markAllBtn.click();

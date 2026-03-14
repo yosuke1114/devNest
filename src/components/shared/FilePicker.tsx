@@ -1,5 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { IconFolder } from "@tabler/icons-react";
+import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
 
 interface FilePickerProps {
   onPick: (path: string) => void;
@@ -25,28 +27,17 @@ export function FilePicker({
   };
 
   return (
-    <button
+    <Button
       type="button"
       data-testid="file-picker"
-      className={className}
+      variant="outline"
+      size="sm"
+      className={cn(className)}
       disabled={disabled}
       onClick={handleClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "6px 12px",
-        background: "transparent",
-        border: "1px solid #3a3a52",
-        borderRadius: 4,
-        color: "#aaa",
-        cursor: disabled ? "not-allowed" : "pointer",
-        fontSize: 13,
-        opacity: disabled ? 0.5 : 1,
-      }}
     >
       <IconFolder size={14} />
       {label}
-    </button>
+    </Button>
   );
 }

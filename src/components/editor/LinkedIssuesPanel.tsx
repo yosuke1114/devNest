@@ -1,4 +1,5 @@
-import { IconCircleCheck, IconCircleDot } from "@tabler/icons-react";
+import { useState, useEffect } from "react";
+import { IconCircleCheck, IconCircleDot, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import type { Issue } from "../../types";
 
 interface LinkedIssuesPanelProps {
@@ -8,33 +9,50 @@ interface LinkedIssuesPanelProps {
 }
 
 export function LinkedIssuesPanel({ issues, loading, onIssueClick }: LinkedIssuesPanelProps) {
+  const [open, setOpen] = useState(false);
+
+  // Issue が増えたら自動で開く、なくなったら閉じる
+  useEffect(() => {
+    if (!loading) setOpen(issues.length > 0);
+  }, [issues.length, loading]);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div
+    <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
         style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           padding: "10px 14px",
           fontSize: 11,
           color: "#888",
           textTransform: "uppercase",
           letterSpacing: 1,
-          borderBottom: "1px solid #2a2a3a",
-          flexShrink: 0,
+          background: "transparent",
+          border: "none",
+          borderTop: "1px solid #2a2a3a",
+          borderBottom: open ? "1px solid #2a2a3a" : "none",
+          cursor: "pointer",
+          width: "100%",
+          textAlign: "left",
         }}
       >
-        Linked Issues
-      </div>
+        <span>Linked Issues{issues.length > 0 ? ` (${issues.length})` : ""}</span>
+        {open ? <IconChevronDown size={13} /> : <IconChevronUp size={13} />}
+      </button>
 
-      <div style={{ flex: 1, overflow: "auto" }}>
-        {loading ? (
-          <div style={centerStyle}>読み込み中…</div>
-        ) : issues.length === 0 ? (
-          <div style={centerStyle}>Issue がありません</div>
-        ) : (
-          issues.map((issue) => (
+      {loading ? (
+        <div style={centerStyle}>読み込み中…</div>
+      ) : issues.length === 0 ? (
+        <div style={centerStyle}>Issue がありません</div>
+      ) : open ? (
+        <div style={{ maxHeight: 200, overflow: "auto" }}>
+          {issues.map((issue) => (
             <IssueRow key={issue.id} issue={issue} onClick={onIssueClick} />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

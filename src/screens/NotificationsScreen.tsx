@@ -5,6 +5,8 @@ import { useNotificationsStore } from "../stores/notificationsStore";
 import { NotificationItem } from "../components/notifications/NotificationItem";
 import { EmptyState } from "../components/notifications/EmptyState";
 import { PermissionBanner } from "../components/notifications/PermissionBanner";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
 
 // ─── NotificationsScreen ───────────────────────────────────────────────────────
 
@@ -29,7 +31,7 @@ export function NotificationsScreen() {
 
   if (!currentProject) {
     return (
-      <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
         プロジェクトを選択してください
       </div>
     );
@@ -38,25 +40,27 @@ export function NotificationsScreen() {
   return (
     <div data-testid="notifications-screen" className="flex-1 flex flex-col overflow-hidden">
       {/* ヘッダー */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-white">NOTIFICATIONS</span>
+            <span className="text-sm font-medium text-foreground">NOTIFICATIONS</span>
             {unreadCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-700 text-white font-medium">
+              <Badge className="px-1.5 py-0.5 text-[10px]">
                 {unreadCount}
-              </span>
+              </Badge>
             )}
           </div>
         </div>
         {unreadCount > 0 && (
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => markAllRead(currentProject.id)}
             data-testid="notifications-mark-all-read"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-gray-300 transition-colors"
+            className="h-7 px-2.5 text-xs flex items-center gap-1.5"
           >
             <IconCheck size={11} /> MARK ALL READ
-          </button>
+          </Button>
         )}
       </div>
 
@@ -69,10 +73,10 @@ export function NotificationsScreen() {
       {/* リスト */}
       <div className="flex-1 overflow-y-auto">
         {listStatus === "loading" && (
-          <div className="p-4 text-xs text-gray-500 text-center">読み込み中…</div>
+          <div className="p-4 text-xs text-muted-foreground text-center">読み込み中…</div>
         )}
         {listStatus === "error" && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-red-900/30 border-b border-red-800/50 text-xs text-red-300">
+          <div className="flex items-center gap-2 px-4 py-3 bg-destructive/20 border-b border-destructive/40 text-xs text-destructive">
             <IconX size={12} /> 通知の取得に失敗しました
           </div>
         )}

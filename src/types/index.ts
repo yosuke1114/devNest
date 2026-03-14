@@ -421,7 +421,14 @@ export type ScreenName =
   | "analytics"
   | "kanban"
   | "mcp"
-  | "collaboration";
+  | "collaboration"
+  // ─── Task G: 統合画面 ───────────────────────────────────────────────────────
+  | "home"           // 🏠 ホームダッシュボード（ポートフォリオ + エージェント要約）
+  | "project"        // 📋 プロジェクトビュー（タブ: Kanban/Maintenance/Analytics/AI Review）
+  | "agent"          // 🤖 エージェントコントロール（タスクキュー + 承認 + ターミナル）
+  | "sprint"         // 📊 スプリント（プランニング + レトロスペクティブ）
+  | "docs-freshness" // 📄 設計書鮮度マップ
+  | "swarm";         // 🤖 DevNest Swarm（マルチエージェントターミナル）
 
 export interface NavigateParams {
   prId?: number;
@@ -430,6 +437,8 @@ export interface NavigateParams {
   tab?: string;
   anchor?: string;
   scrollToLine?: number;
+  /** TerminalScreen に遷移する際に渡す Claude Code 用プロンプト */
+  promptSummary?: string;
 }
 
 export type SetupStep = 0 | 1 | 2 | 3 | 4 | 5;

@@ -75,7 +75,7 @@ describe("terminalStore", () => {
 
     await useTerminalStore.getState().startSession(1, "Fix the bug");
 
-    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug");
+    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug", undefined);
   });
 
   it("startSession() 成功時に session がセットされる", async () => {
@@ -135,7 +135,7 @@ describe("terminalStore", () => {
 
     await useTerminalStore.getState().startSession(1, "Fix the bug");
 
-    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug");
+    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug", undefined);
   });
 
   it("startSession() path が null の issueLinks は無視される", async () => {
@@ -151,7 +151,7 @@ describe("terminalStore", () => {
     await useTerminalStore.getState().startSession(1, "Fix the bug");
 
     // path=null のみなので docPaths は空 → promptSummary をそのまま渡す
-    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug");
+    expect(mockIpc.terminalSessionStart).toHaveBeenCalledWith(1, "Fix the bug", undefined);
   });
 
   // ─── stopSession ──────────────────────────────────────────────────────────

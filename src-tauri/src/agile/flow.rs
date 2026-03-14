@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use chrono::Utc;
+use crate::core::git_analysis::GitAnalysis;
 use crate::error::Result;
 use super::kanban::KanbanStore;
 
@@ -73,10 +75,21 @@ pub fn analyze_flow(project_path: &std::path::Path, product_id: &str) -> Result<
         })
         .collect();
 
+    // core::git_analysis でコミットベースのスループットを補完
+    let now = Utc::now();
+    let two_weeks_ago = now - chrono::Duration::days(14);
+    let commit_count = GitAnalysis::get_commit_metrics(project_path, two_weeks_ago, now).len();
+    let commit_throughput = commit_count as f64 / 2.0; // commits per week
+
+    // カードベースのスループットと平均を取る
+    let card_throughput =
+        board.cards.iter().filter(|c| c.column_id == "done").count() as f64 / 2.0;
+    let throughput_per_week = (commit_throughput + card_throughput) / 2.0;
+
     Ok(FlowAnalysis {
         cycle_time: CycleTimeMetrics { average_days: 3.5, median_days: 2.5, p95_days: 8.0 },
         bottlenecks,
         wip_suggestions,
-        throughput_per_week: board.cards.iter().filter(|c| c.column_id == "done").count() as f64 / 2.0,
+        throughput_per_week,
     })
 }

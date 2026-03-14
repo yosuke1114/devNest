@@ -63,9 +63,26 @@ pub(crate) fn should_sync(interval_min: i64, now_min: i64) -> bool {
 
 /// プロジェクト単位の同期処理。
 async fn sync_project(app: &AppHandle, pool: &DbPool, project_id: i64) {
-    let token = match keychain::require_token(project_id) {
-        Ok(t) => t,
-        Err(_) => return, // 未認証プロジェクトはスキップ
+    let token = {
+        // Keychain → DB フォールバック
+        let kc = keychain::get_token(project_id).ok().flatten();
+        if let Some(t) = kc {
+            t
+        } else {
+            let key = format!("github.token.{}", project_id);
+            let row: Option<(String,)> = sqlx::query_as(
+                "SELECT value FROM app_settings WHERE key = ?"
+            )
+            .bind(&key)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            match row.map(|(v,)| v.trim_matches('"').to_string()).filter(|s| !s.is_empty()) {
+                Some(t) => t,
+                None => return, // 未認証プロジェクトはスキップ
+            }
+        }
     };
     let project = match db::project::find(pool, project_id).await {
         Ok(p) => p,

@@ -30,6 +30,7 @@ interface MaintenanceState {
   scanDependencies: (projectPath: string) => Promise<void>;
   scanDebt: (projectPath: string) => Promise<void>;
   scanCoverage: (projectPath: string) => Promise<void>;
+  generateCoverage: (projectPath: string, target?: "node" | "rust" | "all") => Promise<void>;
   scanRefactor: (projectPath: string) => Promise<void>;
   scanDocStaleness: (projectPath: string) => Promise<void>;
   scanAll: (projectPath: string) => Promise<void>;
@@ -72,6 +73,16 @@ export const useMaintenanceStore = create<MaintenanceState>((set, get) => ({
     set({ coverageStatus: "loading", error: null });
     try {
       const report = await ipc.maintenanceRunCoverage(projectPath);
+      set({ coverageReport: report, coverageStatus: "success" });
+    } catch (e) {
+      set({ coverageStatus: "error", error: String(e) });
+    }
+  },
+
+  generateCoverage: async (projectPath, target = "node") => {
+    set({ coverageStatus: "loading", error: null });
+    try {
+      const report = await ipc.maintenanceGenerateCoverage(projectPath, target);
       set({ coverageReport: report, coverageStatus: "success" });
     } catch (e) {
       set({ coverageStatus: "error", error: String(e) });

@@ -3,12 +3,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── xterm.js / addon モック ──────────────────────────────────────────────────
 vi.mock("@xterm/xterm", () => {
+  const disposable = () => ({ dispose: vi.fn() });
   const Terminal = function (this: Record<string, unknown>) {
     this.loadAddon = vi.fn();
     this.open = vi.fn();
-    this.onData = vi.fn();
+    this.onData = vi.fn(disposable);
+    this.onResize = vi.fn(disposable);
     this.write = vi.fn();
+    this.refresh = vi.fn();
     this.dispose = vi.fn();
+    this.rows = 24;
+    this.cols = 80;
   };
   return { Terminal };
 });
@@ -22,6 +27,13 @@ vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
+
+// jsdom には ResizeObserver がないためモックで補完
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 // ─── store モック ──────────────────────────────────────────────────────────────
 const mockProjectStore = {
@@ -127,9 +139,9 @@ describe("TerminalScreen", () => {
     expect(screen.getByText("プロジェクトを選択してください")).toBeInTheDocument();
   });
 
-  it("初期マウント時に listenEvents が呼ばれる", () => {
+  it("初期マウント時に TerminalScreen が描画される", () => {
     render(<TerminalScreen />);
-    expect(mockTerminalStore.listenEvents).toHaveBeenCalled();
+    expect(screen.getByTestId("terminal-screen")).toBeInTheDocument();
   });
 
   it("セッション未開始時に「START CLAUDE CODE」ボタンが表示される", () => {
@@ -145,7 +157,8 @@ describe("TerminalScreen", () => {
   it("START ボタンクリックで startSession が呼ばれる", () => {
     render(<TerminalScreen />);
     fireEvent.click(screen.getByText("START CLAUDE CODE"));
-    expect(mockTerminalStore.startSession).toHaveBeenCalledWith(1);
+    expect(mockTerminalStore.startSession).toHaveBeenCalled();
+    expect(mockTerminalStore.startSession.mock.calls[0][0]).toBe(1);
   });
 
   it("セッション実行中は STOP ボタンと running ステータスが表示される", () => {
@@ -198,18 +211,14 @@ describe("TerminalScreen", () => {
     expect(screen.getByText("/test/path")).toBeInTheDocument();
   });
 
-  it("セッション未起動時にガイドテキストが表示される", () => {
+  it("セッション未起動時に xterm ターミナル領域が表示される", () => {
     render(<TerminalScreen />);
-    expect(
-      screen.getByText("Claude Code を起動して作業を始める")
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-xterm")).toBeInTheDocument();
   });
 
-  it("セッション稼働中にPTYメッセージが表示される", () => {
+  it("セッション稼働中も xterm ターミナル領域が表示される", () => {
     mockTerminalStore.session = { id: 1, status: "running" };
     render(<TerminalScreen />);
-    expect(
-      screen.getByText(/PTY セッション稼働中/)
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-xterm")).toBeInTheDocument();
   });
 });

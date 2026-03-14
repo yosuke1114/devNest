@@ -7,6 +7,12 @@ import { buildMockIpcScript } from "../setup/mock-ipc";
 async function gotoIssues(page: import("@playwright/test").Page) {
   await page.addInitScript(buildMockIpcScript());
   await page.goto("/");
+  // GitHub アコーディオンを展開してから Issues をクリック
+  const githubBtn = page.locator("aside").getByRole("button", { name: "GitHub" }).first();
+  if (await githubBtn.isVisible({ timeout: 3000 })) {
+    await githubBtn.click();
+    await page.waitForTimeout(150);
+  }
   await page.locator("aside").getByRole("button", { name: "Issues", exact: true }).click();
   await page.waitForTimeout(200);
 }

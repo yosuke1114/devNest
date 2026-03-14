@@ -38,6 +38,17 @@ pub async fn github_auth_start(
         ));
     }
 
+    // 前回のコールバックサーバータスクを中断（ポート解放）
+    {
+        let mut guard = state.oauth_task.lock()
+            .map_err(|_| AppError::Internal("oauth_task lock poisoned".to_string()))?;
+        if let Some(handle) = guard.take() {
+            handle.abort();
+        }
+    }
+    // ポートが解放されるまで少し待つ
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
     let url = oauth::auth_url(&client_id);
 
     app.opener()
@@ -45,7 +56,8 @@ pub async fn github_auth_start(
         .map_err(|e| AppError::Internal(format!("ブラウザ起動失敗: {}", e)))?;
 
     let state_db = state.db.clone();
-    tokio::spawn(async move {
+    let oauth_task_arc = state.oauth_task.clone();
+    let handle = tokio::spawn(async move {
         let (tx, rx) = tokio::sync::oneshot::channel::<String>();
 
         if let Err(e) = oauth::wait_for_callback(tx).await {
@@ -74,8 +86,28 @@ pub async fn github_auth_start(
         let client = GitHubClient::new("", "", "");
         match client.exchange_code(&code, &client_id, &secret).await {
             Ok(token) => {
-                match keychain::set_token(project_id, &token) {
-                    Ok(()) => {
+                // Keychain は blocking API のため spawn_blocking でラップ
+                let token_clone = token.clone();
+                let keychain_result = tokio::task::spawn_blocking(move || {
+                    keychain::set_token(project_id, &token_clone)
+                }).await;
+
+                // DB にもバックアップ保存（Keychain が失敗した場合のフォールバック）
+                let key = format!("github.token.{}", project_id);
+                let now = chrono::Utc::now().to_rfc3339();
+                let _ = sqlx::query(
+                    "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+                )
+                .bind(&key)
+                .bind(serde_json::json!(token).to_string())
+                .bind(&now)
+                .execute(&state_db)
+                .await;
+
+                match keychain_result {
+                    Ok(Ok(())) | Ok(Err(_)) => {
+                        // Keychain 成否に関わらず DB に保存済みなので成功扱い
                         let _ = app.emit("github_auth_done", serde_json::json!({
                             "success": true
                         }));
@@ -83,7 +115,7 @@ pub async fn github_auth_start(
                     Err(e) => {
                         let _ = app.emit("github_auth_done", serde_json::json!({
                             "success": false,
-                            "error": e.to_string()
+                            "error": format!("spawn_blocking 失敗: {}", e)
                         }));
                     }
                 }
@@ -95,7 +127,18 @@ pub async fn github_auth_start(
                 }));
             }
         }
+        // タスク完了後にハンドルをクリア
+        if let Ok(mut g) = oauth_task_arc.lock() {
+            *g = None;
+        }
     });
+
+    // ハンドルを AppState に保存（次回の abort 用）
+    {
+        let mut guard = state.oauth_task.lock()
+            .map_err(|_| AppError::Internal("oauth_task lock poisoned".to_string()))?;
+        *guard = Some(handle.abort_handle());
+    }
 
     Ok(())
 }
@@ -122,14 +165,40 @@ pub async fn github_auth_complete(
     Ok(())
 }
 
+/// DB から GitHub トークンを取得する（Keychain フォールバック用）
+async fn get_token_from_db(db: &sqlx::SqlitePool, project_id: i64) -> Option<String> {
+    let key = format!("github.token.{}", project_id);
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT value FROM app_settings WHERE key = ?"
+    )
+    .bind(&key)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    row.map(|(v,)| v.trim_matches('"').to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// 現在の GitHub 認証状態を返す。
 #[tauri::command]
 pub async fn github_auth_status(
     project_id: i64,
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
 ) -> std::result::Result<crate::services::github::GitHubAuthStatus, AppError> {
-    match keychain::get_token(project_id) {
-        Ok(Some(token)) => {
+    // Keychain を試み、失敗したら DB フォールバック
+    let token_opt = tokio::task::spawn_blocking(move || keychain::get_token(project_id))
+        .await
+        .ok()
+        .and_then(|r| r.ok())
+        .flatten();
+    let token_opt = if token_opt.is_some() {
+        token_opt
+    } else {
+        get_token_from_db(&state.db, project_id).await
+    };
+    match token_opt {
+        Some(token) => {
             let client = GitHubClient::new(&token, "", "");
             match client.get_user().await {
                 Ok(user) => Ok(crate::services::github::GitHubAuthStatus {
@@ -152,7 +221,7 @@ pub async fn github_auth_status(
     }
 }
 
-/// GitHub 認証を取り消す（Keychain からトークン削除）。
+/// GitHub 認証を取り消す（Keychain + DB からトークン削除）。
 /// ポーリングを停止して孤立タスクを防ぐ。
 #[tauri::command]
 pub async fn github_auth_revoke(
@@ -161,7 +230,15 @@ pub async fn github_auth_revoke(
 ) -> std::result::Result<(), AppError> {
     // 認証解除時はポーリングを停止（孤立タスク防止）
     state.polling_active.store(false, std::sync::atomic::Ordering::Relaxed);
-    keychain::delete_token(project_id).map_err(|e| AppError::Keychain(e.to_string()))
+    // Keychain から削除（エラーは無視）
+    let _ = keychain::delete_token(project_id);
+    // DB からも削除
+    let key = format!("github.token.{}", project_id);
+    let _ = sqlx::query("DELETE FROM app_settings WHERE key = ?")
+        .bind(&key)
+        .execute(&state.db)
+        .await;
+    Ok(())
 }
 
 #[cfg(test)]

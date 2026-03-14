@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { IconGitMerge, IconX } from "@tabler/icons-react";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
+import { Label } from "../ui/label";
 import type { AsyncStatus } from "../../types";
 
 interface PRCreateModalProps {
@@ -27,63 +31,59 @@ export function PRCreateModal({
   return (
     <div
       data-testid="pr-create-modal"
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ background: "rgba(0,0,0,0.7)" }}
+      className="fixed inset-0 flex items-center justify-center z-50 bg-black/80"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-gray-900 border border-white/20 rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4">
+      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-white">Create Pull Request</div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300">
+          <div className="text-sm font-semibold text-foreground">Create Pull Request</div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
             <IconX size={16} />
-          </button>
+          </Button>
         </div>
         <div className="space-y-1">
-          <div className="text-xs text-gray-400">Branch</div>
-          <div className="px-3 py-2 rounded bg-white/5 text-xs font-mono text-gray-300">
+          <div className="text-xs text-muted-foreground">Branch</div>
+          <div className="px-3 py-2 rounded-md bg-secondary text-xs font-mono text-secondary-foreground">
             {branchName}
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-gray-400" htmlFor="pr-title">
+          <Label htmlFor="pr-title" className="text-xs text-muted-foreground">
             Title
-          </label>
-          <input
+          </Label>
+          <Input
             id="pr-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-purple-500"
+            className="text-sm"
           />
         </div>
         <div className="space-y-1">
-          <div className="text-xs text-gray-400">Description (optional)</div>
-          <textarea
+          <div className="text-xs text-muted-foreground">Description (optional)</div>
+          <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-gray-200 resize-none h-24 focus:outline-none focus:border-purple-500"
+            className="text-sm resize-none h-24"
             placeholder="What does this PR do?"
           />
         </div>
         {error && createStatus === "error" && (
-          <div className="text-xs text-red-400">{error}</div>
+          <div className="text-xs text-destructive">{error}</div>
         )}
         <div className="flex gap-2 justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded text-xs text-gray-400 hover:bg-white/10"
-          >
+          <Button variant="ghost" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            size="sm"
             onClick={handleCreate}
             disabled={!title.trim() || createStatus === "loading"}
-            className="flex items-center gap-1.5 px-4 py-2 rounded text-xs bg-purple-700 hover:bg-purple-600 text-white disabled:opacity-50"
           >
             <IconGitMerge size={12} />
             {createStatus === "loading" ? "Creating…" : "Create PR"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

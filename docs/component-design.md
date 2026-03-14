@@ -1,3 +1,23 @@
+---
+title: "コンポーネント設計"
+doc_type: module_structure
+version: "1.0.0"
+last_synced_commit: null
+status: superseded
+
+> **注意**: このドキュメントは `docs/08-ui-component-design.md` に置き換えられました。
+> 最新の UI コンポーネント設計は 08-ui-component-design.md を参照してください（2026-03-14 実装完了）。
+mapping:
+  sources:
+    - path: "src/components/"
+      scope: directory
+      description: "全 React コンポーネント"
+    - path: "src/screens/"
+      scope: directory
+      description: "画面コンポーネント"
+tags: [frontend, react, components]
+---
+
 # DevNest — 画面別コンポーネント設計書
 
 **バージョン**: 2.0

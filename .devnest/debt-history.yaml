@@ -1,0 +1,7 @@
+snapshots:
+- date: 2026-03-13
+  total_score: 20
+  items_count: 18
+  by_category:
+    TodoFixme: 6
+    LargeFile: 12
