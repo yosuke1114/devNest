@@ -4,6 +4,7 @@ pub mod analytics;
 pub mod collaboration;
 pub mod conflict;
 pub mod doc_mapping;
+pub mod swarm;
 pub mod document;
 pub mod maintenance;
 pub mod file_viewer;
@@ -114,6 +115,7 @@ macro_rules! all_commands {
             commands::maintenance::maintenance_scan_dependencies,
             commands::maintenance::maintenance_scan_tech_debt,
             commands::maintenance::maintenance_run_coverage,
+            commands::maintenance::maintenance_generate_coverage,
             commands::maintenance::maintenance_refactor_candidates,
             // Doc Mapping
             commands::doc_mapping::rebuild_doc_index,
@@ -152,6 +154,12 @@ macro_rules! all_commands {
             commands::collaboration::knowledge_search,
             commands::collaboration::knowledge_add,
             commands::collaboration::knowledge_add_comment,
+            // Phase 11: Swarm
+            commands::swarm::spawn_worker,
+            commands::swarm::kill_worker,
+            commands::swarm::write_to_worker,
+            commands::swarm::resize_worker,
+            commands::swarm::list_workers,
         ]
     };
 }
