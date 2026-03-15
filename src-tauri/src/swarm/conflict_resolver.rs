@@ -50,7 +50,7 @@ fn parse_conflict_content(content: &str, file_path: &str) -> Vec<ConflictBlock> 
             let mut in_ours = true;
 
             // context_before: 最大5行前まで
-            let ctx_start = if i >= 5 { i - 5 } else { 0 };
+            let ctx_start = i.saturating_sub(5);
             let context_before = lines[ctx_start..i].join("\n");
 
             i += 1;

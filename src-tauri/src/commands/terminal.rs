@@ -48,7 +48,6 @@ pub async fn terminal_session_start(
     let pty_arc = state.pty_session.clone();
     let db_clone = state.db.clone();
     let local_path = project.local_path.clone();
-    let prompt_summary = prompt_summary;
     let tokio_handle = tokio::runtime::Handle::current();
 
     std::thread::spawn(move || {

@@ -173,6 +173,12 @@ macro_rules! all_commands {
             commands::swarm::orchestrator_notify_worker_done,
             commands::swarm::orchestrator_merge_all,
             commands::swarm::orchestrator_cancel,
+            commands::swarm::orchestrator_get_result,
+            commands::swarm::orchestrator_get_conflicts,
+            commands::swarm::orchestrator_resolve_conflict,
+            commands::swarm::orchestrator_commit_resolution,
+            commands::swarm::orchestrator_ai_resolve_conflict,
+            commands::swarm::get_system_resources,
         ]
     };
 }

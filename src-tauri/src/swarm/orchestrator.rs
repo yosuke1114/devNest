@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use super::git_branch::{create_worker_branch, current_branch, merge_worker_branch, MergeOutcome};
+use super::resource_monitor::can_spawn_worker;
 use super::result_aggregator::{AggregatedResult, ResultAggregator};
 use super::subtask::SubTask;
 use super::worker::{WorkerConfig, WorkerKind, WorkerMode, WorkerStatus};
@@ -22,6 +23,29 @@ pub struct SwarmSettings {
     pub max_workers: u32,
     pub timeout_minutes: u32,
     pub branch_prefix: String,
+    /// Feature 12-4: デフォルト Shell（"zsh" / "bash" / "fish" / カスタムパス）
+    #[serde(default = "default_shell")]
+    pub default_shell: String,
+    /// Feature 12-4: プロンプトパターン（| 区切り、例 "$|%|❯|>"）
+    #[serde(default = "default_prompt_patterns")]
+    pub prompt_patterns: String,
+    /// Feature 12-4: --dangerously-skip-permissions フラグ
+    #[serde(default)]
+    pub claude_skip_permissions: bool,
+    /// Feature 12-4: --no-stream フラグ
+    #[serde(default)]
+    pub claude_no_stream: bool,
+    /// Feature 12-4: 信頼度 High のコンフリクトを自動承認
+    #[serde(default)]
+    pub auto_approve_high_confidence: bool,
+}
+
+fn default_shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "zsh".to_string())
+}
+
+fn default_prompt_patterns() -> String {
+    "$|%|❯|>|#|→".to_string()
 }
 
 impl Default for SwarmSettings {
@@ -30,6 +54,11 @@ impl Default for SwarmSettings {
             max_workers: 4,
             timeout_minutes: 30,
             branch_prefix: "swarm/worker-".to_string(),
+            default_shell: default_shell(),
+            prompt_patterns: default_prompt_patterns(),
+            claude_skip_permissions: false,
+            claude_no_stream: false,
+            auto_approve_high_confidence: false,
         }
     }
 }
@@ -95,6 +124,7 @@ pub struct OrchestratorRun {
     pub merge_results: Vec<MergeOutcome>,
     pub total: u32,
     pub done_count: u32,
+    pub settings: SwarmSettings,
 }
 
 // ─── Orchestrator ───────────────────────────────────────────────
@@ -165,7 +195,7 @@ impl Orchestrator {
             if assign.execution_state == ExecutionState::Ready
                 && running_count < settings.max_workers as usize
             {
-                let config = make_worker_config(assign, &repo, &run_id);
+                let config = make_worker_config(assign, &repo, &run_id, &settings);
                 to_spawn.push((idx, config));
                 running_count += 1;
             }
@@ -197,6 +227,7 @@ impl Orchestrator {
             merge_results: vec![],
             total,
             done_count: 0,
+            settings: settings.clone(),
         };
 
         self.current_run = Some(run.clone());
@@ -234,7 +265,7 @@ impl Orchestrator {
                 assign.retry_count += 1;
                 assign.status = WorkerStatus::Retrying;
                 assign.execution_state = ExecutionState::Running;
-                let config = make_worker_config(assign, &PathBuf::from(&run.project_path), &run.run_id);
+                let config = make_worker_config(assign, &PathBuf::from(&run.project_path), &run.run_id, &run.settings);
                 spawn_requests.push(SpawnRequest {
                     worker_config: config,
                     task_id: assign.task.id,
@@ -288,9 +319,11 @@ impl Orchestrator {
                     continue;
                 }
                 let all_deps_done = assign.task.depends_on.iter().all(|dep| done_ids.contains(dep));
-                if all_deps_done && running_count + new_spawns.len() < 8 {
-                    // max_workers 設定を参照したいが、ここでは安全な上限8を使用
-                    let config = make_worker_config(assign, &repo, &run_id);
+                if all_deps_done
+                    && running_count + new_spawns.len() < run.settings.max_workers as usize
+                    && can_spawn_worker()
+                {
+                    let config = make_worker_config(assign, &repo, &run_id, &run.settings);
                     new_spawns.push((idx, config));
                 }
             }
@@ -440,12 +473,25 @@ impl Orchestrator {
 // ─── ヘルパー関数 ───────────────────────────────────────────────
 
 /// WorkerAssignment から WorkerConfig を生成する
-fn make_worker_config(assign: &WorkerAssignment, repo: &PathBuf, run_id: &str) -> WorkerConfig {
+fn make_worker_config(
+    assign: &WorkerAssignment,
+    repo: &PathBuf,
+    run_id: &str,
+    settings: &SwarmSettings,
+) -> WorkerConfig {
     let mut metadata = HashMap::new();
     metadata.insert("task_instruction".to_string(), assign.task.instruction.clone());
     metadata.insert("orchestration_run_id".to_string(), run_id.to_string());
     metadata.insert("branch_name".to_string(), assign.branch_name.clone());
     metadata.insert("task_id".to_string(), assign.task.id.to_string());
+    // Feature 12-4: Shell / Claude Code 設定を metadata 経由で manager に伝達
+    metadata.insert("default_shell".to_string(), settings.default_shell.clone());
+    if settings.claude_skip_permissions {
+        metadata.insert("claude_flag_skip_permissions".to_string(), "1".to_string());
+    }
+    if settings.claude_no_stream {
+        metadata.insert("claude_flag_no_stream".to_string(), "1".to_string());
+    }
 
     WorkerConfig {
         kind: WorkerKind::ClaudeCode,
@@ -477,16 +523,6 @@ fn skip_dependents(run: &mut OrchestratorRun, failed_task_id: u32) {
     }
 }
 
-// ─── バックグラウンドモニター ──────────────────────────────────
-
-fn start_monitor(
-    _run_id: String,
-    _worker_manager: SharedWorkerManager,
-    _app: AppHandle,
-) {
-    // Frontend の orchestrator_notify_worker_done が主系
-    // このモニターはフォールバック用（現在は reserved）
-}
 
 #[cfg(test)]
 mod tests {
@@ -571,6 +607,7 @@ mod tests {
             merge_results: vec![],
             total: 3,
             done_count: 0,
+            settings: SwarmSettings::default(),
         };
 
         skip_dependents(&mut run, 1);

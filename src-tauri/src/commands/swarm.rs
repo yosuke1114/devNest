@@ -2,6 +2,8 @@ use tauri::State;
 
 use crate::state::AppState;
 use crate::swarm::{
+    ai_resolver::{AiConflictResolver, AiResolution},
+    resource_monitor::{get_resource_usage, ResourceUsage},
     conflict_resolver::{self, commit_conflict_resolution, parse_conflict_blocks, ConflictBlock, ConflictResolution},
     orchestrator::{OrchestratorRun, SwarmSettings},
     result_aggregator::AggregatedResult,
@@ -155,6 +157,30 @@ pub async fn orchestrator_get_result(
     Ok(orch.get_aggregated_result())
 }
 
+/// コンフリクトブロックを Claude API に渡して AI 解決案を生成する（F-12-06）
+#[tauri::command]
+pub async fn orchestrator_ai_resolve_conflict(
+    file_path: String,
+    start_line: u32,
+    state: State<'_, AppState>,
+) -> Result<AiResolution, String> {
+    let api_key = load_anthropic_key(&state).await?;
+
+    // ConflictBlock を取得
+    let path = std::path::Path::new(&file_path);
+    let blocks = parse_conflict_blocks(path);
+    let block = blocks
+        .iter()
+        .find(|b| b.start_line == start_line)
+        .ok_or_else(|| format!("コンフリクトブロック (行 {}) が見つかりません", start_line))?;
+
+    let resolver = AiConflictResolver::new(&api_key);
+    resolver
+        .resolve(&file_path, &block.ours, &block.theirs, &block.context_before)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// 指定ファイルのコンフリクトブロックを取得する
 #[tauri::command]
 pub async fn orchestrator_get_conflicts(
@@ -207,6 +233,14 @@ pub async fn orchestrator_cancel(
     let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
     orch.cancel(manager.inner(), &app);
     Ok(())
+}
+
+/// CPU・メモリ使用率を返す (F-12-17, F-12-19)
+#[tauri::command]
+pub async fn get_system_resources() -> Result<ResourceUsage, String> {
+    tokio::task::spawn_blocking(get_resource_usage)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn load_anthropic_key(state: &State<'_, AppState>) -> Result<String, String> {

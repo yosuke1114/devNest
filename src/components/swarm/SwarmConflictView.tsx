@@ -14,6 +14,12 @@ interface ConflictBlock {
   startLine: number;
 }
 
+interface AiResolution {
+  resolvedCode: string;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+}
+
 interface SwarmConflictViewProps {
   outcome: MergeOutcome;
   projectPath: string;
@@ -31,6 +37,8 @@ export function SwarmConflictView({
   const [currentIdx, setCurrentIdx] = useState(0);
   const [loading, setLoading] = useState(true);
   const [committing, setCommitting] = useState(false);
+  const [aiResolving, setAiResolving] = useState(false);
+  const [aiResolution, setAiResolution] = useState<AiResolution | null>(null);
   const mergeContainerRef = useRef<HTMLDivElement>(null);
   const mergeViewRef = useRef<MergeView | null>(null);
 
@@ -84,7 +92,25 @@ export function SwarmConflictView({
     };
   }, [blocks, currentIdx, loading]);
 
-  const handleResolve = async (resolution: string) => {
+  const handleAiResolve = async () => {
+    if (blocks.length === 0) return;
+    const block = blocks[currentIdx];
+    setAiResolving(true);
+    setAiResolution(null);
+    try {
+      const result = await invoke<AiResolution>("orchestrator_ai_resolve_conflict", {
+        filePath: block.filePath,
+        startLine: block.startLine,
+      });
+      setAiResolution(result);
+    } catch (e) {
+      console.error("ai_resolve_conflict failed:", e);
+    } finally {
+      setAiResolving(false);
+    }
+  };
+
+  const handleResolve = async (resolution: string, manualCode?: string) => {
     if (blocks.length === 0) return;
     const block = blocks[currentIdx];
 
@@ -93,10 +119,11 @@ export function SwarmConflictView({
         filePath: block.filePath,
         startLine: block.startLine,
         resolution: resolution === "manual"
-          ? { Manual: mergeViewRef.current?.b.state.doc.toString() ?? block.theirs }
+          ? { Manual: manualCode ?? mergeViewRef.current?.b.state.doc.toString() ?? block.theirs }
           : { [resolution]: null },
       });
 
+      setAiResolution(null);
       if (currentIdx + 1 < blocks.length) {
         setCurrentIdx(currentIdx + 1);
       } else {
@@ -174,7 +201,7 @@ export function SwarmConflictView({
         </div>
 
         {/* 解決ボタン */}
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
           <button
             data-testid="take-ours-button"
             onClick={() => handleResolve("TakeOurs")}
@@ -203,7 +230,47 @@ export function SwarmConflictView({
           >
             手動編集
           </button>
+          <button
+            data-testid="ai-resolve-button"
+            onClick={handleAiResolve}
+            disabled={aiResolving}
+            style={{ ...btnStyle, background: "#2a1a4a", opacity: aiResolving ? 0.6 : 1 }}
+          >
+            {aiResolving ? "⏳ 解析中..." : "🤖 AI解決"}
+          </button>
         </div>
+
+        {/* AI 解決プレビュー */}
+        {aiResolution && (
+          <div data-testid="ai-resolution-panel" style={{ marginTop: 12, border: "1px solid #3a2a5a", borderRadius: 6, padding: 12, background: "#0d1117" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#c9d1d9" }}>🤖 AI 解決案</span>
+              <span
+                data-testid="confidence-badge"
+                style={{
+                  fontSize: 10,
+                  padding: "2px 6px",
+                  borderRadius: 10,
+                  background: aiResolution.confidence === "high" ? "#1a4a1a" : aiResolution.confidence === "medium" ? "#3a3a1a" : "#4a1a1a",
+                  color: aiResolution.confidence === "high" ? "#68d391" : aiResolution.confidence === "medium" ? "#f6e05e" : "#fc8181",
+                }}
+              >
+                {aiResolution.confidence === "high" ? "🟢 High" : aiResolution.confidence === "medium" ? "🟡 Medium" : "🔴 Low"}
+              </span>
+            </div>
+            <div style={{ color: "#8b949e", fontSize: 11, marginBottom: 8 }}>{aiResolution.reason}</div>
+            <pre style={{ background: "#161b22", border: "1px solid #30363d", borderRadius: 4, padding: 8, fontSize: 11, color: "#e6edf3", overflow: "auto", maxHeight: 150, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+              {aiResolution.resolvedCode}
+            </pre>
+            <button
+              data-testid="ai-approve-button"
+              onClick={() => handleResolve("manual", aiResolution.resolvedCode)}
+              style={{ ...btnStyle, marginTop: 8, background: "#1a4a7a", width: "100%" }}
+            >
+              ✓ 承認してコミット
+            </button>
+          </div>
+        )}
 
         {committing && (
           <div style={{ color: "#8b949e", textAlign: "center", marginTop: 8, fontSize: 11 }}>
