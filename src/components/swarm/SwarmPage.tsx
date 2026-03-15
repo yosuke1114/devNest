@@ -1,8 +1,22 @@
 import { useProjectStore } from "../../stores/projectStore";
+import { OrchestratorPanel } from "./OrchestratorPanel";
 import { TerminalGrid } from "./TerminalGrid";
+import type { SubTask, SwarmSettings } from "./types";
 
 export function SwarmPage() {
   const currentProject = useProjectStore((s) => s.currentProject);
+  const workingDir = currentProject?.local_path ?? "/";
+
+  const handleRunSubtasks = (tasks: SubTask[], settings: SwarmSettings) => {
+    // TerminalGrid は外部からの batch spawn を受け付ける
+    // pendingSubtasks は TerminalGrid の ref 経由で渡す
+    // → Step 11-D で Orchestrator エンジンと統合予定
+    // 現フェーズでは TerminalGrid に直接 SubTask リストを渡してバッチ起動
+    const event = new CustomEvent("devnest:run-subtasks", {
+      detail: { tasks, settings, workingDir },
+    });
+    window.dispatchEvent(event);
+  };
 
   return (
     <div
@@ -10,7 +24,6 @@ export function SwarmPage() {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        padding: 16,
         background: "#0d1117",
         overflow: "hidden",
       }}
@@ -21,7 +34,8 @@ export function SwarmPage() {
           display: "flex",
           alignItems: "center",
           gap: 10,
-          marginBottom: 16,
+          padding: "10px 16px",
+          borderBottom: "1px solid #21262d",
           flexShrink: 0,
         }}
       >
@@ -45,7 +59,7 @@ export function SwarmPage() {
             padding: "2px 6px",
           }}
         >
-          Phase 11-A
+          Phase 11-C
         </span>
         {currentProject && (
           <span
@@ -61,7 +75,21 @@ export function SwarmPage() {
         )}
       </div>
 
-      <TerminalGrid workingDir={currentProject?.local_path ?? "/"} />
+      {/* メインコンテンツ: 左=Orchestrator / 右=TerminalGrid */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        {/* 左ペイン: Orchestratorパネル（固定幅 280px） */}
+        <div style={{ width: 280, flexShrink: 0, position: "relative" }}>
+          <OrchestratorPanel
+            workingDir={workingDir}
+            onRunSubtasks={handleRunSubtasks}
+          />
+        </div>
+
+        {/* 右ペイン: TerminalGrid */}
+        <div style={{ flex: 1, overflow: "hidden", padding: 12 }}>
+          <TerminalGrid workingDir={workingDir} />
+        </div>
+      </div>
     </div>
   );
 }

@@ -167,6 +167,7 @@ macro_rules! all_commands {
             commands::swarm::write_to_worker,
             commands::swarm::resize_worker,
             commands::swarm::list_workers,
+            commands::swarm::split_task,
         ]
     };
 }

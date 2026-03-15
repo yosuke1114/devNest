@@ -1,6 +1,13 @@
 use tauri::State;
 
-use crate::swarm::{worker::WorkerConfig, worker::WorkerInfo, SharedWorkerManager};
+use crate::state::AppState;
+use crate::swarm::{
+    subtask::{detect_file_conflicts, SplitTaskRequest, SplitTaskResult},
+    task_splitter::TaskSplitter,
+    worker::WorkerConfig,
+    worker::WorkerInfo,
+    SharedWorkerManager,
+};
 
 #[tauri::command]
 pub async fn spawn_worker(
@@ -49,4 +56,46 @@ pub async fn list_workers(
 ) -> Result<Vec<WorkerInfo>, String> {
     let mgr = manager.lock().map_err(|e| e.to_string())?;
     Ok(mgr.list_workers())
+}
+
+/// ユーザープロンプトから SubTask リストを生成する（Claude API 呼び出し）
+#[tauri::command]
+pub async fn split_task(
+    request: SplitTaskRequest,
+    state: State<'_, AppState>,
+) -> Result<SplitTaskResult, String> {
+    let api_key = load_anthropic_key(&state).await?;
+    let splitter = TaskSplitter::new(&api_key);
+    let tasks = splitter
+        .split(&request.prompt, &request.project_path, &request.context_files)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let conflict_warnings = detect_file_conflicts(&tasks);
+
+    Ok(SplitTaskResult {
+        tasks,
+        conflict_warnings,
+    })
+}
+
+async fn load_anthropic_key(state: &State<'_, AppState>) -> Result<String, String> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT value FROM app_settings WHERE key = 'anthropic.api_key'")
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    let key = row
+        .map(|(v,)| v.trim_matches('"').to_string())
+        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+        .unwrap_or_default();
+
+    if key.is_empty() {
+        return Err(
+            "Anthropic API キーが設定されていません。Settings で API キーを設定してください。"
+                .to_string(),
+        );
+    }
+    Ok(key)
 }

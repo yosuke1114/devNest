@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { XtermPane } from "./XtermPane";
-import type { WorkerConfig, WorkerInfo, WorkerStatus } from "./types";
+import type { SubTask, SwarmSettings, WorkerConfig, WorkerInfo, WorkerStatus } from "./types";
 
 const MAX_WORKERS = 8;
 
@@ -13,6 +13,43 @@ interface TerminalGridProps {
 export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // OrchestratorPanel からの batch 実行リクエストを受け取る
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { tasks, settings, workingDir: dir } = (e as CustomEvent<{
+        tasks: SubTask[];
+        settings: SwarmSettings;
+        workingDir: string;
+      }>).detail;
+
+      const limit = Math.min(tasks.length, settings.maxWorkers);
+      const targetTasks = tasks.slice(0, limit);
+
+      targetTasks.forEach(async (task, i) => {
+        if (workers.length + i >= MAX_WORKERS) return;
+        const config: WorkerConfig = {
+          kind: "claudeCode",
+          mode: "batch",
+          label: task.title,
+          workingDir: dir,
+          dependsOn: [],
+          metadata: { task_instruction: task.instruction },
+        };
+        try {
+          const id = await invoke<string>("spawn_worker", { config });
+          const newWorker: WorkerInfo = { id, config, status: "idle" };
+          setWorkers((prev) => [...prev, newWorker]);
+          setActiveId(id);
+        } catch (err) {
+          console.error("batch spawn_worker failed:", err);
+        }
+      });
+    };
+
+    window.addEventListener("devnest:run-subtasks", handler);
+    return () => window.removeEventListener("devnest:run-subtasks", handler);
+  }, [workers.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // worker-status-changed イベントで Worker ステータスをリアルタイム更新
   useEffect(() => {

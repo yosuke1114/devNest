@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::notification::ring::{emit_ring_event, RingEvent, RingUrgency};
 
-use super::worker::{WorkerConfig, WorkerInfo, WorkerKind, WorkerStatus};
+use super::worker::{WorkerConfig, WorkerInfo, WorkerKind, WorkerMode, WorkerStatus};
 
 // Safety: WorkerManager は Arc<Mutex<WorkerManager>> 経由でのみアクセスされる。
 // UnixMasterPty は内部でファイルディスクリプタを保持しており、
@@ -55,11 +55,21 @@ impl WorkerManager {
             })
             .map_err(|e| e.to_string())?;
 
-        // コマンド構築（Interactive: shell を起動）
-        let mut cmd = match config.kind {
-            WorkerKind::Shell | WorkerKind::ClaudeCode => {
-                let shell =
-                    std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        // コマンド構築
+        // Batch + ClaudeCode の場合は `zsh -c 'claude "instruction"'` で起動する
+        let task_instruction = config.metadata.get("task_instruction").cloned();
+        let mut cmd = match (&config.kind, &config.mode, task_instruction) {
+            (WorkerKind::ClaudeCode, WorkerMode::Batch, Some(instruction)) => {
+                let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+                let mut c = CommandBuilder::new(&shell);
+                // 引数内の ' をエスケープしてシェルインジェクションを防止
+                let safe_instr = instruction.replace('\'', "'\\''");
+                c.arg("-c");
+                c.arg(format!("claude '{}'", safe_instr));
+                c
+            }
+            _ => {
+                let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
                 CommandBuilder::new(shell)
             }
         };
