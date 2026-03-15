@@ -18,6 +18,7 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [tasks, setTasks] = useState<SubTask[]>([]);
   const [conflictWarnings, setConflictWarnings] = useState<string[]>([]);
+  const [cycleError, setCycleError] = useState<string | null>(null);
   const [splitting, setSplitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -56,6 +57,7 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
       });
       setTasks(result.tasks);
       setConflictWarnings(result.conflictWarnings);
+      setCycleError(result.cycleError ?? null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -121,6 +123,26 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
         )}
       </div>
 
+      {/* 循環依存エラー */}
+      {cycleError && (
+        <div
+          data-testid="cycle-error"
+          style={{
+            margin: "0 12px",
+            padding: "6px 10px",
+            background: "#2d0a0a",
+            border: "1px solid #fc8181",
+            borderRadius: 4,
+            fontSize: 11,
+            color: "#fc8181",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>🔄 循環依存エラー</div>
+          {cycleError}
+        </div>
+      )}
+
       {/* 競合警告 */}
       {conflictWarnings.length > 0 && (
         <div
@@ -171,12 +193,12 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
           <button
             data-testid="run-button"
             onClick={handleRun}
-            disabled={isStarting}
+            disabled={isStarting || !!cycleError}
             style={{
               ...actionButtonStyle,
               width: "100%",
               background: "#1a7f37",
-              opacity: isStarting ? 0.6 : 1,
+              opacity: isStarting || !!cycleError ? 0.6 : 1,
             }}
           >
             {isStarting ? "🔄 起動中..." : "▶ 実行開始"}
@@ -199,14 +221,28 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
               ✕ キャンセル
             </button>
           </div>
-          {/* Worker 割り当て一覧 */}
+          {/* Worker 割り当て一覧（executionState 対応） */}
           {currentRun.assignments.map((a) => (
-            <div key={a.workerId} style={{ display: "flex", gap: 6, fontSize: 10, color: "#8b949e", marginBottom: 2, fontFamily: "monospace" }}>
-              <span style={{ color: a.status === "done" ? "#68d391" : a.status === "error" ? "#fc8181" : "#f6ad55" }}>
-                {a.status === "done" ? "✓" : a.status === "error" ? "✕" : "●"}
+            <div key={a.workerId || a.task.id} style={{ display: "flex", gap: 6, fontSize: 10, color: "#8b949e", marginBottom: 2, fontFamily: "monospace" }}>
+              <span style={{
+                color: a.executionState === "done" ? "#68d391"
+                  : a.executionState === "error" ? "#fc8181"
+                  : a.executionState === "skipped" ? "#484f58"
+                  : a.executionState === "waiting" ? "#4a5568"
+                  : "#f6ad55"
+              }}>
+                {a.executionState === "done" ? "✓"
+                  : a.executionState === "error" ? "✕"
+                  : a.executionState === "skipped" ? "─"
+                  : a.executionState === "waiting" ? "⏸"
+                  : "●"}
               </span>
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {a.task.title}
+                {a.executionState === "skipped" && <span style={{ color: "#484f58", marginLeft: 4 }}>(スキップ)</span>}
+                {a.executionState === "waiting" && a.task.dependsOn?.length > 0 && (
+                  <span style={{ color: "#4a5568", marginLeft: 4 }}>← Task {a.task.dependsOn.join(",")}</span>
+                )}
               </span>
               <span style={{ color: "#484f58" }}>{a.branchName.split("/").pop()}</span>
             </div>
@@ -281,6 +317,11 @@ function SubTaskCard({ task, index, onDelete, onEditInstruction }: SubTaskCardPr
         <span style={{ flex: 1, color: "#e6edf3", fontSize: 12, fontFamily: "monospace" }}>
           {task.title}
         </span>
+        {task.dependsOn?.length > 0 && (
+          <span style={{ color: "#f6ad55", fontSize: 10 }}>
+            ↳ Task {task.dependsOn.join(",")} 待
+          </span>
+        )}
         {task.files.length > 0 && (
           <span style={{ color: "#58a6ff", fontSize: 10 }}>
             {task.files.length} ファイル

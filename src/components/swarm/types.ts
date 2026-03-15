@@ -3,11 +3,21 @@ export interface SubTask {
   title: string;
   files: string[];
   instruction: string;
+  dependsOn: number[];
 }
+
+export type ExecutionState =
+  | "waiting"
+  | "ready"
+  | "running"
+  | "done"
+  | "error"
+  | "skipped";
 
 export interface SplitTaskResult {
   tasks: SubTask[];
   conflictWarnings: string[];
+  cycleError: string | null;
 }
 
 export interface SwarmSettings {

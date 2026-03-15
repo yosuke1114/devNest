@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { SubTask, SwarmSettings, WorkerStatus } from "../components/swarm/types";
+import type { SubTask, SwarmSettings, WorkerStatus, ExecutionState } from "../components/swarm/types";
 
 // ─── Rust 側と対応する型 ──────────────────────────────────────
 
@@ -10,6 +10,8 @@ export interface WorkerAssignment {
   task: SubTask;
   branchName: string;
   status: WorkerStatus;
+  executionState: ExecutionState;
+  retryCount: number;
 }
 
 export interface MergeOutcome {

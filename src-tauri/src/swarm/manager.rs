@@ -75,8 +75,8 @@ impl WorkerManager {
         };
         cmd.cwd(&config.working_dir);
 
-        // 子プロセス起動
-        let _child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+        // 子プロセス起動（exit code 取得のために child を保持）
+        let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
 
         // 読み取りスレッド起動（PTY出力のストリーミング + プロセス終了検出）
         let mut reader = pair
@@ -116,22 +116,40 @@ impl WorkerManager {
                 }
             }
 
-            // プロセス終了 → Done に更新
+            // exit code を確認して Done/Error を判定
+            let exit_success = child
+                .wait()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            let final_status = if exit_success {
+                WorkerStatus::Done
+            } else {
+                WorkerStatus::Error
+            };
+            let status_str = if exit_success { "done" } else { "error" };
+
             {
                 let mut s = statuses_clone.lock().unwrap();
-                s.insert(worker_id.clone(), WorkerStatus::Done);
+                s.insert(worker_id.clone(), final_status);
             }
             let _ = app_clone.emit(
                 "worker-status-changed",
-                serde_json::json!({ "workerId": worker_id, "status": "done" }),
+                serde_json::json!({ "workerId": worker_id, "status": status_str }),
             );
+
             // Ring notification（F-11-19）
+            let urgency = if exit_success { RingUrgency::Info } else { RingUrgency::Warning };
+            let message = if exit_success {
+                format!("Worker {} が完了しました", worker_id)
+            } else {
+                format!("Worker {} がエラーで終了しました", worker_id)
+            };
             emit_ring_event(&app_clone, RingEvent::AgentAttention {
                 task_id: worker_id.clone(),
                 task_type: "swarm_worker".to_string(),
                 product_id: String::new(),
-                urgency: RingUrgency::Info,
-                message: format!("Worker {} が完了しました", worker_id),
+                urgency,
+                message,
             });
         });
 

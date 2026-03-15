@@ -5,12 +5,13 @@ use crate::services::anthropic::AnthropicClient;
 use super::subtask::SubTask;
 
 const SYSTEM_PROMPT: &str = r#"あなたはタスク分解の専門家です。
-ユーザーのタスクを独立して並列実行可能なサブタスクに分割してください。
+ユーザーのタスクを並列・直列実行可能なサブタスクに分割してください。
 
 制約:
-- 各サブタスクは他のサブタスクの結果に依存しないこと
 - 各サブタスクには対象ファイル/ディレクトリを明記すること
 - 分割数は最大8つまで
+- 独立して実行できるタスクは depends_on を空配列にすること
+- 依存関係がある場合のみ depends_on に依存先タスクの id を列挙すること（循環依存禁止）
 - JSON形式のみで返すこと（説明文や前置きは不要）
 
 出力形式:
@@ -20,7 +21,15 @@ const SYSTEM_PROMPT: &str = r#"あなたはタスク分解の専門家です。
       "id": 1,
       "title": "短いタイトル（20文字以内）",
       "files": ["path/to/file"],
-      "instruction": "Workerへの具体的な指示（claude コマンドに渡すプロンプト）"
+      "instruction": "Workerへの具体的な指示（claude コマンドに渡すプロンプト）",
+      "depends_on": []
+    },
+    {
+      "id": 2,
+      "title": "依存タスクの例",
+      "files": ["path/to/other"],
+      "instruction": "Task 1の結果を踏まえた指示",
+      "depends_on": [1]
     }
   ]
 }"#;
@@ -97,10 +106,16 @@ fn parse_subtasks(raw: &str) -> Result<Vec<SubTask>> {
                 .map(|arr| arr.iter().filter_map(|f| f.as_str().map(|s| s.to_string())).collect())
                 .unwrap_or_default();
 
+            let depends_on = v
+                .get("depends_on")
+                .and_then(|x| x.as_array())
+                .map(|arr| arr.iter().filter_map(|d| d.as_u64().map(|n| n as u32)).collect())
+                .unwrap_or_default();
+
             if instruction.is_empty() {
                 return None;
             }
-            Some(SubTask { id, title, files, instruction })
+            Some(SubTask { id, title, files, instruction, depends_on })
         })
         .collect();
 

@@ -5,7 +5,7 @@ use crate::swarm::{
     conflict_resolver::{self, commit_conflict_resolution, parse_conflict_blocks, ConflictBlock, ConflictResolution},
     orchestrator::{OrchestratorRun, SwarmSettings},
     result_aggregator::AggregatedResult,
-    subtask::{detect_file_conflicts, SplitTaskRequest, SplitTaskResult, SubTask},
+    subtask::{detect_circular_deps, detect_file_conflicts, SplitTaskRequest, SplitTaskResult, SubTask},
     task_splitter::TaskSplitter,
     worker::WorkerConfig,
     worker::WorkerInfo,
@@ -13,6 +13,7 @@ use crate::swarm::{
     SharedOrchestrator,
     SharedWorkerManager,
 };
+use tauri::Emitter;
 
 #[tauri::command]
 pub async fn spawn_worker(
@@ -77,10 +78,12 @@ pub async fn split_task(
         .map_err(|e| e.to_string())?;
 
     let conflict_warnings = detect_file_conflicts(&tasks);
+    let cycle_error = detect_circular_deps(&tasks).err();
 
     Ok(SplitTaskResult {
         tasks,
         conflict_warnings,
+        cycle_error,
     })
 }
 
@@ -108,7 +111,7 @@ pub async fn orchestrator_get_status(
     Ok(orch.current_run.clone())
 }
 
-/// Worker のステータス変化を Orchestrator に通知する（Case A 自動リトライ対応）
+/// Worker のステータス変化を Orchestrator に通知する（Case A リトライ + 依存チェーン解放）
 #[tauri::command]
 pub async fn orchestrator_notify_worker_done(
     worker_id: String,
@@ -117,19 +120,27 @@ pub async fn orchestrator_notify_worker_done(
     manager: State<'_, SharedWorkerManager>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let retry_request = {
+    let spawn_requests = {
         let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
         orch.update_worker_status(&worker_id, status, &app)
     };
 
-    // Case A: リトライが必要なら新 Worker を起動
-    if let Some(req) = retry_request {
+    // SpawnRequest ごとに Worker を起動
+    for req in spawn_requests {
         let new_id = {
             let mut mgr = manager.lock().map_err(|e| e.to_string())?;
             mgr.spawn_worker(req.worker_config, app.clone())?
         };
-        let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
-        orch.update_retry_worker_id(&worker_id, new_id);
+
+        // Orchestrator の worker_id を更新
+        {
+            let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+            orch.update_worker_id_for_task(req.task_id, new_id.clone());
+            // イベント発行
+            if let Some(run) = &orch.current_run {
+                let _ = app.emit("orchestrator-status-changed", run);
+            }
+        }
     }
 
     Ok(())

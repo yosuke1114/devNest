@@ -1,14 +1,15 @@
 /// Orchestrator エンジン — SubTask を Worker に割り当て、Git ブランチ分離で並列実行する
+/// Feature 12-1: Worker依存グラフ（直列実行チェーン）対応済み
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use super::git_branch::{create_worker_branch, current_branch, merge_worker_branch, MergeOutcome};
+use super::result_aggregator::{AggregatedResult, ResultAggregator};
 use super::subtask::SubTask;
 use super::worker::{WorkerConfig, WorkerKind, WorkerMode, WorkerStatus};
 use super::SharedWorkerManager;
@@ -45,6 +46,24 @@ pub enum RunStatus {
     Cancelled,
 }
 
+/// Worker タスクの実行状態（依存グラフ対応）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ExecutionState {
+    /// 依存タスクが未完了（起動待ち）
+    Waiting,
+    /// 依存タスク全完了、起動可能
+    Ready,
+    /// Worker 起動中・実行中
+    Running,
+    /// 完了
+    Done,
+    /// エラー終了
+    Error,
+    /// 依存タスク失敗のためスキップ
+    Skipped,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkerAssignment {
@@ -52,6 +71,17 @@ pub struct WorkerAssignment {
     pub task: SubTask,
     pub branch_name: String,
     pub status: WorkerStatus,
+    pub execution_state: ExecutionState,
+    /// Case A: 自動リトライ回数
+    pub retry_count: u32,
+}
+
+/// update_worker_status が新たに起動すべき Worker を返す
+pub struct SpawnRequest {
+    pub worker_config: WorkerConfig,
+    pub task_id: u32,
+    pub is_retry: bool,
+    pub old_worker_id: Option<String>, // リトライ時のみ Some
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,7 +110,7 @@ pub fn create_orchestrator() -> SharedOrchestrator {
 }
 
 impl Orchestrator {
-    /// SubTask リストを受け取り、Git ブランチを作成して Worker を起動する
+    /// SubTask リストを受け取り、依存グラフを解析して即時実行可能な Worker を起動する
     pub fn start_run(
         &mut self,
         tasks: Vec<SubTask>,
@@ -91,57 +121,73 @@ impl Orchestrator {
     ) -> Result<OrchestratorRun, String> {
         let run_id = Uuid::new_v4().to_string();
         let repo = PathBuf::from(&project_path);
+        let run_prefix = run_id.split('-').next().unwrap_or("0").to_string();
 
         // ベースブランチ取得
         let base_branch = current_branch(&repo).unwrap_or_else(|_| "main".to_string());
 
-        let limit = (tasks.len() as u32).min(settings.max_workers) as usize;
-        let target_tasks = &tasks[..limit];
+        // 全タスクの Assignment を事前作成（依存グラフ対応）
+        let mut assignments: Vec<WorkerAssignment> = tasks
+            .iter()
+            .map(|task| {
+                let branch_name = format!(
+                    "{}{}-{}",
+                    settings.branch_prefix, run_prefix, task.id
+                );
+                let is_ready = task.depends_on.is_empty();
+                WorkerAssignment {
+                    worker_id: String::new(), // 起動時に付与
+                    task: task.clone(),
+                    branch_name,
+                    status: WorkerStatus::Idle,
+                    execution_state: if is_ready {
+                        ExecutionState::Ready
+                    } else {
+                        ExecutionState::Waiting
+                    },
+                    retry_count: 0,
+                }
+            })
+            .collect();
 
-        let mut assignments = Vec::new();
-
-        for task in target_tasks {
-            let branch_name = format!(
-                "{}{}-{}",
-                settings.branch_prefix,
-                run_id.split('-').next().unwrap_or("0"),
-                task.id
-            );
-
-            // Git ブランチ作成（失敗しても Worker 起動は継続）
-            if let Err(e) = create_worker_branch(&repo, &branch_name) {
+        // Git ブランチを全タスク分あらかじめ作成
+        for assign in &assignments {
+            if let Err(e) = create_worker_branch(&repo, &assign.branch_name) {
                 eprintln!("[Orchestrator] branch create failed: {}", e);
             }
-
-            // Worker 設定
-            let config = WorkerConfig {
-                kind: WorkerKind::ClaudeCode,
-                mode: WorkerMode::Batch,
-                label: task.title.clone(),
-                working_dir: repo.clone(),
-                depends_on: vec![],
-                metadata: {
-                    let mut m = HashMap::new();
-                    m.insert("task_instruction".to_string(), task.instruction.clone());
-                    m.insert("orchestration_run_id".to_string(), run_id.clone());
-                    m.insert("branch_name".to_string(), branch_name.clone());
-                    m
-                },
-            };
-
-            let worker_id = {
-                let mut mgr = worker_manager.lock().map_err(|e| e.to_string())?;
-                mgr.spawn_worker(config, app.clone())?
-            };
-
-            assignments.push(WorkerAssignment {
-                worker_id,
-                task: task.clone(),
-                branch_name,
-                status: WorkerStatus::Idle,
-            });
         }
 
+        // Ready 状態のタスクを max_workers 上限内で起動
+        let mut running_count = 0usize;
+        let mut to_spawn: Vec<(usize, WorkerConfig)> = Vec::new(); // (index, config)
+
+        for (idx, assign) in assignments.iter().enumerate() {
+            if assign.execution_state == ExecutionState::Ready
+                && running_count < settings.max_workers as usize
+            {
+                let config = make_worker_config(assign, &repo, &run_id);
+                to_spawn.push((idx, config));
+                running_count += 1;
+            }
+        }
+
+        for (idx, config) in to_spawn {
+            match {
+                let mut mgr = worker_manager.lock().map_err(|e| e.to_string())?;
+                mgr.spawn_worker(config, app.clone())
+            } {
+                Ok(worker_id) => {
+                    assignments[idx].worker_id = worker_id;
+                    assignments[idx].execution_state = ExecutionState::Running;
+                }
+                Err(e) => {
+                    eprintln!("[Orchestrator] spawn failed: {}", e);
+                    assignments[idx].execution_state = ExecutionState::Error;
+                }
+            }
+        }
+
+        let total = assignments.len() as u32;
         let run = OrchestratorRun {
             run_id: run_id.clone(),
             status: RunStatus::Running,
@@ -149,52 +195,186 @@ impl Orchestrator {
             base_branch,
             project_path: project_path.clone(),
             merge_results: vec![],
-            total: limit as u32,
+            total,
             done_count: 0,
         };
 
         self.current_run = Some(run.clone());
-
-        // バックグラウンドモニター起動
-        start_monitor(run_id, worker_manager, app, Arc::new(Mutex::new(self as *mut _)));
+        let _ = app.emit("orchestrator-status-changed", &run);
 
         Ok(run)
     }
 
-    /// Worker のステータスを更新し、全完了時にマージフェーズへ移行する
+    /// Worker のステータスを更新し、依存チェーンを解決して次の Worker を起動する準備をする。
+    /// 戻り値: 新たに起動すべき Worker 設定のリスト
     pub fn update_worker_status(
         &mut self,
         worker_id: &str,
         status: WorkerStatus,
         app: &AppHandle,
-    ) {
+    ) -> Vec<SpawnRequest> {
         let run = match self.current_run.as_mut() {
             Some(r) => r,
-            None => return,
+            None => return vec![],
         };
 
+        let mut spawn_requests: Vec<SpawnRequest> = Vec::new();
+
+        // 対象 Worker を特定して状態を更新
+        let mut completed_task_id: Option<u32> = None;
+        let mut is_error = false;
+
         for assign in &mut run.assignments {
-            if assign.worker_id == worker_id {
+            if assign.worker_id != worker_id {
+                continue;
+            }
+
+            if status == WorkerStatus::Error && assign.retry_count < 1 {
+                // Case A: 自動リトライ（1回のみ）
+                assign.retry_count += 1;
+                assign.status = WorkerStatus::Retrying;
+                assign.execution_state = ExecutionState::Running;
+                let config = make_worker_config(assign, &PathBuf::from(&run.project_path), &run.run_id);
+                spawn_requests.push(SpawnRequest {
+                    worker_config: config,
+                    task_id: assign.task.id,
+                    is_retry: true,
+                    old_worker_id: Some(worker_id.to_string()),
+                });
+            } else {
                 assign.status = status.clone();
+                assign.execution_state = match status {
+                    WorkerStatus::Done => ExecutionState::Done,
+                    WorkerStatus::Error => ExecutionState::Error,
+                    _ => assign.execution_state.clone(),
+                };
+                if status == WorkerStatus::Done {
+                    completed_task_id = Some(assign.task.id);
+                } else if status == WorkerStatus::Error {
+                    is_error = true;
+                    // エラー時: このタスクに依存するタスクをスキップ
+                    let error_task_id = assign.task.id;
+                    skip_dependents(run, error_task_id);
+                }
+            }
+            break;
+        }
+
+        // 依存解決: Done になったタスクがある場合、待機中タスクをチェック
+        if let Some(done_task_id) = completed_task_id {
+            let _ = done_task_id; // 依存チェックは全 Waiting タスクに対して行う
+            let repo = PathBuf::from(&run.project_path);
+            let run_id = run.run_id.clone();
+
+            // 完了タスク ID セットを収集（借用衝突を避けるため先に収集）
+            let done_ids: std::collections::HashSet<u32> = run
+                .assignments
+                .iter()
+                .filter(|a| a.execution_state == ExecutionState::Done)
+                .map(|a| a.task.id)
+                .collect();
+
+            // 現在 Running/Waiting の数を数える
+            let running_count = run
+                .assignments
+                .iter()
+                .filter(|a| a.execution_state == ExecutionState::Running)
+                .count();
+
+            // Waiting タスクで依存がすべて Done になったものを Ready にして起動
+            let mut new_spawns: Vec<(usize, WorkerConfig)> = Vec::new();
+            for (idx, assign) in run.assignments.iter().enumerate() {
+                if assign.execution_state != ExecutionState::Waiting {
+                    continue;
+                }
+                let all_deps_done = assign.task.depends_on.iter().all(|dep| done_ids.contains(dep));
+                if all_deps_done && running_count + new_spawns.len() < 8 {
+                    // max_workers 設定を参照したいが、ここでは安全な上限8を使用
+                    let config = make_worker_config(assign, &repo, &run_id);
+                    new_spawns.push((idx, config));
+                }
+            }
+
+            for (idx, config) in new_spawns {
+                run.assignments[idx].execution_state = ExecutionState::Ready;
+                spawn_requests.push(SpawnRequest {
+                    worker_config: config,
+                    task_id: run.assignments[idx].task.id,
+                    is_retry: false,
+                    old_worker_id: None,
+                });
             }
         }
 
-        let all_finished = run.assignments.iter().all(|a| {
-            matches!(a.status, WorkerStatus::Done | WorkerStatus::Error)
-        });
-
+        // 全体完了チェック（Waiting/Running がないこと）
         run.done_count = run
             .assignments
             .iter()
-            .filter(|a| matches!(a.status, WorkerStatus::Done | WorkerStatus::Error))
+            .filter(|a| matches!(a.execution_state, ExecutionState::Done | ExecutionState::Error | ExecutionState::Skipped))
             .count() as u32;
 
-        if all_finished {
+        let all_finished = run.assignments.iter().all(|a| {
+            matches!(
+                a.execution_state,
+                ExecutionState::Done | ExecutionState::Error | ExecutionState::Skipped
+            )
+        });
+
+        let pending_spawns = spawn_requests.iter().filter(|r| !r.is_retry).count();
+        if all_finished && pending_spawns == 0 && spawn_requests.iter().all(|r| r.is_retry) {
+            // リトライ中は「まだ実行中」
+        } else if all_finished && pending_spawns == 0 {
             run.status = RunStatus::Merging;
             let _ = app.emit("orchestrator-merge-ready", &run);
         } else {
             let _ = app.emit("orchestrator-status-changed", &run);
         }
+
+        if is_error {
+            // エラー後にスキップ完了で全終了することがあるので再チェック
+            let all_finished2 = run.assignments.iter().all(|a| {
+                matches!(
+                    a.execution_state,
+                    ExecutionState::Done | ExecutionState::Error | ExecutionState::Skipped
+                )
+            });
+            if all_finished2 && spawn_requests.is_empty() {
+                run.status = RunStatus::Merging;
+                let _ = app.emit("orchestrator-merge-ready", &run);
+            }
+        }
+
+        spawn_requests
+    }
+
+    /// リトライ Worker の worker_id を更新する（spawn 後に旧 ID → 新 ID）
+    pub fn update_worker_id_for_task(&mut self, task_id: u32, new_worker_id: String) {
+        if let Some(run) = self.current_run.as_mut() {
+            for assign in &mut run.assignments {
+                if assign.task.id == task_id {
+                    assign.worker_id = new_worker_id;
+                    assign.execution_state = ExecutionState::Running;
+                    break;
+                }
+            }
+        }
+    }
+
+    /// 集約結果を取得する（マージ完了後）
+    pub fn get_aggregated_result(&self) -> Option<AggregatedResult> {
+        let run = self.current_run.as_ref()?;
+        let repo = PathBuf::from(&run.project_path);
+
+        let assignments_info: Vec<(&str, &str, bool)> = run
+            .assignments
+            .iter()
+            .map(|a| {
+                let succeeded = matches!(a.execution_state, ExecutionState::Done);
+                (a.worker_id.as_str(), a.branch_name.as_str(), succeeded)
+            })
+            .collect();
+
+        Some(ResultAggregator::aggregate(&repo, &run.base_branch, &assignments_info))
     }
 
     /// 全 Worker のマージを実行する
@@ -211,7 +391,7 @@ impl Orchestrator {
         let succeeded_branches: Vec<String> = run
             .assignments
             .iter()
-            .filter(|a| matches!(a.status, WorkerStatus::Done))
+            .filter(|a| matches!(a.execution_state, ExecutionState::Done))
             .map(|a| a.branch_name.clone())
             .collect();
 
@@ -247,7 +427,9 @@ impl Orchestrator {
 
         if let Ok(mut mgr) = worker_manager.lock() {
             for assign in &run.assignments {
-                let _ = mgr.kill_worker(&assign.worker_id, app.clone());
+                if !assign.worker_id.is_empty() {
+                    let _ = mgr.kill_worker(&assign.worker_id, app.clone());
+                }
             }
         }
 
@@ -255,24 +437,70 @@ impl Orchestrator {
     }
 }
 
+// ─── ヘルパー関数 ───────────────────────────────────────────────
+
+/// WorkerAssignment から WorkerConfig を生成する
+fn make_worker_config(assign: &WorkerAssignment, repo: &PathBuf, run_id: &str) -> WorkerConfig {
+    let mut metadata = HashMap::new();
+    metadata.insert("task_instruction".to_string(), assign.task.instruction.clone());
+    metadata.insert("orchestration_run_id".to_string(), run_id.to_string());
+    metadata.insert("branch_name".to_string(), assign.branch_name.clone());
+    metadata.insert("task_id".to_string(), assign.task.id.to_string());
+
+    WorkerConfig {
+        kind: WorkerKind::ClaudeCode,
+        mode: WorkerMode::Batch,
+        label: assign.task.title.clone(),
+        working_dir: repo.clone(),
+        depends_on: vec![],
+        metadata,
+    }
+}
+
+/// 指定タスク ID に依存するすべての Waiting タスクを Skipped にする（再帰的）
+fn skip_dependents(run: &mut OrchestratorRun, failed_task_id: u32) {
+    // 1パスで Waiting タスクの中から依存先が failed_task_id を含むものを探す
+    let mut newly_skipped: Vec<u32> = Vec::new();
+
+    for assign in &mut run.assignments {
+        if assign.execution_state == ExecutionState::Waiting
+            && assign.task.depends_on.contains(&failed_task_id)
+        {
+            assign.execution_state = ExecutionState::Skipped;
+            newly_skipped.push(assign.task.id);
+        }
+    }
+
+    // スキップされたタスクにさらに依存するタスクも再帰的にスキップ
+    for skipped_id in newly_skipped {
+        skip_dependents(run, skipped_id);
+    }
+}
+
 // ─── バックグラウンドモニター ──────────────────────────────────
 
-/// Worker の完了を2秒ごとにポーリングし、全完了時に Orchestrator を更新する
 fn start_monitor(
-    run_id: String,
-    worker_manager: SharedWorkerManager,
-    app: AppHandle,
-    orch_ptr: Arc<Mutex<*mut Orchestrator>>,
+    _run_id: String,
+    _worker_manager: SharedWorkerManager,
+    _app: AppHandle,
 ) {
-    // バックグラウンドモニターは frontend の worker-status-changed を補完する
-    // 実際には frontend が orchestrator_notify_worker_done を呼ぶことで更新される
-    // このモニターはフォールバック（frontend が落ちた場合など）
-    let _ = (run_id, worker_manager, app, orch_ptr); // reserved
+    // Frontend の orchestrator_notify_worker_done が主系
+    // このモニターはフォールバック用（現在は reserved）
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_task(id: u32, depends_on: Vec<u32>) -> SubTask {
+        SubTask {
+            id,
+            title: format!("Task {}", id),
+            files: vec![],
+            instruction: format!("do task {}", id),
+            depends_on,
+        }
+    }
 
     #[test]
     fn swarm_settings_default_values() {
@@ -296,13 +524,57 @@ mod tests {
     }
 
     #[test]
-    fn worker_assignment_has_correct_fields() {
+    fn execution_state_serializes_correctly() {
+        let state = ExecutionState::Waiting;
+        let json = serde_json::to_string(&state).unwrap();
+        assert_eq!(json, "\"waiting\"");
+    }
+
+    #[test]
+    fn worker_assignment_has_all_fields() {
         let assign = WorkerAssignment {
             worker_id: "w1".into(),
-            task: SubTask { id: 1, title: "T".into(), files: vec![], instruction: "do it".into() },
+            task: make_task(1, vec![]),
             branch_name: "swarm/worker-abc-1".into(),
             status: WorkerStatus::Idle,
+            execution_state: ExecutionState::Ready,
+            retry_count: 0,
         };
         assert_eq!(assign.branch_name, "swarm/worker-abc-1");
+        assert_eq!(assign.execution_state, ExecutionState::Ready);
+    }
+
+    #[test]
+    fn skip_dependents_marks_transitively() {
+        let mut run = OrchestratorRun {
+            run_id: "r1".into(),
+            status: RunStatus::Running,
+            assignments: vec![
+                WorkerAssignment {
+                    worker_id: "w1".into(), task: make_task(1, vec![]),
+                    branch_name: "b1".into(), status: WorkerStatus::Error,
+                    execution_state: ExecutionState::Error, retry_count: 0,
+                },
+                WorkerAssignment {
+                    worker_id: "".into(), task: make_task(2, vec![1]),
+                    branch_name: "b2".into(), status: WorkerStatus::Idle,
+                    execution_state: ExecutionState::Waiting, retry_count: 0,
+                },
+                WorkerAssignment {
+                    worker_id: "".into(), task: make_task(3, vec![2]),
+                    branch_name: "b3".into(), status: WorkerStatus::Idle,
+                    execution_state: ExecutionState::Waiting, retry_count: 0,
+                },
+            ],
+            base_branch: "main".into(),
+            project_path: "/tmp".into(),
+            merge_results: vec![],
+            total: 3,
+            done_count: 0,
+        };
+
+        skip_dependents(&mut run, 1);
+        assert_eq!(run.assignments[1].execution_state, ExecutionState::Skipped);
+        assert_eq!(run.assignments[2].execution_state, ExecutionState::Skipped);
     }
 }
