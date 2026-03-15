@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useSwarmStore } from "../../stores/swarmStore";
 import type {
   SubTask,
   SplitTaskResult,
@@ -9,10 +10,9 @@ import { DEFAULT_SWARM_SETTINGS } from "./types";
 
 interface OrchestratorPanelProps {
   workingDir: string;
-  onRunSubtasks: (tasks: SubTask[], settings: SwarmSettings) => void;
 }
 
-export function OrchestratorPanel({ workingDir, onRunSubtasks }: OrchestratorPanelProps) {
+export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [tasks, setTasks] = useState<SubTask[]>([]);
   const [conflictWarnings, setConflictWarnings] = useState<string[]>([]);
@@ -20,6 +20,22 @@ export function OrchestratorPanel({ workingDir, onRunSubtasks }: OrchestratorPan
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<SwarmSettings>(DEFAULT_SWARM_SETTINGS);
+
+  const {
+    currentRun,
+    mergeReady,
+    isStarting,
+    isMerging,
+    startRun,
+    cancelRun,
+    mergeAll,
+    listenOrchestratorEvents,
+  } = useSwarmStore();
+
+  // Orchestrator イベントリスナー登録
+  useEffect(() => {
+    return listenOrchestratorEvents();
+  }, [listenOrchestratorEvents]);
 
   const handleSplit = async () => {
     if (!prompt.trim()) return;
@@ -50,9 +66,9 @@ export function OrchestratorPanel({ workingDir, onRunSubtasks }: OrchestratorPan
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, instruction } : t)));
   };
 
-  const handleRun = () => {
+  const handleRun = async () => {
     if (tasks.length === 0) return;
-    onRunSubtasks(tasks, settings);
+    await startRun(tasks, settings, workingDir);
   };
 
   return (
@@ -141,8 +157,8 @@ export function OrchestratorPanel({ workingDir, onRunSubtasks }: OrchestratorPan
         )}
       </div>
 
-      {/* 実行ボタン */}
-      {tasks.length > 0 && (
+      {/* 実行ボタン / 実行中ステータス */}
+      {tasks.length > 0 && !currentRun && (
         <div style={{ padding: "8px 12px", flexShrink: 0, borderTop: "1px solid #21262d" }}>
           <div style={{ color: "#8b949e", fontSize: 11, marginBottom: 4 }}>
             {tasks.length} タスク / 最大 {settings.maxWorkers} Worker 並列
@@ -150,9 +166,80 @@ export function OrchestratorPanel({ workingDir, onRunSubtasks }: OrchestratorPan
           <button
             data-testid="run-button"
             onClick={handleRun}
-            style={{ ...actionButtonStyle, width: "100%", background: "#1a7f37" }}
+            disabled={isStarting}
+            style={{
+              ...actionButtonStyle,
+              width: "100%",
+              background: "#1a7f37",
+              opacity: isStarting ? 0.6 : 1,
+            }}
           >
-            ▶ 実行開始
+            {isStarting ? "🔄 起動中..." : "▶ 実行開始"}
+          </button>
+        </div>
+      )}
+
+      {/* 実行中パネル */}
+      {currentRun && currentRun.status !== "done" && currentRun.status !== "partialDone" && (
+        <div style={{ padding: "8px 12px", flexShrink: 0, borderTop: "1px solid #21262d" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: "#8b949e" }}>
+              {currentRun.status === "merging" ? "🔀 マージ中..." : `▶ 実行中 ${currentRun.doneCount}/${currentRun.total}`}
+            </span>
+            <button
+              onClick={cancelRun}
+              style={{ ...iconButtonStyle, color: "#fc8181", fontSize: 11 }}
+              aria-label="実行をキャンセル"
+            >
+              ✕ キャンセル
+            </button>
+          </div>
+          {/* Worker 割り当て一覧 */}
+          {currentRun.assignments.map((a) => (
+            <div key={a.workerId} style={{ display: "flex", gap: 6, fontSize: 10, color: "#8b949e", marginBottom: 2, fontFamily: "monospace" }}>
+              <span style={{ color: a.status === "done" ? "#68d391" : a.status === "error" ? "#fc8181" : "#f6ad55" }}>
+                {a.status === "done" ? "✓" : a.status === "error" ? "✕" : "●"}
+              </span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {a.task.title}
+              </span>
+              <span style={{ color: "#484f58" }}>{a.branchName.split("/").pop()}</span>
+            </div>
+          ))}
+          {/* マージ実行ボタン */}
+          {mergeReady && (
+            <button
+              data-testid="merge-button"
+              onClick={mergeAll}
+              disabled={isMerging}
+              style={{ ...actionButtonStyle, width: "100%", marginTop: 8, background: "#6e40c9", opacity: isMerging ? 0.6 : 1 }}
+            >
+              {isMerging ? "🔀 マージ中..." : "🔀 ブランチをマージ"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* マージ結果 */}
+      {currentRun && (currentRun.status === "done" || currentRun.status === "partialDone") && (
+        <div style={{ padding: "8px 12px", flexShrink: 0, borderTop: "1px solid #21262d" }}>
+          <div style={{ color: currentRun.status === "done" ? "#68d391" : "#f6ad55", fontSize: 12, marginBottom: 6, fontWeight: 700 }}>
+            {currentRun.status === "done" ? "✓ 完了" : "⚠️ 一部完了"}
+          </div>
+          {currentRun.mergeResults.map((r) => (
+            <div key={r.branch} style={{ fontSize: 10, fontFamily: "monospace", marginBottom: 2 }}>
+              <span style={{ color: r.success ? "#68d391" : "#fc8181" }}>{r.success ? "✓" : "✕"}</span>
+              <span style={{ color: "#8b949e", marginLeft: 4 }}>{r.branch.split("/").pop()}</span>
+              {r.conflictFiles.length > 0 && (
+                <span style={{ color: "#fc8181", marginLeft: 4 }}>コンフリクト: {r.conflictFiles.join(", ")}</span>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={() => useSwarmStore.getState().reset()}
+            style={{ ...actionButtonStyle, width: "100%", marginTop: 8, background: "#21262d", border: "1px solid #30363d", color: "#8b949e" }}
+          >
+            リセット
           </button>
         </div>
       )}

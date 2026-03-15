@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useSwarmStore } from "../../stores/swarmStore";
 import { XtermPane } from "./XtermPane";
-import type { SubTask, SwarmSettings, WorkerConfig, WorkerInfo, WorkerStatus } from "./types";
+import type { WorkerConfig, WorkerInfo, WorkerStatus } from "./types";
 
 const MAX_WORKERS = 8;
 
@@ -13,63 +14,40 @@ interface TerminalGridProps {
 export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const notifyWorkerDone = useSwarmStore((s) => s.notifyWorkerDone);
 
-  // OrchestratorPanel からの batch 実行リクエストを受け取る
+  // worker-spawned: Rust 側で起動された Worker（手動・Orchestrator 問わず）を追加
   useEffect(() => {
-    const handler = (e: Event) => {
-      const { tasks, settings, workingDir: dir } = (e as CustomEvent<{
-        tasks: SubTask[];
-        settings: SwarmSettings;
-        workingDir: string;
-      }>).detail;
-
-      const limit = Math.min(tasks.length, settings.maxWorkers);
-      const targetTasks = tasks.slice(0, limit);
-
-      targetTasks.forEach(async (task, i) => {
-        if (workers.length + i >= MAX_WORKERS) return;
-        const config: WorkerConfig = {
-          kind: "claudeCode",
-          mode: "batch",
-          label: task.title,
-          workingDir: dir,
-          dependsOn: [],
-          metadata: { task_instruction: task.instruction },
-        };
-        try {
-          const id = await invoke<string>("spawn_worker", { config });
-          const newWorker: WorkerInfo = { id, config, status: "idle" };
-          setWorkers((prev) => [...prev, newWorker]);
-          setActiveId(id);
-        } catch (err) {
-          console.error("batch spawn_worker failed:", err);
-        }
+    const unlistenPromise = listen<WorkerInfo>("worker-spawned", (event) => {
+      setWorkers((prev) => {
+        // 重複チェック
+        if (prev.some((w) => w.id === event.payload.id)) return prev;
+        return [...prev, event.payload];
       });
-    };
+      setActiveId(event.payload.id);
+    });
+    return () => { unlistenPromise.then((fn) => fn()); };
+  }, []);
 
-    window.addEventListener("devnest:run-subtasks", handler);
-    return () => window.removeEventListener("devnest:run-subtasks", handler);
-  }, [workers.length]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // worker-status-changed イベントで Worker ステータスをリアルタイム更新
+  // worker-status-changed: ステータス更新 + Orchestrator に通知
   useEffect(() => {
     const unlistenPromise = listen<{ workerId: string; status: WorkerStatus }>(
       "worker-status-changed",
       (event) => {
+        const { workerId, status } = event.payload;
         setWorkers((prev) =>
-          prev.map((w) =>
-            w.id === event.payload.workerId
-              ? { ...w, status: event.payload.status }
-              : w
-          )
+          prev.map((w) => (w.id === workerId ? { ...w, status } : w))
         );
+        // done/error のとき Orchestrator に通知
+        if (status === "done" || status === "error") {
+          notifyWorkerDone(workerId, status);
+        }
       }
     );
-    return () => {
-      unlistenPromise.then((fn) => fn());
-    };
-  }, []);
+    return () => { unlistenPromise.then((fn) => fn()); };
+  }, [notifyWorkerDone]);
 
+  // 手動 Worker 追加（spawn だけ行い、state 追加は worker-spawned イベント経由）
   const addWorker = async (kind: "shell" | "claudeCode") => {
     if (workers.length >= MAX_WORKERS) return;
     const n = workers.length + 1;
@@ -81,12 +59,8 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
       dependsOn: [],
       metadata: {},
     };
-
     try {
-      const id = await invoke<string>("spawn_worker", { config });
-      const newWorker: WorkerInfo = { id, config, status: "idle" };
-      setWorkers((prev) => [...prev, newWorker]);
-      setActiveId(id);
+      await invoke("spawn_worker", { config });
     } catch (err) {
       console.error("spawn_worker failed:", err);
     }
@@ -95,14 +69,12 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const killWorker = async (id: string) => {
     try {
       await invoke("kill_worker", { workerId: id });
-    } catch {
-      // ベストエフォート
-    }
+    } catch {/* ベストエフォート */}
     setWorkers((prev) => prev.filter((w) => w.id !== id));
     if (activeId === id) setActiveId(null);
   };
 
-  // Worker数に応じてグリッドのカラム数を自動調整
+  // Worker 数に応じてグリッドのカラム数を自動調整
   const cols =
     workers.length <= 1 ? 1
     : workers.length <= 4 ? 2
@@ -152,29 +124,13 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
       {/* 進捗バー（ClaudeCode Worker が1つ以上のときのみ表示） */}
       {showProgress && (
         <div style={{ flexShrink: 0 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 4,
-            }}
-          >
-            <span style={{ fontSize: 11, color: "#8b949e" }}>
-              Worker 進捗
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 11, color: "#8b949e" }}>Worker 進捗</span>
             <span style={{ fontSize: 11, color: "#e6edf3", fontFamily: "monospace" }}>
               {finishedCount} / {claudeWorkers.length} 完了 ({progressPct}%)
             </span>
           </div>
-          <div
-            style={{
-              height: 4,
-              background: "#21262d",
-              borderRadius: 2,
-              overflow: "hidden",
-            }}
-          >
+          <div style={{ height: 4, background: "#21262d", borderRadius: 2, overflow: "hidden" }}>
             <div
               style={{
                 height: "100%",

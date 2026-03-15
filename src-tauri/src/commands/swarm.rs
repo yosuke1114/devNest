@@ -2,10 +2,13 @@ use tauri::State;
 
 use crate::state::AppState;
 use crate::swarm::{
-    subtask::{detect_file_conflicts, SplitTaskRequest, SplitTaskResult},
+    orchestrator::{OrchestratorRun, SwarmSettings},
+    subtask::{detect_file_conflicts, SplitTaskRequest, SplitTaskResult, SubTask},
     task_splitter::TaskSplitter,
     worker::WorkerConfig,
     worker::WorkerInfo,
+    worker::WorkerStatus,
+    SharedOrchestrator,
     SharedWorkerManager,
 };
 
@@ -77,6 +80,65 @@ pub async fn split_task(
         tasks,
         conflict_warnings,
     })
+}
+
+/// SubTask リストを Worker に割り当てて並列実行を開始する
+#[tauri::command]
+pub async fn orchestrator_start(
+    tasks: Vec<SubTask>,
+    settings: SwarmSettings,
+    project_path: String,
+    orchestrator: State<'_, SharedOrchestrator>,
+    manager: State<'_, SharedWorkerManager>,
+    app: tauri::AppHandle,
+) -> Result<OrchestratorRun, String> {
+    let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    let worker_manager = manager.inner().clone();
+    orch.start_run(tasks, settings, project_path, worker_manager, app)
+}
+
+/// Orchestrator の現在のステータスを返す
+#[tauri::command]
+pub async fn orchestrator_get_status(
+    orchestrator: State<'_, SharedOrchestrator>,
+) -> Result<Option<OrchestratorRun>, String> {
+    let orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    Ok(orch.current_run.clone())
+}
+
+/// Worker のステータス変化を Orchestrator に通知する
+#[tauri::command]
+pub async fn orchestrator_notify_worker_done(
+    worker_id: String,
+    status: WorkerStatus,
+    orchestrator: State<'_, SharedOrchestrator>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    orch.update_worker_status(&worker_id, status, &app);
+    Ok(())
+}
+
+/// 全 Worker のブランチをベースブランチにマージする
+#[tauri::command]
+pub async fn orchestrator_merge_all(
+    orchestrator: State<'_, SharedOrchestrator>,
+    app: tauri::AppHandle,
+) -> Result<Vec<crate::swarm::git_branch::MergeOutcome>, String> {
+    let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    Ok(orch.merge_all(&app))
+}
+
+/// 実行中の Orchestrator をキャンセルする
+#[tauri::command]
+pub async fn orchestrator_cancel(
+    orchestrator: State<'_, SharedOrchestrator>,
+    manager: State<'_, SharedWorkerManager>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    orch.cancel(manager.inner(), &app);
+    Ok(())
 }
 
 async fn load_anthropic_key(state: &State<'_, AppState>) -> Result<String, String> {

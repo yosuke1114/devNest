@@ -168,6 +168,11 @@ macro_rules! all_commands {
             commands::swarm::resize_worker,
             commands::swarm::list_workers,
             commands::swarm::split_task,
+            commands::swarm::orchestrator_start,
+            commands::swarm::orchestrator_get_status,
+            commands::swarm::orchestrator_notify_worker_done,
+            commands::swarm::orchestrator_merge_all,
+            commands::swarm::orchestrator_cancel,
         ]
     };
 }

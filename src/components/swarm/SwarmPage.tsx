@@ -1,22 +1,10 @@
 import { useProjectStore } from "../../stores/projectStore";
 import { OrchestratorPanel } from "./OrchestratorPanel";
 import { TerminalGrid } from "./TerminalGrid";
-import type { SubTask, SwarmSettings } from "./types";
 
 export function SwarmPage() {
   const currentProject = useProjectStore((s) => s.currentProject);
   const workingDir = currentProject?.local_path ?? "/";
-
-  const handleRunSubtasks = (tasks: SubTask[], settings: SwarmSettings) => {
-    // TerminalGrid は外部からの batch spawn を受け付ける
-    // pendingSubtasks は TerminalGrid の ref 経由で渡す
-    // → Step 11-D で Orchestrator エンジンと統合予定
-    // 現フェーズでは TerminalGrid に直接 SubTask リストを渡してバッチ起動
-    const event = new CustomEvent("devnest:run-subtasks", {
-      detail: { tasks, settings, workingDir },
-    });
-    window.dispatchEvent(event);
-  };
 
   return (
     <div
@@ -79,10 +67,7 @@ export function SwarmPage() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* 左ペイン: Orchestratorパネル（固定幅 280px） */}
         <div style={{ width: 280, flexShrink: 0, position: "relative" }}>
-          <OrchestratorPanel
-            workingDir={workingDir}
-            onRunSubtasks={handleRunSubtasks}
-          />
+          <OrchestratorPanel workingDir={workingDir} />
         </div>
 
         {/* 右ペイン: TerminalGrid */}
