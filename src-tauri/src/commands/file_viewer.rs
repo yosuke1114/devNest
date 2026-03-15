@@ -30,12 +30,11 @@ const CODE_EXTENSIONS: &[&str] = &[
 ];
 
 fn is_excluded_dir(name: &str) -> bool {
-    EXCLUDE_DIRS.iter().any(|d| *d == name)
+    EXCLUDE_DIRS.contains(&name)
 }
 
 fn is_excluded_file(name: &str) -> bool {
-    EXCLUDE_FILES.iter().any(|f| *f == name)
-        || name.starts_with('.')
+    EXCLUDE_FILES.contains(&name) || name.starts_with('.')
 }
 
 fn build_tree(dir: &std::path::Path, root: &std::path::Path) -> Vec<FileNode> {

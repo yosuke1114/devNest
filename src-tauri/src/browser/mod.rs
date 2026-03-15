@@ -25,6 +25,12 @@ pub struct InAppBrowser {
     panels: HashMap<String, BrowserPanelInfo>,
 }
 
+impl Default for InAppBrowser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InAppBrowser {
     pub fn new() -> Self {
         Self {

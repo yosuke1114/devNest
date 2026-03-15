@@ -238,9 +238,9 @@ pub async fn orchestrator_cancel(
 /// CPU・メモリ使用率を返す (F-12-17, F-12-19)
 #[tauri::command]
 pub async fn get_system_resources() -> Result<ResourceUsage, String> {
-    Ok(tokio::task::spawn_blocking(get_resource_usage)
+    tokio::task::spawn_blocking(get_resource_usage)
         .await
-        .map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
 }
 
 async fn load_anthropic_key(state: &State<'_, AppState>) -> Result<String, String> {

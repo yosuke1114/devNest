@@ -31,6 +31,12 @@ pub struct WorkerManager {
     statuses: StatusStore,
 }
 
+impl Default for WorkerManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkerManager {
     pub fn new() -> Self {
         Self {

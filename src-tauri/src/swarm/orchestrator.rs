@@ -523,16 +523,6 @@ fn skip_dependents(run: &mut OrchestratorRun, failed_task_id: u32) {
     }
 }
 
-// ─── バックグラウンドモニター ──────────────────────────────────
-
-fn start_monitor(
-    _run_id: String,
-    _worker_manager: SharedWorkerManager,
-    _app: AppHandle,
-) {
-    // Frontend の orchestrator_notify_worker_done が主系
-    // このモニターはフォールバック用（現在は reserved）
-}
 
 #[cfg(test)]
 mod tests {
