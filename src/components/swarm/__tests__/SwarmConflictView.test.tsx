@@ -126,6 +126,71 @@ describe("SwarmConflictView", () => {
     }));
   });
 
+  it("AI解決ボタンがai_resolve_conflictを呼び解決案を表示する", async () => {
+    mockInvoke
+      .mockResolvedValueOnce([
+        { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 10 },
+      ])
+      .mockResolvedValueOnce({
+        resolvedCode: "const x = 1;",
+        confidence: "high",
+        reason: "両者が独立した変更のため統合可能",
+      });
+
+    render(
+      <SwarmConflictView
+        outcome={outcome}
+        projectPath="/tmp/proj"
+        onResolved={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => screen.getByTestId("ai-resolve-button"));
+    fireEvent.click(screen.getByTestId("ai-resolve-button"));
+
+    await waitFor(() => screen.getByTestId("ai-resolution-panel"));
+    expect(screen.getByTestId("confidence-badge").textContent).toContain("High");
+    expect(screen.getByText("両者が独立した変更のため統合可能")).toBeTruthy();
+    expect(screen.getByText("const x = 1;")).toBeTruthy();
+    expect(mockInvoke).toHaveBeenCalledWith("orchestrator_ai_resolve_conflict", {
+      filePath: "src/foo.ts",
+      startLine: 10,
+    });
+  });
+
+  it("AI承認ボタンがManual解決でコミットする", async () => {
+    mockInvoke
+      .mockResolvedValueOnce([
+        { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 10 },
+      ])
+      .mockResolvedValueOnce({
+        resolvedCode: "const x = 1;",
+        confidence: "medium",
+        reason: "統合可能",
+      })
+      .mockResolvedValueOnce(undefined)  // orchestrator_resolve_conflict
+      .mockResolvedValueOnce(undefined); // orchestrator_commit_resolution
+
+    const onResolved = vi.fn();
+    render(
+      <SwarmConflictView
+        outcome={outcome}
+        projectPath="/tmp/proj"
+        onResolved={onResolved}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => screen.getByTestId("ai-resolve-button"));
+    fireEvent.click(screen.getByTestId("ai-resolve-button"));
+    await waitFor(() => screen.getByTestId("ai-approve-button"));
+    fireEvent.click(screen.getByTestId("ai-approve-button"));
+
+    await waitFor(() => expect(onResolved).toHaveBeenCalled());
+    expect(mockInvoke).toHaveBeenCalledWith("orchestrator_resolve_conflict", expect.objectContaining({
+      resolution: { Manual: "const x = 1;" },
+    }));
+  });
+
   it("×ボタンでonCloseが呼ばれる", async () => {
     mockInvoke.mockResolvedValue([
       { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 10 },
