@@ -56,22 +56,31 @@ impl WorkerManager {
             .map_err(|e| e.to_string())?;
 
         // コマンド構築
-        // Batch + ClaudeCode の場合は `zsh -c 'claude "instruction"'` で起動する
+        // Batch + ClaudeCode の場合は `<shell> -c 'claude [flags] "instruction"'` で起動する
         let task_instruction = config.metadata.get("task_instruction").cloned();
+        let default_shell = config
+            .metadata
+            .get("default_shell")
+            .cloned()
+            .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "zsh".to_string()));
         let mut cmd = match (&config.kind, &config.mode, task_instruction) {
             (WorkerKind::ClaudeCode, WorkerMode::Batch, Some(instruction)) => {
-                let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-                let mut c = CommandBuilder::new(&shell);
+                let mut c = CommandBuilder::new(&default_shell);
                 // 引数内の ' をエスケープしてシェルインジェクションを防止
                 let safe_instr = instruction.replace('\'', "'\\''");
+                // Feature 12-4: オプションフラグを metadata から構築
+                let mut flags = String::new();
+                if config.metadata.get("claude_flag_skip_permissions").map(|v| v == "1").unwrap_or(false) {
+                    flags.push_str(" --dangerously-skip-permissions");
+                }
+                if config.metadata.get("claude_flag_no_stream").map(|v| v == "1").unwrap_or(false) {
+                    flags.push_str(" --no-stream");
+                }
                 c.arg("-c");
-                c.arg(format!("claude '{}'", safe_instr));
+                c.arg(format!("claude{} '{}'", flags, safe_instr));
                 c
             }
-            _ => {
-                let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-                CommandBuilder::new(shell)
-            }
+            _ => CommandBuilder::new(&default_shell),
         };
         cmd.cwd(&config.working_dir);
 

@@ -420,6 +420,68 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
           aria-label="Gitブランチプレフィックス"
         />
 
+        {/* Shell セクション */}
+        <div style={{ color: "#8b949e", fontSize: 10, fontWeight: 700, marginBottom: 6, marginTop: 12, letterSpacing: "0.05em" }}>SHELL</div>
+        <label style={labelStyle}>デフォルト Shell</label>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+          {["zsh", "bash", "fish"].map((sh) => (
+            <button
+              key={sh}
+              aria-pressed={local.defaultShell === sh}
+              onClick={() => setLocal((s) => ({ ...s, defaultShell: sh }))}
+              style={{
+                ...segmentButtonStyle,
+                background: local.defaultShell === sh ? "#1f6feb" : "#21262d",
+                color: local.defaultShell === sh ? "#fff" : "#8b949e",
+              }}
+            >
+              {sh}
+            </button>
+          ))}
+        </div>
+        <label style={labelStyle}>プロンプトパターン（| 区切り）</label>
+        <input
+          type="text"
+          value={local.promptPatterns}
+          onChange={(e) => setLocal((s) => ({ ...s, promptPatterns: e.target.value }))}
+          style={inputStyle}
+          aria-label="プロンプトパターン"
+          placeholder="$|%|❯|>"
+        />
+
+        {/* Claude Code セクション */}
+        <div style={{ color: "#8b949e", fontSize: 10, fontWeight: 700, marginBottom: 6, marginTop: 12, letterSpacing: "0.05em" }}>CLAUDE CODE</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, cursor: "pointer", fontSize: 12, color: "#e6edf3" }}>
+          <input
+            type="checkbox"
+            checked={local.claudeSkipPermissions}
+            onChange={(e) => setLocal((s) => ({ ...s, claudeSkipPermissions: e.target.checked }))}
+            aria-label="--dangerously-skip-permissions"
+          />
+          <code style={{ fontSize: 11, color: "#79c0ff" }}>--dangerously-skip-permissions</code>
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, cursor: "pointer", fontSize: 12, color: "#e6edf3" }}>
+          <input
+            type="checkbox"
+            checked={local.claudeNoStream}
+            onChange={(e) => setLocal((s) => ({ ...s, claudeNoStream: e.target.checked }))}
+            aria-label="--no-stream"
+          />
+          <code style={{ fontSize: 11, color: "#79c0ff" }}>--no-stream</code>
+        </label>
+
+        {/* AI 解決セクション */}
+        <div style={{ color: "#8b949e", fontSize: 10, fontWeight: 700, marginBottom: 6, marginTop: 4, letterSpacing: "0.05em" }}>AI解決</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, cursor: "pointer", fontSize: 12, color: "#e6edf3" }}>
+          <input
+            type="checkbox"
+            checked={local.autoApproveHighConfidence}
+            onChange={(e) => setLocal((s) => ({ ...s, autoApproveHighConfidence: e.target.checked }))}
+            aria-label="信頼度Highの自動承認"
+          />
+          信頼度 High のコンフリクトを自動承認
+        </label>
+
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
           <button onClick={onClose} style={cancelButtonStyle}>キャンセル</button>
           <button
