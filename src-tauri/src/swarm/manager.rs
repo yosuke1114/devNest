@@ -10,6 +10,21 @@ use crate::notification::ring::{emit_ring_event, RingEvent, RingUrgency};
 
 use super::worker::{WorkerConfig, WorkerInfo, WorkerKind, WorkerMode, WorkerStatus};
 
+/// Claude Code 起動コマンド引数を構築する純粋関数。
+/// - `instruction` 内の `'` はシェルインジェクション防止のためエスケープする
+/// - `metadata` に応じてオプションフラグを付与する
+pub(crate) fn build_claude_arg(instruction: &str, metadata: &HashMap<String, String>) -> String {
+    let safe_instr = instruction.replace('\'', "'\\''");
+    let mut flags = String::new();
+    if metadata.get("claude_flag_skip_permissions").map(|v| v == "1").unwrap_or(false) {
+        flags.push_str(" --dangerously-skip-permissions");
+    }
+    if metadata.get("claude_flag_no_stream").map(|v| v == "1").unwrap_or(false) {
+        flags.push_str(" --no-stream");
+    }
+    format!("claude{} '{}'", flags, safe_instr)
+}
+
 // Safety: WorkerManager は Arc<Mutex<WorkerManager>> 経由でのみアクセスされる。
 // UnixMasterPty は内部でファイルディスクリプタを保持しており、
 // Mutex 保護下であればスレッド間転送は安全。
@@ -72,18 +87,9 @@ impl WorkerManager {
         let mut cmd = match (&config.kind, &config.mode, task_instruction) {
             (WorkerKind::ClaudeCode, WorkerMode::Batch, Some(instruction)) => {
                 let mut c = CommandBuilder::new(&default_shell);
-                // 引数内の ' をエスケープしてシェルインジェクションを防止
-                let safe_instr = instruction.replace('\'', "'\\''");
-                // Feature 12-4: オプションフラグを metadata から構築
-                let mut flags = String::new();
-                if config.metadata.get("claude_flag_skip_permissions").map(|v| v == "1").unwrap_or(false) {
-                    flags.push_str(" --dangerously-skip-permissions");
-                }
-                if config.metadata.get("claude_flag_no_stream").map(|v| v == "1").unwrap_or(false) {
-                    flags.push_str(" --no-stream");
-                }
+                let claude_arg = build_claude_arg(&instruction, &config.metadata);
                 c.arg("-c");
-                c.arg(format!("claude{} '{}'", flags, safe_instr));
+                c.arg(claude_arg);
                 c
             }
             _ => CommandBuilder::new(&default_shell),
@@ -253,5 +259,81 @@ impl WorkerManager {
                 info
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn build_claude_arg_basic() {
+        let arg = build_claude_arg("fix the bug", &meta(&[]));
+        assert_eq!(arg, "claude 'fix the bug'");
+    }
+
+    #[test]
+    fn build_claude_arg_escapes_single_quote() {
+        // シェルインジェクション防止: ' → '\'' にエスケープされる
+        let arg = build_claude_arg("it's broken", &meta(&[]));
+        assert_eq!(arg, "claude 'it'\\''s broken'");
+    }
+
+    #[test]
+    fn build_claude_arg_skip_permissions_flag() {
+        let arg = build_claude_arg("do x", &meta(&[("claude_flag_skip_permissions", "1")]));
+        assert_eq!(arg, "claude --dangerously-skip-permissions 'do x'");
+    }
+
+    #[test]
+    fn build_claude_arg_no_stream_flag() {
+        let arg = build_claude_arg("do x", &meta(&[("claude_flag_no_stream", "1")]));
+        assert_eq!(arg, "claude --no-stream 'do x'");
+    }
+
+    #[test]
+    fn build_claude_arg_both_flags() {
+        let arg = build_claude_arg("do x", &meta(&[
+            ("claude_flag_skip_permissions", "1"),
+            ("claude_flag_no_stream", "1"),
+        ]));
+        assert!(arg.contains("--dangerously-skip-permissions"));
+        assert!(arg.contains("--no-stream"));
+        assert!(arg.ends_with("'do x'"));
+    }
+
+    #[test]
+    fn build_claude_arg_flag_off_when_zero() {
+        let arg = build_claude_arg("do x", &meta(&[("claude_flag_skip_permissions", "0")]));
+        assert!(!arg.contains("--dangerously-skip-permissions"));
+        assert_eq!(arg, "claude 'do x'");
+    }
+
+    #[test]
+    fn worker_manager_new_has_empty_state() {
+        let mgr = WorkerManager::new();
+        assert!(mgr.workers.is_empty());
+        assert!(mgr.ptys.is_empty());
+        assert!(mgr.list_workers().is_empty());
+    }
+
+    #[test]
+    fn write_to_worker_returns_error_when_not_found() {
+        let mut mgr = WorkerManager::new();
+        let result = mgr.write_to_worker("nonexistent", b"hello");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Worker not found");
+    }
+
+    #[test]
+    fn resize_worker_returns_error_when_not_found() {
+        let mut mgr = WorkerManager::new();
+        let result = mgr.resize_worker("nonexistent", 80, 24);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Worker not found");
     }
 }
