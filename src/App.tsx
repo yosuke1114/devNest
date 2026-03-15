@@ -37,7 +37,7 @@ export default function App() {
   const { currentScreen } = useUiStore();
   const { fetchProjects, selectProject } = useProjectStore();
   const { fetchTheme } = useSettingsStore();
-  const { listenEvents: listenNotificationEvents, loadNotifications } = useNotificationsStore();
+  const { listenEvents: listenNotificationEvents, listenRingEvents, loadNotifications } = useNotificationsStore();
   const { listenEvents: listenTerminalEvents, onTerminalDone } = useTerminalStore();
   const { listenSyncDone: listenPrSyncDone } = usePrStore();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -49,6 +49,7 @@ export default function App() {
 
     // イベントリスナー
     const unlistenNotifications = listenNotificationEvents();
+    const unlistenRingEvents = listenRingEvents();
     const unlistenTerminal = listenTerminalEvents();
     const unlistenPrSync = listenPrSyncDone();
 
@@ -95,6 +96,7 @@ export default function App() {
 
     return () => {
       unlistenNotifications();
+      unlistenRingEvents();
       unlistenTerminal();
       unlistenPrSync();
       unlistenTerminalDone?.();

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface BrowserPanelProps {
@@ -9,9 +9,28 @@ interface BrowserPanelProps {
   onNavigate?: (url: string) => void;
 }
 
+const navBtnStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#8b949e",
+  cursor: "pointer",
+  fontSize: 16,
+  padding: "0 4px",
+  lineHeight: 1,
+};
+
 export function BrowserPanel({ url: initialUrl, panelId, title, onClose, onNavigate }: BrowserPanelProps) {
   const [currentUrl, setCurrentUrl] = useState(initialUrl);
   const [inputUrl, setInputUrl] = useState(initialUrl);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handleBack = () => {
+    iframeRef.current?.contentWindow?.history.back();
+  };
+
+  const handleForward = () => {
+    iframeRef.current?.contentWindow?.history.forward();
+  };
 
   const handleNavigate = async (newUrl: string) => {
     setCurrentUrl(newUrl);
@@ -45,6 +64,8 @@ export function BrowserPanel({ url: initialUrl, panelId, title, onClose, onNavig
           flexShrink: 0,
         }}
       >
+        <button onClick={handleBack} aria-label="前のページに戻る" style={navBtnStyle}>‹</button>
+        <button onClick={handleForward} aria-label="次のページに進む" style={navBtnStyle}>›</button>
         <span style={{ fontSize: 12, color: "#8b949e", flexShrink: 0 }}>
           {title ?? "ブラウザ"}
         </span>
@@ -81,6 +102,7 @@ export function BrowserPanel({ url: initialUrl, panelId, title, onClose, onNavig
 
       {/* iframe */}
       <iframe
+        ref={iframeRef}
         data-testid="browser-iframe"
         src={currentUrl}
         title={title ?? currentUrl}

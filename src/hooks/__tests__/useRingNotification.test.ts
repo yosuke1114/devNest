@@ -75,4 +75,33 @@ describe("useRingNotification", () => {
 
     expect(result.current.rings).toHaveLength(3);
   });
+
+  it("criticalCount が warning/critical のリングをカウントする", async () => {
+    const { result } = renderHook(() => useRingNotification());
+    await act(async () => {});
+
+    act(() => {
+      capturedListener?.({ payload: makeEvent("critical") });
+      capturedListener?.({ payload: makeEvent("warning") });
+      capturedListener?.({ payload: makeEvent("info") });
+    });
+
+    expect(result.current.criticalCount).toBe(1);
+    expect(result.current.warningCount).toBe(1);
+  });
+
+  it("dismissRing でリングを個別に消去できる", async () => {
+    const { result } = renderHook(() => useRingNotification());
+    await act(async () => {});
+
+    act(() => {
+      capturedListener?.({ payload: makeEvent("critical") });
+    });
+
+    const ringId = result.current.rings[0].id;
+    act(() => {
+      result.current.dismissRing(ringId);
+    });
+    expect(result.current.rings).toHaveLength(0);
+  });
 });

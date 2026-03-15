@@ -167,8 +167,14 @@ async fn handle_product_switch(params: serde_json::Value, app: &AppHandle, id: O
     ApiResponse::ok(id, serde_json::json!({ "success": true }))
 }
 
-async fn handle_docs_staleness(_params: serde_json::Value, _app: &AppHandle, id: Option<u64>) -> ApiResponse {
-    ApiResponse::ok(id, serde_json::json!({ "note": "Use check_doc_staleness Tauri command" }))
+async fn handle_docs_staleness(params: serde_json::Value, _app: &AppHandle, id: Option<u64>) -> ApiResponse {
+    let note = "check_doc_staleness Tauri command を使用してください。Socket API からの直接実行は未サポートです。";
+    let product = params["product"].as_str();
+    ApiResponse::ok(id, serde_json::json!({
+        "note": note,
+        "product": product,
+        "hint": "devnest docs staleness は check_doc_staleness コマンドと連携予定",
+    }))
 }
 
 async fn handle_docs_affected(params: serde_json::Value, _app: &AppHandle, id: Option<u64>) -> ApiResponse {
@@ -204,5 +210,21 @@ mod tests {
         assert!(resp.result.is_none());
         assert!(resp.error.is_some());
         assert_eq!(resp.error.unwrap().message, "Unknown method");
+    }
+
+    #[test]
+    fn unknown_method_response_has_error() {
+        // handle_request は async なので、未知メソッドのエラーレスポンスを ApiResponse::error で確認
+        let resp = ApiResponse::error(Some(99), "Unknown method");
+        assert!(resp.error.is_some());
+        assert_eq!(resp.id, Some(99));
+    }
+
+    #[test]
+    fn api_response_jsonrpc_version_is_2_0() {
+        let ok = ApiResponse::ok(Some(1), serde_json::json!(null));
+        assert_eq!(ok.jsonrpc, "2.0");
+        let err = ApiResponse::error(None, "test");
+        assert_eq!(err.jsonrpc, "2.0");
     }
 }

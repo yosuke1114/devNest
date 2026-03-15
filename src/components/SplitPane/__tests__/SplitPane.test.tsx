@@ -110,7 +110,7 @@ describe("SplitPaneContainer", () => {
     };
     render(<SplitPaneContainer initialLayout={layout} />);
     expect(screen.getByTestId("pane-x")).toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText("ブラウザペインを閉じる"));
+    await userEvent.click(screen.getByLabelText("ブラウザパネルを閉じる"));
     expect(screen.queryByTestId("pane-x")).toBeNull();
   });
 
@@ -120,8 +120,53 @@ describe("SplitPaneContainer", () => {
       children: [{ id: "only", type: "browser", props: {} }],
     };
     render(<SplitPaneContainer initialLayout={layout} />);
-    await userEvent.click(screen.getByLabelText("ブラウザペインを閉じる"));
+    await userEvent.click(screen.getByLabelText("ブラウザパネルを閉じる"));
     // デフォルトレイアウト（agent-monitor）の log ペインが表示される
     expect(screen.getByTestId("pane-log")).toBeInTheDocument();
+  });
+
+  it("レイアウト変更が localStorage に保存される", async () => {
+    const localStorageMock = (() => {
+      let store: Record<string, string> = {};
+      return {
+        getItem: (key: string) => store[key] ?? null,
+        setItem: (key: string, value: string) => { store[key] = value; },
+        clear: () => { store = {}; },
+      };
+    })();
+    Object.defineProperty(window, "localStorage", { value: localStorageMock, writable: true });
+
+    render(<SplitPaneContainer />);
+    await userEvent.click(screen.getByTestId("preset-doc-driven"));
+
+    const saved = localStorageMock.getItem("devnest-split-layout");
+    expect(saved).not.toBeNull();
+    const parsed = JSON.parse(saved!);
+    expect(parsed.direction).toBeDefined();
+  });
+
+  it("アプリ起動時に保存済みレイアウトが復元される", () => {
+    const savedLayout: SplitLayout = {
+      direction: "horizontal",
+      children: [
+        { id: "custom", type: "kanban", props: {} },
+      ],
+    };
+    const localStorageMock2 = (() => {
+      let store: Record<string, string> = {};
+      return {
+        getItem: (key: string) => store[key] ?? null,
+        setItem: (key: string, value: string) => { store[key] = value; },
+        removeItem: (key: string) => { delete store[key]; },
+        clear: () => { store = {}; },
+      };
+    })();
+    Object.defineProperty(window, "localStorage", { value: localStorageMock2, writable: true });
+    localStorageMock2.setItem("devnest-split-layout", JSON.stringify(savedLayout));
+
+    render(<SplitPaneContainer />);
+    expect(screen.getByTestId("pane-custom")).toBeInTheDocument();
+
+    localStorageMock2.removeItem("devnest-split-layout");
   });
 });

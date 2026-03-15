@@ -34,4 +34,14 @@ describe("BrowserPanel", () => {
     await userEvent.click(screen.getByLabelText("ブラウザパネルを閉じる"));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("戻るボタンが表示される", () => {
+    render(<BrowserPanel {...defaultProps} />);
+    expect(screen.getByLabelText("前のページに戻る")).toBeInTheDocument();
+  });
+
+  it("進むボタンが表示される", () => {
+    render(<BrowserPanel {...defaultProps} />);
+    expect(screen.getByLabelText("次のページに進む")).toBeInTheDocument();
+  });
 });

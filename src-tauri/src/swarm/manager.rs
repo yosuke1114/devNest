@@ -6,6 +6,8 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
+use crate::notification::ring::{emit_ring_event, RingEvent, RingUrgency};
+
 use super::worker::{WorkerConfig, WorkerInfo, WorkerKind, WorkerStatus};
 
 // Safety: WorkerManager は Arc<Mutex<WorkerManager>> 経由でのみアクセスされる。
@@ -113,6 +115,14 @@ impl WorkerManager {
                 "worker-status-changed",
                 serde_json::json!({ "workerId": worker_id, "status": "done" }),
             );
+            // Ring notification（F-11-19）
+            emit_ring_event(&app_clone, RingEvent::AgentAttention {
+                task_id: worker_id.clone(),
+                task_type: "swarm_worker".to_string(),
+                product_id: String::new(),
+                urgency: RingUrgency::Info,
+                message: format!("Worker {} が完了しました", worker_id),
+            });
         });
 
         // writer と master を保持

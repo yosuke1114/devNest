@@ -16,6 +16,8 @@ import {
 import { useProjectStore } from "../../stores/projectStore";
 import { useUiStore } from "../../stores/uiStore";
 import { usePrStore } from "../../stores/prStore";
+import { useRingNotification } from "../../hooks/useRingNotification";
+import { RingIndicator } from "../shared/RingIndicator";
 import type { ScreenName } from "../../types";
 
 // ─── SidebarSubItem ──────────────────────────────────────────────────────────
@@ -180,6 +182,10 @@ export function Sidebar() {
     s.prs.filter((pr) => pr.state === "open").length
   );
 
+  const { rings } = useRingNotification();
+  const agentRingUrgency = rings.find(r => r.event.type === "agentAttention")?.event.urgency ?? null;
+  const githubRingUrgency = rings.find(r => r.event.type === "gitHubEvent")?.event.urgency ?? null;
+
   const [githubOpen, setGithubOpen] = useState(
     () => ["issues", "pr", "conflict"].includes(currentScreen)
   );
@@ -287,15 +293,17 @@ export function Sidebar() {
         <SectionHeader label="開発" />
 
         {/* GitHub (expandable) */}
-        <SidebarItem
-          label="GitHub"
-          icon={<IconBrandGithub size={18} />}
-          active={githubChildActive && !githubOpen}
-          badge={openPRsCount > 0 ? openPRsCount : undefined}
-          expandable
-          expanded={githubOpen}
-          onClick={handleToggleGithub}
-        />
+        <RingIndicator urgency={githubRingUrgency}>
+          <SidebarItem
+            label="GitHub"
+            icon={<IconBrandGithub size={18} />}
+            active={githubChildActive && !githubOpen}
+            badge={openPRsCount > 0 ? openPRsCount : undefined}
+            expandable
+            expanded={githubOpen}
+            onClick={handleToggleGithub}
+          />
+        </RingIndicator>
         {githubOpen ? (
           <>
             <SidebarSubItem
@@ -353,13 +361,15 @@ export function Sidebar() {
         {/* ── 管理 ── */}
         <SectionHeader label="管理" />
 
-        <SidebarItem
-          screen="swarm"
-          label="Swarm"
-          icon={<IconLayoutGrid size={18} />}
-          active={currentScreen === "swarm"}
-          onClick={() => handleNavigate("swarm")}
-        />
+        <RingIndicator urgency={agentRingUrgency}>
+          <SidebarItem
+            screen="swarm"
+            label="Swarm"
+            icon={<IconLayoutGrid size={18} />}
+            active={currentScreen === "swarm"}
+            onClick={() => handleNavigate("swarm")}
+          />
+        </RingIndicator>
         <SidebarItem
           screen="agent"
           label="エージェント"

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { PaneConfig, PaneType } from "./types";
+import { BrowserPanel } from "../Browser/BrowserPanel";
 
 export const PANE_LABELS: Record<PaneType, string> = {
   browser: "ブラウザ",
@@ -16,6 +18,57 @@ interface PaneRendererProps {
 }
 
 export function PaneRenderer({ config, onRemove }: PaneRendererProps) {
+  const PaneBody = () => {
+    const [_panelId] = useState<string>(config.id);
+
+    if (config.type === "browser") {
+      const url = (config.props?.url as string) ?? "https://github.com";
+      return (
+        <BrowserPanel
+          url={url}
+          panelId={_panelId}
+          title={PANE_LABELS[config.type]}
+          onClose={() => onRemove(config.id)}
+        />
+      );
+    }
+
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#484f58",
+          fontSize: 13,
+        }}
+      >
+        {PANE_LABELS[config.type]}
+      </div>
+    );
+  };
+
+  if (config.type === "browser") {
+    return (
+      <div
+        data-testid={`pane-${config.id}`}
+        data-pane-type={config.type}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          background: "#0d1117",
+          border: "1px solid #21262d",
+          borderRadius: 4,
+          overflow: "hidden",
+        }}
+      >
+        <PaneBody />
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid={`pane-${config.id}`}
@@ -61,18 +114,7 @@ export function PaneRenderer({ config, onRemove }: PaneRendererProps) {
       </div>
 
       {/* ペイン本体（プレースホルダー）*/}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#484f58",
-          fontSize: 13,
-        }}
-      >
-        {PANE_LABELS[config.type]}
-      </div>
+      <PaneBody />
     </div>
   );
 }

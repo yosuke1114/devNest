@@ -79,4 +79,32 @@ mod tests {
         assert!(path.to_string_lossy().contains(".devnest"));
         assert!(path.to_string_lossy().ends_with("devnest.sock"));
     }
+
+    #[test]
+    fn socket_path_contains_home_dir() {
+        let path = DevNestApiServer::socket_path();
+        let home = std::env::var("HOME").unwrap_or_default();
+        if !home.is_empty() {
+            assert!(path.to_string_lossy().starts_with(&home));
+        }
+    }
+
+    #[test]
+    fn socket_dir_is_dotdevnest() {
+        let path = DevNestApiServer::socket_path();
+        let parent = path.parent().unwrap();
+        assert_eq!(parent.file_name().unwrap().to_str().unwrap(), ".devnest");
+    }
+
+    #[tokio::test]
+    async fn bind_and_cleanup_works() {
+        // ランダムなテスト用パスにバインドして削除できることを確認
+        let test_sock = std::env::temp_dir().join(format!("devnest-test-{}.sock", std::process::id()));
+        if test_sock.exists() {
+            std::fs::remove_file(&test_sock).ok();
+        }
+        let listener = tokio::net::UnixListener::bind(&test_sock);
+        assert!(listener.is_ok());
+        std::fs::remove_file(&test_sock).ok();
+    }
 }

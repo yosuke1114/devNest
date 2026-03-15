@@ -15,7 +15,7 @@ export function RingIndicator({ urgency, children }: RingIndicatorProps) {
     <span
       data-testid={`ring-indicator-${urgency}`}
       style={{
-        display: "inline-flex",
+        display: "block",
         position: "relative",
         animation: `ring-pulse-${urgency} ${urgency === "critical" ? "1s" : "2s"} ease-in-out infinite`,
         borderRadius: 4,

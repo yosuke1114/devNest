@@ -1,14 +1,15 @@
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{AppHandle, State};
 use tokio::task::spawn_blocking;
 
 use crate::error::AppError;
 use crate::maintenance::{
     coverage::{run_coverage_scan, CoverageReport},
-    dependency::{scan_dependencies, DependencyReport},
+    dependency::{scan_dependencies, DependencyReport, Severity},
     refactor::{analyze_refactor_candidates, RefactorCandidate},
     tech_debt::{scan_tech_debt, TechDebtReport},
 };
+use crate::notification::ring::{emit_ring_event, AlertSeverity, RingEvent};
 use crate::state::AppState;
 
 /// 依存ライブラリのスキャン
@@ -17,13 +18,41 @@ use crate::state::AppState;
 pub async fn maintenance_scan_dependencies(
     project_path: String,
     _state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<DependencyReport, AppError> {
-    spawn_blocking(move || {
+    let report = spawn_blocking(move || {
         let path = std::path::Path::new(&project_path);
         scan_dependencies(path).map_err(|e| AppError::Internal(e.to_string()))
     })
     .await
-    .map_err(|e| AppError::Internal(e.to_string()))?
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // Critical/High な脆弱性がある場合は Ring Event を発火
+    let critical_count = report
+        .rust_deps
+        .iter()
+        .chain(&report.node_deps)
+        .filter(|d| {
+            matches!(
+                d.vulnerability_severity,
+                Some(Severity::Critical) | Some(Severity::High)
+            )
+        })
+        .count();
+
+    if critical_count > 0 {
+        emit_ring_event(
+            &app,
+            RingEvent::MaintenanceAlert {
+                product_id: String::new(),
+                alert_type: "vulnerability".to_string(),
+                severity: AlertSeverity::Critical,
+                message: format!("脆弱性が {} 件検出されました", critical_count),
+            },
+        );
+    }
+
+    Ok(report)
 }
 
 /// 技術的負債スキャン（ファイル走査のみ。外部ツール不使用）

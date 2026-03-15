@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useUiStore } from "../../stores/uiStore";
 
 interface BrowserContext {
   kind: string;
@@ -16,6 +17,7 @@ interface BrowserContextBarProps {
 
 export function BrowserContextBar({ url }: BrowserContextBarProps) {
   const [context, setContext] = useState<BrowserContext | null>(null);
+  const { navigate } = useUiStore();
 
   useEffect(() => {
     if (!url) return;
@@ -42,6 +44,22 @@ export function BrowserContextBar({ url }: BrowserContextBarProps) {
           <span style={{ color: "#58a6ff" }}>
             {context.owner}/{context.repo}
           </span>
+          <button
+            data-testid="ai-review-button"
+            onClick={() => navigate("pr")}
+            style={{
+              marginLeft: 12,
+              padding: "2px 8px",
+              background: "#7c6af7",
+              border: "none",
+              borderRadius: 4,
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: 11,
+            }}
+          >
+            ✨ AIレビュー実行
+          </button>
           {context.affectedDocPaths.length > 0 && (
             <div style={{ marginTop: 4 }}>
               <span style={{ color: "#8b949e" }}>影響設計書: </span>

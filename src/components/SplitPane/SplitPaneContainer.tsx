@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import type { PaneConfig, SplitLayout } from "./types";
@@ -53,29 +53,65 @@ function removePaneFromLayout(
 }
 
 const DEFAULT_LAYOUT: SplitLayout = LAYOUT_PRESETS["agent-monitor"];
+const STORAGE_KEY = "devnest-split-layout";
 
 export function SplitPaneContainer({ initialLayout }: SplitPaneContainerProps) {
-  const [layout, setLayout] = useState<SplitLayout>(
-    initialLayout ?? DEFAULT_LAYOUT
-  );
+  const [layout, setLayout] = useState<SplitLayout>(() => {
+    if (initialLayout) return initialLayout;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as SplitLayout;
+    } catch { /* ignore */ }
+    return DEFAULT_LAYOUT;
+  });
   const [activePreset, setActivePreset] = useState<string>("agent-monitor");
 
-  const applyPreset = (name: string) => {
+  const updateLayout = useCallback((newLayout: SplitLayout) => {
+    setLayout(newLayout);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newLayout));
+    } catch { /* ignore */ }
+  }, []);
+
+  const applyPreset = useCallback((name: string) => {
     const preset = LAYOUT_PRESETS[name];
     if (preset) {
-      setLayout(preset);
+      updateLayout(preset);
       setActivePreset(name);
     }
-  };
+  }, [updateLayout]);
 
   const removePane = (id: string) => {
     const updated = removePaneFromLayout(layout, id);
     if (updated.children.length === 0) {
-      setLayout(DEFAULT_LAYOUT);
+      updateLayout(DEFAULT_LAYOUT);
     } else {
-      setLayout(updated);
+      updateLayout(updated);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+
+      if (e.shiftKey) {
+        const presetMap: Record<string, string> = {
+          "1": "code-review",
+          "2": "agent-monitor",
+          "3": "doc-driven",
+          "4": "full",
+        };
+        if (presetMap[e.key]) {
+          e.preventDefault();
+          applyPreset(presetMap[e.key]);
+          return;
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [applyPreset]);
 
   // フラットなペイン数を数える（テスト検証用）
   const countPanes = (node: PaneConfig | SplitLayout): number => {
