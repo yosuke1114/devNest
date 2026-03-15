@@ -7,6 +7,8 @@ import type {
   SwarmSettings,
 } from "./types";
 import { DEFAULT_SWARM_SETTINGS } from "./types";
+import { ResultSummaryPanel } from "./ResultSummaryPanel";
+import { SwarmConflictView } from "./SwarmConflictView";
 
 interface OrchestratorPanelProps {
   workingDir: string;
@@ -26,10 +28,13 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
     mergeReady,
     isStarting,
     isMerging,
+    aggregatedResult,
+    conflictOutcome,
     startRun,
     cancelRun,
     mergeAll,
     listenOrchestratorEvents,
+    setConflictOutcome,
   } = useSwarmStore();
 
   // Orchestrator イベントリスナー登録
@@ -220,28 +225,26 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
         </div>
       )}
 
-      {/* マージ結果 */}
-      {currentRun && (currentRun.status === "done" || currentRun.status === "partialDone") && (
-        <div style={{ padding: "8px 12px", flexShrink: 0, borderTop: "1px solid #21262d" }}>
-          <div style={{ color: currentRun.status === "done" ? "#68d391" : "#f6ad55", fontSize: 12, marginBottom: 6, fontWeight: 700 }}>
-            {currentRun.status === "done" ? "✓ 完了" : "⚠️ 一部完了"}
-          </div>
-          {currentRun.mergeResults.map((r) => (
-            <div key={r.branch} style={{ fontSize: 10, fontFamily: "monospace", marginBottom: 2 }}>
-              <span style={{ color: r.success ? "#68d391" : "#fc8181" }}>{r.success ? "✓" : "✕"}</span>
-              <span style={{ color: "#8b949e", marginLeft: 4 }}>{r.branch.split("/").pop()}</span>
-              {r.conflictFiles.length > 0 && (
-                <span style={{ color: "#fc8181", marginLeft: 4 }}>コンフリクト: {r.conflictFiles.join(", ")}</span>
-              )}
-            </div>
-          ))}
-          <button
-            onClick={() => useSwarmStore.getState().reset()}
-            style={{ ...actionButtonStyle, width: "100%", marginTop: 8, background: "#21262d", border: "1px solid #30363d", color: "#8b949e" }}
-          >
-            リセット
-          </button>
+      {/* 完了サマリー */}
+      {currentRun && (currentRun.status === "done" || currentRun.status === "partialDone" || currentRun.status === "failed") && (
+        <div style={{ flex: 1, overflow: "auto", borderTop: "1px solid #21262d" }}>
+          <ResultSummaryPanel
+            run={currentRun}
+            result={aggregatedResult}
+            onReset={() => useSwarmStore.getState().reset()}
+            onOpenConflict={(outcome) => setConflictOutcome(outcome)}
+          />
         </div>
+      )}
+
+      {/* コンフリクト解決ビュー */}
+      {conflictOutcome && currentRun && (
+        <SwarmConflictView
+          outcome={conflictOutcome}
+          projectPath={currentRun.projectPath}
+          onResolved={() => setConflictOutcome(null)}
+          onClose={() => setConflictOutcome(null)}
+        />
       )}
 
       {/* 設定モーダル */}

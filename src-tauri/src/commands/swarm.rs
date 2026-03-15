@@ -2,7 +2,9 @@ use tauri::State;
 
 use crate::state::AppState;
 use crate::swarm::{
+    conflict_resolver::{self, commit_conflict_resolution, parse_conflict_blocks, ConflictBlock, ConflictResolution},
     orchestrator::{OrchestratorRun, SwarmSettings},
+    result_aggregator::AggregatedResult,
     subtask::{detect_file_conflicts, SplitTaskRequest, SplitTaskResult, SubTask},
     task_splitter::TaskSplitter,
     worker::WorkerConfig,
@@ -106,17 +108,72 @@ pub async fn orchestrator_get_status(
     Ok(orch.current_run.clone())
 }
 
-/// Worker のステータス変化を Orchestrator に通知する
+/// Worker のステータス変化を Orchestrator に通知する（Case A 自動リトライ対応）
 #[tauri::command]
 pub async fn orchestrator_notify_worker_done(
     worker_id: String,
     status: WorkerStatus,
     orchestrator: State<'_, SharedOrchestrator>,
+    manager: State<'_, SharedWorkerManager>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
-    orch.update_worker_status(&worker_id, status, &app);
+    let retry_request = {
+        let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        orch.update_worker_status(&worker_id, status, &app)
+    };
+
+    // Case A: リトライが必要なら新 Worker を起動
+    if let Some(req) = retry_request {
+        let new_id = {
+            let mut mgr = manager.lock().map_err(|e| e.to_string())?;
+            mgr.spawn_worker(req.worker_config, app.clone())?
+        };
+        let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        orch.update_retry_worker_id(&worker_id, new_id);
+    }
+
     Ok(())
+}
+
+/// 集約結果を取得する
+#[tauri::command]
+pub async fn orchestrator_get_result(
+    orchestrator: State<'_, SharedOrchestrator>,
+) -> Result<Option<AggregatedResult>, String> {
+    let orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    Ok(orch.get_aggregated_result())
+}
+
+/// 指定ファイルのコンフリクトブロックを取得する
+#[tauri::command]
+pub async fn orchestrator_get_conflicts(
+    file_path: String,
+) -> Result<Vec<ConflictBlock>, String> {
+    let path = std::path::Path::new(&file_path);
+    Ok(parse_conflict_blocks(path))
+}
+
+/// コンフリクトブロックを解決する
+#[tauri::command]
+pub async fn orchestrator_resolve_conflict(
+    file_path: String,
+    start_line: u32,
+    resolution: ConflictResolution,
+) -> Result<(), String> {
+    let path = std::path::Path::new(&file_path);
+    conflict_resolver::resolve_conflict_block(path, start_line, resolution)
+}
+
+/// コンフリクト解決後にコミットする
+#[tauri::command]
+pub async fn orchestrator_commit_resolution(
+    project_path: String,
+    files: Vec<String>,
+    message: Option<String>,
+) -> Result<(), String> {
+    let repo = std::path::Path::new(&project_path);
+    let msg = message.as_deref().unwrap_or("fix: Swarm コンフリクト解決");
+    commit_conflict_resolution(repo, &files, msg)
 }
 
 /// 全 Worker のブランチをベースブランチにマージする

@@ -19,6 +19,24 @@ export interface MergeOutcome {
   error: string | null;
 }
 
+export interface WorkerDiff {
+  workerId: string;
+  branch: string;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+  changedFiles: string[];
+}
+
+export interface AggregatedResult {
+  workerDiffs: WorkerDiff[];
+  succeededIds: string[];
+  failedIds: string[];
+  totalFilesChanged: number;
+  totalInsertions: number;
+  totalDeletions: number;
+}
+
 export type RunStatus =
   | "preparing"
   | "running"
@@ -47,6 +65,8 @@ interface SwarmState {
   isStarting: boolean;
   isMerging: boolean;
   error: string | null;
+  aggregatedResult: AggregatedResult | null;
+  conflictOutcome: MergeOutcome | null;
 
   startRun: (
     tasks: SubTask[],
@@ -57,6 +77,7 @@ interface SwarmState {
   mergeAll: () => Promise<void>;
   notifyWorkerDone: (workerId: string, status: WorkerStatus) => Promise<void>;
   listenOrchestratorEvents: () => () => void;
+  setConflictOutcome: (outcome: MergeOutcome | null) => void;
   reset: () => void;
 }
 
@@ -66,6 +87,8 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   isStarting: false,
   isMerging: false,
   error: null,
+  aggregatedResult: null,
+  conflictOutcome: null,
 
   startRun: async (tasks, settings, projectPath) => {
     set({ isStarting: true, error: null, mergeReady: false });
@@ -130,13 +153,24 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       set({ currentRun: event.payload, mergeReady: true });
     }).then((fn) => unlistens.push(fn));
 
-    // マージ完了
+    // マージ完了 → 集約結果を取得
     listen<OrchestratorRun>("orchestrator-merge-done", (event) => {
       set({ currentRun: event.payload, mergeReady: false, isMerging: false });
+      invoke<AggregatedResult | null>("orchestrator_get_result")
+        .then((r) => set({ aggregatedResult: r }))
+        .catch(() => {/* ベストエフォート */});
     }).then((fn) => unlistens.push(fn));
 
     return () => unlistens.forEach((fn) => fn());
   },
 
-  reset: () => set({ currentRun: null, mergeReady: false, error: null }),
+  setConflictOutcome: (outcome) => set({ conflictOutcome: outcome }),
+
+  reset: () => set({
+    currentRun: null,
+    mergeReady: false,
+    error: null,
+    aggregatedResult: null,
+    conflictOutcome: null,
+  }),
 }));
