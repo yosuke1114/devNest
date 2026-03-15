@@ -1,10 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import type { WorkerInfo, WorkerStatus } from "./types";
+
+// Shell アイドル検出: 行末が $/%/>/#/❯/→ で終わる場合にプロンプト表示と判定 (F-12-10)
+const SHELL_PROMPT_RE = /[\$%>#❯→]\s*$/m;
 
 interface XtermPaneProps {
   worker: WorkerInfo;
@@ -35,6 +38,8 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
   const fitAddonRef = useRef<FitAddon | null>(null);
 
   const isShell = worker.config.kind === "shell";
+  // Shell アイドル状態: プロンプトが検出されたら true (F-12-11)
+  const [shellIdle, setShellIdle] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -60,20 +65,24 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // PTY出力をxtermに流す
+    // PTY出力をxtermに流す（Shell の場合はプロンプト検出でアイドル判定）
     let unlistenFn: (() => void) | undefined;
     const unlistenPromise = listen<{ workerId: string; data: string }>(
       "worker-output",
       (event) => {
         if (event.payload.workerId === worker.id) {
           term.write(event.payload.data);
+          if (isShell && SHELL_PROMPT_RE.test(event.payload.data)) {
+            setShellIdle(true);
+          }
         }
       }
     );
     unlistenPromise.then((fn) => { unlistenFn = fn; });
 
-    // キーボード入力をRustに転送
+    // キーボード入力をRustに転送（Shell の場合は入力でRunningに戻す）
     const onDataDisposable = term.onData((data) => {
+      if (isShell) setShellIdle(false);
       const encoder = new TextEncoder();
       invoke("write_to_worker", {
         workerId: worker.id,
@@ -136,7 +145,18 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
           <span style={{ color: "#e6edf3", fontSize: 12, fontFamily: "monospace" }}>
             {worker.config.label}
           </span>
-          {!isShell && (
+          {isShell ? (
+            <span
+              data-testid="shell-idle-badge"
+              style={{
+                fontSize: 10,
+                color: shellIdle ? "#68d391" : "#f6ad55",
+                fontFamily: "monospace",
+              }}
+            >
+              {shellIdle ? "Idle" : "● Running"}
+            </span>
+          ) : (
             <span
               style={{
                 fontSize: 11,
