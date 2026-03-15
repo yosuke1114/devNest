@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use super::git_branch::{create_worker_branch, current_branch, merge_worker_branch, MergeOutcome};
+use super::resource_monitor::can_spawn_worker;
 use super::result_aggregator::{AggregatedResult, ResultAggregator};
 use super::subtask::SubTask;
 use super::worker::{WorkerConfig, WorkerKind, WorkerMode, WorkerStatus};
@@ -318,7 +319,10 @@ impl Orchestrator {
                     continue;
                 }
                 let all_deps_done = assign.task.depends_on.iter().all(|dep| done_ids.contains(dep));
-                if all_deps_done && running_count + new_spawns.len() < run.settings.max_workers as usize {
+                if all_deps_done
+                    && running_count + new_spawns.len() < run.settings.max_workers as usize
+                    && can_spawn_worker()
+                {
                     let config = make_worker_config(assign, &repo, &run_id, &run.settings);
                     new_spawns.push((idx, config));
                 }

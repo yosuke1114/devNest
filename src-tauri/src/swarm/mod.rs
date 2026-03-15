@@ -1,6 +1,10 @@
+pub mod ai_resolver;
+pub mod resource_monitor;
+pub mod conflict_resolver;
 pub mod git_branch;
 pub mod manager;
 pub mod orchestrator;
+pub mod result_aggregator;
 pub mod subtask;
 pub mod task_splitter;
 pub mod worker;

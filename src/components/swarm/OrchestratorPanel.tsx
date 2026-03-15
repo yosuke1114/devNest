@@ -23,6 +23,7 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<SwarmSettings>(DEFAULT_SWARM_SETTINGS);
+  const [resources, setResources] = useState<{ cpuPct: number; memFreeGb: number; spawnSuppressed: boolean } | null>(null);
 
   const {
     currentRun,
@@ -42,6 +43,21 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
   useEffect(() => {
     return listenOrchestratorEvents();
   }, [listenOrchestratorEvents]);
+
+  // リソース監視 (F-12-19): 5秒おきにポーリング
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const r = await invoke<{ cpuPct: number; memFreeGb: number; spawnSuppressed: boolean }>(
+          "get_system_resources"
+        );
+        setResources(r);
+      } catch { /* ignore */ }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleSplit = async () => {
     if (!prompt.trim()) return;
@@ -85,14 +101,34 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
         <span style={{ fontSize: 13, fontWeight: 700, color: "#e6edf3" }}>
           🧠 Orchestrator
         </span>
-        <button
-          data-testid="settings-button"
-          onClick={() => setShowSettings(true)}
-          style={iconButtonStyle}
-          aria-label="Swarm設定を開く"
-        >
-          ⚙️
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* リソースインジケーター (F-12-19) */}
+          {resources && (
+            <span
+              data-testid="resource-indicator"
+              style={{
+                fontSize: 10,
+                fontFamily: "monospace",
+                color: resources.spawnSuppressed ? "#fc8181" : "#68d391",
+                background: "#161b22",
+                border: `1px solid ${resources.spawnSuppressed ? "#4a1a1a" : "#1a4a1a"}`,
+                borderRadius: 4,
+                padding: "2px 6px",
+              }}
+              title={`CPU: ${resources.cpuPct.toFixed(1)}% / 空きMem: ${resources.memFreeGb.toFixed(1)}GB`}
+            >
+              {resources.spawnSuppressed ? "⚠️" : "✓"} CPU {resources.cpuPct.toFixed(0)}% MEM {resources.memFreeGb.toFixed(1)}G
+            </span>
+          )}
+          <button
+            data-testid="settings-button"
+            onClick={() => setShowSettings(true)}
+            style={iconButtonStyle}
+            aria-label="Swarm設定を開く"
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
 
       {/* タスク入力 */}
