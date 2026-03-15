@@ -232,6 +232,31 @@ export function buildMockIpcScript(overrides: Record<string, unknown> = {}): str
     index_reset: 2,
     sync_log_list: [],
     git_pull: null,
+    // ─── Swarm (Phase 11-12) ───────────────────────────────────
+    split_task: {
+      tasks: [
+        { id: 1, title: "Task A: ユーザー認証実装", files: ["src/auth.ts"], instruction: "ユーザー認証を実装してください", dependsOn: [] },
+        { id: 2, title: "Task B: テスト追加", files: ["src/auth.test.ts"], instruction: "テストを追加してください", dependsOn: [1] },
+      ],
+      conflictWarnings: [],
+      cycleError: null,
+    },
+    spawn_worker: null,
+    kill_worker: null,
+    write_to_worker: null,
+    resize_worker: null,
+    orchestrator_start_run: "run-e2e-001",
+    orchestrator_cancel_run: null,
+    orchestrator_merge_all: { success: true, outcomes: [] },
+    orchestrator_resolve_conflict: null,
+    orchestrator_commit_resolution: null,
+    orchestrator_ai_resolve_conflict: {
+      resolvedCode: "const auth = () => true; // AI resolved",
+      confidence: "high",
+      reason: "両者が独立した変更のため統合可能",
+    },
+    orchestrator_get_run_status: null,
+    get_system_resources: { cpuPct: 25.0, memFreeGb: 8.0, spawnSuppressed: false },
     ...overrides,
   };
 
@@ -241,8 +266,41 @@ export function buildMockIpcScript(overrides: Record<string, unknown> = {}): str
   };
 
   return `
+    // ─── Tauri イベントシステム: transformCallback + plugin:event|listen ──────
+    window.__tauriCbNextId__ = 0;
+    window.__tauriCallbacks__ = {};
+    window.__tauriEventListeners__ = {};
+
+    // テストからイベントを発火するユーティリティ
+    window.__fireEvent = function(event, payload) {
+      var ids = window.__tauriEventListeners__[event] || [];
+      ids.forEach(function(id) {
+        var cb = window.__tauriCallbacks__[id];
+        if (cb) cb({ event: event, payload: payload, id: id, windowLabel: 'main' });
+      });
+    };
+
     window.__TAURI_INTERNALS__ = {
       invoke: async function(cmd, args) {
+        // plugin:event|listen: コールバックIDとイベント名を紐付け
+        if (cmd === 'plugin:event|listen') {
+          var evName = args && args.event;
+          var handlerId = args && args.handler;
+          if (evName !== undefined && handlerId !== undefined) {
+            window.__tauriEventListeners__[evName] = window.__tauriEventListeners__[evName] || [];
+            window.__tauriEventListeners__[evName].push(handlerId);
+          }
+          return handlerId; // eventId として返す
+        }
+        // plugin:event|unlisten
+        if (cmd === 'plugin:event|unlisten') {
+          var evName2 = args && args.event;
+          var evId = args && args.eventId;
+          if (evName2 && window.__tauriEventListeners__[evName2]) {
+            window.__tauriEventListeners__[evName2] = window.__tauriEventListeners__[evName2].filter(function(x) { return x !== evId; });
+          }
+          return null;
+        }
         const responses = ${JSON.stringify(defaults)};
         // document_get は documentId に応じて返すデータを切り替える
         if (cmd === 'document_get') {
@@ -256,13 +314,26 @@ export function buildMockIpcScript(overrides: Record<string, unknown> = {}): str
         console.warn('[mock-ipc] unknown command:', cmd, args);
         return null;
       },
-      transformCallback: function(cb, once) { return 0; },
-      clearCallback: function(id) {},
+      transformCallback: function(cb, once) {
+        var id = ++window.__tauriCbNextId__;
+        window.__tauriCallbacks__[id] = cb;
+        return id;
+      },
+      clearCallback: function(id) {
+        delete window.__tauriCallbacks__[id];
+      },
       isTauri: true,
     };
-    // Tauri イベントシステムのスタブ
+    // Tauri イベントシステムのスタブ（直接 listen 呼び出し用フォールバック）
     window.__TAURI_INTERNALS__.listen = async function(event, cb) {
-      return () => {};
+      var id = window.__TAURI_INTERNALS__.transformCallback(cb, false);
+      window.__tauriEventListeners__[event] = window.__tauriEventListeners__[event] || [];
+      window.__tauriEventListeners__[event].push(id);
+      return function() {
+        window.__TAURI_INTERNALS__.clearCallback(id);
+        var listeners = window.__tauriEventListeners__[event] || [];
+        window.__tauriEventListeners__[event] = listeners.filter(function(x) { return x !== id; });
+      };
     };
   `;
 }

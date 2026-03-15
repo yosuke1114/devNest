@@ -95,6 +95,7 @@ const SidebarItem = memo(function SidebarItem({
 }: SidebarItemProps) {
   return (
     <button
+      data-testid={screen ? `nav-${screen}` : undefined}
       onClick={onClick}
       style={{
         display: "flex",

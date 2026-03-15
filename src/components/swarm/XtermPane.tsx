@@ -115,6 +115,7 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
 
   return (
     <div
+      data-testid={`worker-pane-${worker.id}`}
       onClick={onClick}
       style={{
         display: "flex",
@@ -130,6 +131,7 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
     >
       {/* ヘッダー */}
       <div
+        data-testid={`worker-pane-header-${worker.id}`}
         style={{
           display: "flex",
           alignItems: "center",
@@ -141,13 +143,13 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span>{isShell ? "🐚" : "🤖"}</span>
+          <span data-testid={`worker-kind-icon-${worker.id}`}>{isShell ? "🐚" : "🤖"}</span>
           <span style={{ color: "#e6edf3", fontSize: 12, fontFamily: "monospace" }}>
             {worker.config.label}
           </span>
           {isShell ? (
             <span
-              data-testid="shell-idle-badge"
+              data-testid={`shell-badge-${worker.id}`}
               style={{
                 fontSize: 10,
                 color: shellIdle ? "#68d391" : "#f6ad55",
@@ -158,6 +160,8 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
             </span>
           ) : (
             <span
+              data-testid={`worker-badge-${worker.id}`}
+              data-status={worker.status}
               style={{
                 fontSize: 11,
                 color: STATUS_COLOR[worker.status],
@@ -169,6 +173,7 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
           )}
         </div>
         <button
+          data-testid={`worker-close-${worker.id}`}
           onClick={(e) => {
             e.stopPropagation();
             onKill(worker.id);
@@ -188,7 +193,7 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
       </div>
 
       {/* ターミナル本体 */}
-      <div ref={containerRef} style={{ flex: 1, padding: 4 }} />
+      <div data-testid={`worker-terminal-${worker.id}`} ref={containerRef} style={{ flex: 1, padding: 4 }} />
     </div>
   );
 }

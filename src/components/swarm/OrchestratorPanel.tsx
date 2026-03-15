@@ -202,7 +202,7 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
       )}
 
       {/* SubTask リスト */}
-      <div style={{ flex: 1, overflow: "auto", padding: "4px 12px" }}>
+      <div data-testid="subtask-list" style={{ flex: 1, overflow: "auto", padding: "4px 12px" }}>
         {tasks.length === 0 ? (
           <div style={emptyStyle}>
             タスクを入力して「分解」を実行してください
@@ -422,6 +422,7 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
           {([2, 4, 6, 8] as const).map((n) => (
             <button
               key={n}
+              data-testid={`worker-limit-${n}`}
               aria-pressed={local.maxWorkers === n}
               onClick={() => setLocal((s) => ({ ...s, maxWorkers: n }))}
               style={{
@@ -437,6 +438,7 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
 
         <label style={labelStyle}>タイムアウト: {local.timeoutMinutes} 分</label>
         <input
+          data-testid="timeout-slider"
           type="range"
           min={5}
           max={120}
@@ -449,6 +451,7 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
 
         <label style={labelStyle}>Git ブランチプレフィックス</label>
         <input
+          data-testid="branch-prefix-input"
           type="text"
           value={local.branchPrefix}
           onChange={(e) => setLocal((s) => ({ ...s, branchPrefix: e.target.value }))}
@@ -463,6 +466,7 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
           {["zsh", "bash", "fish"].map((sh) => (
             <button
               key={sh}
+              data-testid={`shell-option-${sh}`}
               aria-pressed={local.defaultShell === sh}
               onClick={() => setLocal((s) => ({ ...s, defaultShell: sh }))}
               style={{
@@ -510,6 +514,7 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
         <div style={{ color: "#8b949e", fontSize: 10, fontWeight: 700, marginBottom: 6, marginTop: 4, letterSpacing: "0.05em" }}>AI解決</div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, cursor: "pointer", fontSize: 12, color: "#e6edf3" }}>
           <input
+            data-testid="auto-approve-checkbox"
             type="checkbox"
             checked={local.autoApproveHighConfidence}
             onChange={(e) => setLocal((s) => ({ ...s, autoApproveHighConfidence: e.target.checked }))}
@@ -519,7 +524,7 @@ function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
         </label>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
-          <button onClick={onClose} style={cancelButtonStyle}>キャンセル</button>
+          <button data-testid="settings-cancel" onClick={onClose} style={cancelButtonStyle}>キャンセル</button>
           <button
             data-testid="settings-save"
             onClick={handleSave}

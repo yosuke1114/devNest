@@ -92,10 +92,11 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
       : 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
+    <div data-testid="terminal-grid" style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
       {/* ツールバー */}
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+      <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <button
+          data-testid="add-shell-button"
           onClick={() => addWorker("shell")}
           disabled={workers.length >= MAX_WORKERS}
           style={addButtonStyle}
@@ -103,6 +104,7 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
           🐚 Shell を追加
         </button>
         <button
+          data-testid="add-worker-button"
           onClick={() => addWorker("claudeCode")}
           disabled={workers.length >= MAX_WORKERS}
           style={addButtonStyle}
@@ -110,6 +112,7 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
           🤖 Worker を追加
         </button>
         <span
+          data-testid="worker-count"
           style={{
             color: "#484f58",
             fontSize: 12,
@@ -123,15 +126,17 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
 
       {/* 進捗バー（ClaudeCode Worker が1つ以上のときのみ表示） */}
       {showProgress && (
-        <div style={{ flexShrink: 0 }}>
+        <div data-testid="progress-bar-container" style={{ flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 11, color: "#8b949e" }}>Worker 進捗</span>
-            <span style={{ fontSize: 11, color: "#e6edf3", fontFamily: "monospace" }}>
+            <span data-testid="progress-text" style={{ fontSize: 11, color: "#e6edf3", fontFamily: "monospace" }}>
               {finishedCount} / {claudeWorkers.length} 完了 ({progressPct}%)
             </span>
           </div>
-          <div style={{ height: 4, background: "#21262d", borderRadius: 2, overflow: "hidden" }}>
+          <div data-testid="progress-bar-track" style={{ height: 4, background: "#21262d", borderRadius: 2, overflow: "hidden" }}>
             <div
+              data-testid="progress-bar-fill"
+              data-progress={progressPct}
               style={{
                 height: "100%",
                 width: `${progressPct}%`,
@@ -150,7 +155,7 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
 
       {/* グリッド */}
       {workers.length === 0 ? (
-        <div style={emptyStateStyle}>
+        <div data-testid="empty-state" style={emptyStateStyle}>
           <div style={{ fontSize: 24, marginBottom: 8 }}>🤖</div>
           <div style={{ color: "#484f58", fontSize: 13 }}>
             Worker または Shell を追加してください
@@ -158,6 +163,7 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
         </div>
       ) : (
         <div
+          data-testid="pane-grid"
           style={{
             flex: 1,
             display: "grid",

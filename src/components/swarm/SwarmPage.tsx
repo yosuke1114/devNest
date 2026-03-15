@@ -8,6 +8,7 @@ export function SwarmPage() {
 
   return (
     <div
+      data-testid="swarm-page"
       style={{
         height: "100%",
         display: "flex",
