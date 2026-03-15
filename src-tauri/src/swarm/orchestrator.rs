@@ -617,6 +617,7 @@ mod tests {
             merge_results: vec![],
             total: 3,
             done_count: 0,
+            settings: SwarmSettings::default(),
         };
 
         skip_dependents(&mut run, 1);
