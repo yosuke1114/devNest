@@ -19,9 +19,14 @@ const mockProject = {
 };
 
 vi.mock("../stores/projectStore", () => ({
-  useProjectStore: vi.fn((sel: (s: unknown) => unknown) =>
-    sel({ currentProject: mockProject, projects: [mockProject] })
-  ),
+  useProjectStore: vi.fn((sel?: (s: unknown) => unknown) => {
+    const state = {
+      currentProject: mockProject,
+      projects: [mockProject],
+      currentStatus: null,
+    };
+    return sel ? sel(state) : state;
+  }),
 }));
 
 vi.mock("../stores/analyticsStore", () => ({
@@ -42,6 +47,13 @@ vi.mock("../stores/maintenanceStore", () => ({
   useMaintenanceStore: vi.fn(() => ({
     report: null, status: "idle", fetchReport: vi.fn(),
     runLint: vi.fn(), runTests: vi.fn(), runDepsUpdate: vi.fn(),
+    depReport: null, depStatus: "idle", scanDependencies: vi.fn(),
+    debtReport: null, debtStatus: "idle", scanDebt: vi.fn(),
+    coverageReport: null, coverageStatus: "idle", scanCoverage: vi.fn(),
+    generateCoverage: vi.fn(),
+    refactorCandidates: [], refactorStatus: "idle", scanRefactor: vi.fn(),
+    docStaleness: [], docStalenessStatus: "idle", scanDocStaleness: vi.fn(),
+    error: null, scanAll: vi.fn(),
   })),
 }));
 
@@ -83,6 +95,11 @@ vi.mock("../stores/agentStore", () => ({
 
 vi.mock("../lib/ipc", () => ({
   ipc: { invoke: vi.fn(() => Promise.resolve(null)) },
+  // CollaborationScreen が直接呼ぶ関数
+  knowledgeList: vi.fn(() => Promise.resolve([])),
+  knowledgeSearch: vi.fn(() => Promise.resolve([])),
+  knowledgeAdd: vi.fn(() => Promise.resolve(null)),
+  teamGetDashboard: vi.fn(() => Promise.resolve(null)),
 }));
 
 // ─── テスト ─────────────────────────────────────────────────────────
@@ -130,6 +147,27 @@ describe("Phase 6-10 スクリーン スモークテスト", () => {
   it("AgentControlScreen: プロジェクト選択済みでクラッシュしない", async () => {
     const { AgentControlScreen } = await import("../AgentControlScreen");
     const { unmount } = render(<AgentControlScreen />);
+    expect(document.body).toBeTruthy();
+    unmount();
+  });
+
+  it("CollaborationScreen: プロジェクト選択済みでクラッシュしない", async () => {
+    const { CollaborationScreen } = await import("../CollaborationScreen");
+    const { unmount } = render(<CollaborationScreen />);
+    expect(document.body).toBeTruthy();
+    unmount();
+  });
+
+  it("FreshnessMapScreen: プロジェクト選択済みでクラッシュしない", async () => {
+    const { FreshnessMapScreen } = await import("../FreshnessMapScreen");
+    const { unmount } = render(<FreshnessMapScreen />);
+    expect(document.body).toBeTruthy();
+    unmount();
+  });
+
+  it("ProjectViewScreen: プロジェクト選択済みでクラッシュしない", async () => {
+    const { ProjectViewScreen } = await import("../ProjectViewScreen");
+    const { unmount } = render(<ProjectViewScreen />);
     expect(document.body).toBeTruthy();
     unmount();
   });
