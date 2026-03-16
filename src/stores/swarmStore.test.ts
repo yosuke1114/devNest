@@ -228,4 +228,95 @@ describe("swarmStore", () => {
       expect(s.conflictOutcome).toBeNull();
     });
   });
+
+  // ─ listenOrchestratorEvents ─────────────────────────────────────
+
+  describe("listenOrchestratorEvents", () => {
+    it("cleanup 関数を返す", () => {
+      const cleanup = useSwarmStore.getState().listenOrchestratorEvents();
+      expect(typeof cleanup).toBe("function");
+      cleanup();
+    });
+
+    it("orchestrator-status-changed で currentRun が更新される", async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const listeners: Record<string, (event: unknown) => void> = {};
+      vi.mocked(listen).mockImplementation(async (event: string, cb: (event: unknown) => void) => {
+        listeners[event] = cb;
+        return vi.fn();
+      });
+
+      useSwarmStore.getState().listenOrchestratorEvents();
+      // listen は async なので一旦 microtask を待つ
+      await new Promise((r) => setTimeout(r, 0));
+
+      const run = makeRun({ status: "running", doneCount: 1 });
+      listeners["orchestrator-status-changed"]?.({ payload: run });
+      expect(useSwarmStore.getState().currentRun?.doneCount).toBe(1);
+    });
+
+    it("orchestrator-merge-ready で mergeReady が true になる", async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const listeners: Record<string, (event: unknown) => void> = {};
+      vi.mocked(listen).mockImplementation(async (event: string, cb: (event: unknown) => void) => {
+        listeners[event] = cb;
+        return vi.fn();
+      });
+
+      useSwarmStore.getState().listenOrchestratorEvents();
+      await new Promise((r) => setTimeout(r, 0));
+
+      const run = makeRun({ status: "merge_ready" });
+      listeners["orchestrator-merge-ready"]?.({ payload: run });
+      expect(useSwarmStore.getState().mergeReady).toBe(true);
+      expect(useSwarmStore.getState().currentRun?.status).toBe("merge_ready");
+    });
+
+    it("orchestrator-merge-done で isMerging が false になり aggregatedResult を取得する", async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const listeners: Record<string, (event: unknown) => void> = {};
+      vi.mocked(listen).mockImplementation(async (event: string, cb: (event: unknown) => void) => {
+        listeners[event] = cb;
+        return vi.fn();
+      });
+
+      const mockResult: AggregatedResult = {
+        workerDiffs: [], succeededIds: ["w-001"], failedIds: [],
+        totalFilesChanged: 5, totalInsertions: 50, totalDeletions: 10,
+      };
+      mockInvoke.mockResolvedValueOnce(mockResult);
+
+      useSwarmStore.setState({ isMerging: true, mergeReady: true });
+      useSwarmStore.getState().listenOrchestratorEvents();
+      await new Promise((r) => setTimeout(r, 0));
+
+      const run = makeRun({ status: "done" });
+      listeners["orchestrator-merge-done"]?.({ payload: run });
+
+      expect(useSwarmStore.getState().isMerging).toBe(false);
+      expect(useSwarmStore.getState().mergeReady).toBe(false);
+
+      // invoke("orchestrator_get_result") の結果を待つ
+      await new Promise((r) => setTimeout(r, 10));
+      expect(useSwarmStore.getState().aggregatedResult).toEqual(mockResult);
+    });
+
+    it("cleanup で全 unlisten が呼ばれる", async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const unlistenFns = [vi.fn(), vi.fn(), vi.fn()];
+      let callIdx = 0;
+      vi.mocked(listen).mockImplementation(async () => {
+        const fn = unlistenFns[callIdx++] ?? vi.fn();
+        return fn;
+      });
+
+      const cleanup = useSwarmStore.getState().listenOrchestratorEvents();
+      // listen のPromise解決を待つ
+      await new Promise((r) => setTimeout(r, 0));
+      cleanup();
+      for (const fn of unlistenFns) {
+        expect(fn).toHaveBeenCalled();
+      }
+    });
+  });
 });

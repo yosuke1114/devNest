@@ -287,4 +287,164 @@ describe("documentStore", () => {
     cleanup();
     expect(mockUnlisten).toHaveBeenCalled();
   });
+
+  // ─── createDocument ──────────────────────────────────────────────────────
+
+  it("createDocument() が documentCreate を呼んで documents に追加する", async () => {
+    const newDoc = makeDocument({ id: 10, path: "docs/new.md" });
+    mockIpc.documentCreate.mockResolvedValueOnce(newDoc);
+    useDocumentStore.setState({ documents: [] });
+
+    const result = await useDocumentStore.getState().createDocument(1, "docs/new.md");
+
+    expect(mockIpc.documentCreate).toHaveBeenCalledWith(1, "docs/new.md");
+    expect(result).toEqual(newDoc);
+    expect(useDocumentStore.getState().documents).toContainEqual(newDoc);
+  });
+
+  it("createDocument() 後に documents がパス順にソートされる", async () => {
+    const existing = makeDocument({ id: 1, path: "docs/z.md" });
+    useDocumentStore.setState({ documents: [existing] });
+    const newDoc = makeDocument({ id: 2, path: "docs/a.md" });
+    mockIpc.documentCreate.mockResolvedValueOnce(newDoc);
+
+    await useDocumentStore.getState().createDocument(1, "docs/a.md");
+
+    const docs = useDocumentStore.getState().documents;
+    expect(docs[0].path).toBe("docs/a.md");
+    expect(docs[1].path).toBe("docs/z.md");
+  });
+
+  // ─── renameDocument ──────────────────────────────────────────────────────
+
+  it("renameDocument() が documentRename を呼んで documents を更新する", async () => {
+    const original = makeDocument({ id: 1, path: "docs/old.md" });
+    const renamed = makeDocument({ id: 1, path: "docs/new.md" });
+    useDocumentStore.setState({ documents: [original], currentDoc: null });
+    mockIpc.documentRename.mockResolvedValueOnce(renamed);
+
+    const result = await useDocumentStore.getState().renameDocument(1, 1, "docs/new.md");
+
+    expect(mockIpc.documentRename).toHaveBeenCalledWith(1, 1, "docs/new.md");
+    expect(result).toEqual(renamed);
+    expect(useDocumentStore.getState().documents[0].path).toBe("docs/new.md");
+  });
+
+  it("renameDocument() で currentDoc が同じ id なら currentDoc も更新される", async () => {
+    const original = makeDocument({ id: 1, path: "docs/old.md" });
+    const renamed = makeDocument({ id: 1, path: "docs/new.md" });
+    useDocumentStore.setState({
+      documents: [original],
+      currentDoc: makeDocWithContent({ id: 1, path: "docs/old.md", project_id: 1 }),
+    });
+    mockIpc.documentRename.mockResolvedValueOnce(renamed);
+
+    await useDocumentStore.getState().renameDocument(1, 1, "docs/new.md");
+
+    expect(useDocumentStore.getState().currentDoc?.path).toBe("docs/new.md");
+  });
+
+  // ─── fetchFileTree ────────────────────────────────────────────────────────
+
+  it("fetchFileTree() が fileTree を呼んで fileTreeNodes をセットする", async () => {
+    const nodes = [{ id: "n1", name: "src", path: "src", kind: "dir" as const, children: [] }];
+    mockIpc.fileTree.mockResolvedValueOnce(nodes);
+
+    await useDocumentStore.getState().fetchFileTree(1);
+
+    expect(mockIpc.fileTree).toHaveBeenCalledWith(1);
+    expect(useDocumentStore.getState().fileTreeNodes).toEqual(nodes);
+    expect(useDocumentStore.getState().fileTreeLoading).toBe(false);
+  });
+
+  it("fetchFileTree() 失敗時に fileTreeLoading が false に戻る", async () => {
+    mockIpc.fileTree.mockRejectedValueOnce(new Error("fail"));
+    await useDocumentStore.getState().fetchFileTree(1);
+    expect(useDocumentStore.getState().fileTreeLoading).toBe(false);
+  });
+
+  // ─── openCodeFile ─────────────────────────────────────────────────────────
+
+  it("openCodeFile() 成功時に openedFile が code タイプになる", async () => {
+    mockIpc.fileRead.mockResolvedValueOnce({
+      path: "src/foo.ts",
+      content: "const x = 1;",
+      truncated: false,
+      total_lines: 1,
+    });
+
+    await useDocumentStore.getState().openCodeFile(1, "src/foo.ts");
+
+    const of = useDocumentStore.getState().openedFile;
+    expect(of?.type).toBe("code");
+    if (of?.type === "code") {
+      expect(of.path).toBe("src/foo.ts");
+      expect(of.content).toBe("const x = 1;");
+    }
+  });
+
+  it("openCodeFile() 失敗時に openedFile が code-error タイプになる", async () => {
+    mockIpc.fileRead.mockRejectedValueOnce({ message: "file not found" });
+
+    await useDocumentStore.getState().openCodeFile(1, "src/missing.ts");
+
+    const of = useDocumentStore.getState().openedFile;
+    expect(of?.type).toBe("code-error");
+    if (of?.type === "code-error") {
+      expect(of.error).toBe("file not found");
+    }
+  });
+
+  // ─── saveCodeFile ─────────────────────────────────────────────────────────
+
+  it("saveCodeFile() 成功時に codeSaveStatus が success になる", async () => {
+    mockIpc.fileSave.mockResolvedValueOnce(undefined);
+
+    await useDocumentStore.getState().saveCodeFile(1, "src/foo.ts", "content");
+
+    expect(mockIpc.fileSave).toHaveBeenCalledWith(1, "src/foo.ts", "content");
+    expect(useDocumentStore.getState().codeSaveStatus).toBe("success");
+  });
+
+  it("saveCodeFile() 失敗時に codeSaveStatus が error になりリスローされる", async () => {
+    mockIpc.fileSave.mockRejectedValueOnce({ message: "write error" });
+
+    await expect(
+      useDocumentStore.getState().saveCodeFile(1, "src/foo.ts", "content")
+    ).rejects.toBeTruthy();
+    expect(useDocumentStore.getState().codeSaveStatus).toBe("error");
+  });
+
+  // ─── listenCodeSaveProgress ──────────────────────────────────────────────
+
+  it("listenCodeSaveProgress() が code_save_progress イベントをリッスンする", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const cleanup = await useDocumentStore.getState().listenCodeSaveProgress();
+    expect(listen).toHaveBeenCalledWith("code_save_progress", expect.any(Function));
+    expect(typeof cleanup).toBe("function");
+  });
+
+  // ─── reset ───────────────────────────────────────────────────────────────
+
+  it("reset() で全状態が初期値に戻る", () => {
+    useDocumentStore.setState({
+      documents: [makeDocument()],
+      currentDoc: makeDocWithContent(),
+      linkedIssues: [],
+      saveStatus: "success",
+      error: { code: "Git", message: "err" } as never,
+      fileTreeLoading: true,
+      codeSaveStatus: "error",
+    });
+
+    useDocumentStore.getState().reset();
+    const s = useDocumentStore.getState();
+    expect(s.documents).toEqual([]);
+    expect(s.currentDoc).toBeNull();
+    expect(s.saveStatus).toBe("idle");
+    expect(s.error).toBeNull();
+    expect(s.fileTreeNodes).toEqual([]);
+    expect(s.fileTreeLoading).toBe(false);
+    expect(s.codeSaveStatus).toBe("idle");
+  });
 });
