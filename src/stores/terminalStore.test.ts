@@ -284,4 +284,120 @@ describe("terminalStore", () => {
     useTerminalStore.getState().onTerminalDone(makeDonePayload({ branch_name: "feat/new" }));
     expect(useTerminalStore.getState().session?.branch_name).toBe("feat/new");
   });
+
+  // ─── sendResize ───────────────────────────────────────────────────────────
+
+  it("sendResize() が terminalResize を呼ぶ", () => {
+    useTerminalStore.setState({ session: makeSession({ id: 7, status: "running" }) });
+    mockIpc.terminalResize.mockResolvedValueOnce(undefined);
+
+    useTerminalStore.getState().sendResize(120, 40);
+
+    expect(mockIpc.terminalResize).toHaveBeenCalledWith(7, 120, 40);
+  });
+
+  it("sendResize() で session が null のとき何もしない", () => {
+    useTerminalStore.setState({ session: null });
+    useTerminalStore.getState().sendResize(80, 24);
+    expect(mockIpc.terminalResize).not.toHaveBeenCalled();
+  });
+
+  it("sendResize() で session が running でないとき何もしない", () => {
+    useTerminalStore.setState({ session: makeSession({ status: "completed" }) });
+    useTerminalStore.getState().sendResize(80, 24);
+    expect(mockIpc.terminalResize).not.toHaveBeenCalled();
+  });
+
+  // ─── setPendingPrompt ─────────────────────────────────────────────────────
+
+  it("setPendingPrompt() で pendingPrompt がセットされる", () => {
+    useTerminalStore.getState().setPendingPrompt("Fix auth");
+    expect(useTerminalStore.getState().pendingPrompt).toBe("Fix auth");
+  });
+
+  it("setPendingPrompt(null) で pendingPrompt が null になる", () => {
+    useTerminalStore.setState({ pendingPrompt: "something" });
+    useTerminalStore.getState().setPendingPrompt(null);
+    expect(useTerminalStore.getState().pendingPrompt).toBeNull();
+  });
+
+  // ─── listenEvents ─────────────────────────────────────────────────────────
+
+  it("listenEvents() が terminal_error をリッスンし cleanup 関数を返す", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    vi.mocked(listen).mockResolvedValueOnce(vi.fn());
+
+    const cleanup = useTerminalStore.getState().listenEvents();
+    expect(typeof cleanup).toBe("function");
+  });
+
+  it("listenEvents() terminal_error イベントで session が error 状態になる", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    const session = makeSession({ id: 5, status: "running" });
+    useTerminalStore.setState({ session });
+
+    useTerminalStore.getState().listenEvents();
+    await new Promise((r) => setTimeout(r, 0));
+
+    capturedCb?.({ payload: { session_id: 5, error: "PTY failed" } });
+
+    const s = useTerminalStore.getState();
+    expect(s.error).toBe("PTY failed");
+    expect(s.startStatus).toBe("error");
+    expect(s.session?.status).toBe("failed");
+  });
+
+  it("listenEvents() session_id が一致しない場合は無視される", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    const session = makeSession({ id: 5, status: "running" });
+    useTerminalStore.setState({ session });
+
+    useTerminalStore.getState().listenEvents();
+    await new Promise((r) => setTimeout(r, 0));
+
+    capturedCb?.({ payload: { session_id: 99, error: "other error" } });
+
+    // session_id が違うので状態は変わらない
+    expect(useTerminalStore.getState().error).toBeNull();
+  });
+
+  // ─── reset ────────────────────────────────────────────────────────────────
+
+  it("reset() で全状態が初期値に戻る", () => {
+    useTerminalStore.setState({
+      session: makeSession(),
+      sessions: [makeSession()],
+      startStatus: "success",
+      showPrReadyBanner: true,
+      readyBranch: "feat/done",
+      hasDocChanges: true,
+      changedFiles: ["docs/x.md"],
+      error: "some error",
+      pendingPrompt: "Fix auth",
+    });
+
+    useTerminalStore.getState().reset();
+    const s = useTerminalStore.getState();
+    expect(s.session).toBeNull();
+    expect(s.sessions).toEqual([]);
+    expect(s.startStatus).toBe("idle");
+    expect(s.showPrReadyBanner).toBe(false);
+    expect(s.readyBranch).toBe("");
+    expect(s.hasDocChanges).toBe(false);
+    expect(s.changedFiles).toEqual([]);
+    expect(s.error).toBeNull();
+    expect(s.pendingPrompt).toBeNull();
+  });
 });
