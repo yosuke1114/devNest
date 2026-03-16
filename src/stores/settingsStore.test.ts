@@ -263,4 +263,35 @@ describe("settingsStore", () => {
     await useSettingsStore.getState().setTheme("system");
     expect(useSettingsStore.getState().theme).toBe("system");
   });
+
+  it("startAuth() 失敗時に error がセットされリスローされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.githubAuthStart.mockRejectedValueOnce({ code: "GitHub", message: "timeout" });
+    await expect(useSettingsStore.getState().startAuth(1)).rejects.toBeTruthy();
+    expect(useSettingsStore.getState().error).toBeTruthy();
+  });
+
+  it("revokeAuth() 失敗時に error がセットされリスローされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.githubAuthRevoke.mockRejectedValueOnce({ code: "GitHub", message: "forbidden" });
+    await expect(useSettingsStore.getState().revokeAuth(1)).rejects.toBeTruthy();
+    expect(useSettingsStore.getState().error).toBeTruthy();
+  });
+
+  it("listenAuthDone() success ペイロードで fetchAuthStatus が呼ばれる", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.githubAuthStatus.mockResolvedValueOnce({ connected: true, user_login: "alice", avatar_url: null });
+
+    await useSettingsStore.getState().listenAuthDone(1);
+    capturedCb?.({ payload: { success: true } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(ipcM.githubAuthStatus).toHaveBeenCalledWith(1);
+  });
 });

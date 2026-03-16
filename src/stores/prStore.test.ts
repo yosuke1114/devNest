@@ -559,4 +559,35 @@ describe("prStore", () => {
     expect(s.mergeStatus).toBe("idle");
     expect(s.error).toBeNull();
   });
+
+  it("selectPr() detail 取得失敗で detailStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prGetDetail.mockRejectedValueOnce(new Error("not found"));
+    await usePrStore.getState().selectPr(99, 1);
+    expect(usePrStore.getState().detailStatus).toBe("error");
+  });
+
+  it("fetchFiles() 失敗で filesStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prGetFiles.mockRejectedValueOnce(new Error("forbidden"));
+    await usePrStore.getState().fetchFiles(1, 5);
+    expect(usePrStore.getState().filesStatus).toBe("error");
+  });
+
+  it("fetchDiff() 失敗で diffStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prGetDiff.mockRejectedValueOnce(new Error("too large"));
+    await usePrStore.getState().fetchDiff(1, 5);
+    expect(usePrStore.getState().diffStatus).toBe("error");
+  });
+
+  it("mergePr() gitPull が失敗しても mergeStatus は success のまま", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prMerge.mockResolvedValueOnce(undefined);
+    ipcM.gitPull.mockRejectedValueOnce(new Error("pull failed"));
+
+    await usePrStore.getState().mergePr(1, 99, "merge");
+
+    expect(usePrStore.getState().mergeStatus).toBe("success");
+  });
 });
