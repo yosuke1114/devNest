@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
+use crate::notification::ring::{emit_ring_event, RingEvent, RingUrgency};
+
 use super::git_branch::{create_worker_branch, current_branch, merge_worker_branch, MergeOutcome};
 use super::resource_monitor::can_spawn_worker;
 use super::result_aggregator::{AggregatedResult, ResultAggregator};
@@ -281,8 +283,24 @@ impl Orchestrator {
                 };
                 if status == WorkerStatus::Done {
                     completed_task_id = Some(assign.task.id);
+                    // Worker完了 → 通知リングへ発火
+                    emit_ring_event(app, RingEvent::SwarmWorkerUpdate {
+                        run_id: run.run_id.clone(),
+                        worker_id: worker_id.to_string(),
+                        task_title: assign.task.title.clone(),
+                        status: "done".to_string(),
+                        urgency: RingUrgency::Info,
+                    });
                 } else if status == WorkerStatus::Error {
                     is_error = true;
+                    // Workerエラー → 通知リングへ発火
+                    emit_ring_event(app, RingEvent::SwarmWorkerUpdate {
+                        run_id: run.run_id.clone(),
+                        worker_id: worker_id.to_string(),
+                        task_title: assign.task.title.clone(),
+                        status: "error".to_string(),
+                        urgency: RingUrgency::Warning,
+                    });
                     // エラー時: このタスクに依存するタスクをスキップ
                     let error_task_id = assign.task.id;
                     skip_dependents(run, error_task_id);
@@ -359,6 +377,15 @@ impl Orchestrator {
         } else if all_finished && pending_spawns == 0 {
             run.status = RunStatus::Merging;
             let _ = app.emit("orchestrator-merge-ready", &run);
+            // Swarm全体完了 → 通知リングへ発火
+            let has_errors = run.assignments.iter().any(|a| a.execution_state == ExecutionState::Error);
+            emit_ring_event(app, RingEvent::SwarmRunComplete {
+                run_id: run.run_id.clone(),
+                total: run.total,
+                done: run.done_count,
+                has_conflicts: has_errors,
+                urgency: if has_errors { RingUrgency::Warning } else { RingUrgency::Info },
+            });
         } else {
             let _ = app.emit("orchestrator-status-changed", &run);
         }
@@ -496,8 +523,10 @@ fn make_worker_config(
     WorkerConfig {
         kind: WorkerKind::ClaudeCode,
         mode: WorkerMode::Batch,
+        role: crate::swarm::worker::WorkerRole::Builder,
         label: assign.task.title.clone(),
         working_dir: repo.clone(),
+        assigned_files: vec![],
         depends_on: vec![],
         metadata,
     }

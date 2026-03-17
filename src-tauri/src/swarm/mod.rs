@@ -1,3 +1,4 @@
+pub mod agentic_bridge;
 pub mod ai_resolver;
 pub mod resource_monitor;
 pub mod conflict_resolver;
@@ -8,6 +9,14 @@ pub mod result_aggregator;
 pub mod subtask;
 pub mod task_splitter;
 pub mod worker;
+pub mod role_manager;
+pub mod guard_manager;
+pub mod watchdog;
+pub mod context_store;
+pub mod mail_store;
+pub mod session_store;
+pub mod knowledge_store;
+pub mod health_check;
 
 use std::sync::{Arc, Mutex};
 

@@ -1,5 +1,7 @@
+use std::path::Path;
 use tauri::State;
 
+use crate::doc_mapping::index::build_index;
 use crate::state::AppState;
 use crate::swarm::{
     ai_resolver::{AiConflictResolver, AiResolution},
@@ -67,6 +69,7 @@ pub async fn list_workers(
 }
 
 /// ユーザープロンプトから SubTask リストを生成する（Claude API 呼び出し）
+/// doc-mapping インデックスが存在する場合は設計書コンテキストを注入する
 #[tauri::command]
 pub async fn split_task(
     request: SplitTaskRequest,
@@ -74,10 +77,26 @@ pub async fn split_task(
 ) -> Result<SplitTaskResult, String> {
     let api_key = load_anthropic_key(&state).await?;
     let splitter = TaskSplitter::new(&api_key);
-    let tasks = splitter
-        .split(&request.prompt, &request.project_path, &request.context_files)
-        .await
-        .map_err(|e| e.to_string())?;
+
+    // doc-mapping インデックスを試行ロード（利用可能な場合のみ使用）
+    let project_path = Path::new(&request.project_path);
+    let docs_dir = project_path.join("docs");
+    let doc_index = if docs_dir.exists() {
+        build_index(&docs_dir, project_path).ok()
+    } else {
+        None
+    };
+
+    let tasks = if let Some(ref index) = doc_index {
+        splitter
+            .split_with_docs(&request.prompt, &request.project_path, &request.context_files, index)
+            .await
+    } else {
+        splitter
+            .split(&request.prompt, &request.project_path, &request.context_files)
+            .await
+    }
+    .map_err(|e| e.to_string())?;
 
     let conflict_warnings = detect_file_conflicts(&tasks);
     let cycle_error = detect_circular_deps(&tasks).err();

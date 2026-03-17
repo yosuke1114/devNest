@@ -45,6 +45,25 @@ pub enum RingEvent {
         title: String,
         url: Option<String>,
     },
+
+    /// Swarm Worker の状態変化（done / error / retrying）
+    SwarmWorkerUpdate {
+        run_id: String,
+        worker_id: String,
+        task_title: String,
+        /// "done" | "error" | "retrying"
+        status: String,
+        urgency: RingUrgency,
+    },
+
+    /// Swarm 実行全体の完了
+    SwarmRunComplete {
+        run_id: String,
+        total: u32,
+        done: u32,
+        has_conflicts: bool,
+        urgency: RingUrgency,
+    },
 }
 
 impl RingEvent {
@@ -64,6 +83,8 @@ impl RingEvent {
                 }
             }
             RingEvent::GitHubEvent { .. } => &RingUrgency::Info,
+            RingEvent::SwarmWorkerUpdate { urgency, .. } => urgency,
+            RingEvent::SwarmRunComplete { urgency, .. } => urgency,
         }
     }
 
@@ -77,6 +98,8 @@ impl RingEvent {
             RingEvent::MaintenanceAlert { .. } => "保守アラート",
             RingEvent::DocStale { .. } => "設計書鮮度アラート",
             RingEvent::GitHubEvent { title, .. } => title,
+            RingEvent::SwarmWorkerUpdate { .. } => "Swarm Worker 通知",
+            RingEvent::SwarmRunComplete { .. } => "Swarm 完了",
         }
     }
 
@@ -89,6 +112,16 @@ impl RingEvent {
             }
             RingEvent::GitHubEvent { event_type, title, .. } => {
                 format!("{}: {}", event_type, title)
+            }
+            RingEvent::SwarmWorkerUpdate { task_title, status, .. } => {
+                format!("タスク「{}」が {} になりました", task_title, status)
+            }
+            RingEvent::SwarmRunComplete { done, total, has_conflicts, .. } => {
+                if *has_conflicts {
+                    format!("{}/{} タスク完了（コンフリクトあり）", done, total)
+                } else {
+                    format!("{}/{} タスクが正常に完了しました", done, total)
+                }
             }
         }
     }

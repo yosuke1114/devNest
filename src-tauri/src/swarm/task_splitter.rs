@@ -1,4 +1,5 @@
 /// TaskSplitter — Claude API でユーザーのタスクをサブタスクに分解する
+use crate::doc_mapping::{index::find_docs_for_source, types::DocIndex};
 use crate::error::{AppError, Result};
 use crate::services::anthropic::AnthropicClient;
 
@@ -52,6 +53,27 @@ impl TaskSplitter {
         project_path: &str,
         context_files: &[String],
     ) -> Result<Vec<SubTask>> {
+        self.split_inner(prompt, project_path, context_files, None).await
+    }
+
+    /// doc-mapping インデックスを活用してタスク分解する（設計書コンテキスト注入）
+    pub async fn split_with_docs(
+        &self,
+        prompt: &str,
+        project_path: &str,
+        context_files: &[String],
+        doc_index: &DocIndex,
+    ) -> Result<Vec<SubTask>> {
+        self.split_inner(prompt, project_path, context_files, Some(doc_index)).await
+    }
+
+    async fn split_inner(
+        &self,
+        prompt: &str,
+        project_path: &str,
+        context_files: &[String],
+        doc_index: Option<&DocIndex>,
+    ) -> Result<Vec<SubTask>> {
         let context_section = if context_files.is_empty() {
             String::new()
         } else {
@@ -61,9 +83,31 @@ impl TaskSplitter {
             )
         };
 
+        // doc-mapping が利用可能な場合、関連設計書コンテキストを注入する
+        let doc_context_section = if let Some(index) = doc_index {
+            let related_docs: Vec<String> = context_files
+                .iter()
+                .flat_map(|f| find_docs_for_source(index, f))
+                .map(|e| e.doc.clone())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+
+            if related_docs.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "\n\n関連設計書（実装との整合性を維持してください）:\n{}\n各サブタスクの instruction に設計書の参照パスを含め、実装完了後に frontmatter の last_synced_commit と version を更新するよう指示してください。",
+                    related_docs.iter().map(|d| format!("- {}", d)).collect::<Vec<_>>().join("\n")
+                )
+            }
+        } else {
+            String::new()
+        };
+
         let user_message = format!(
-            "プロジェクト: {}\n\nタスク:\n{}{}",
-            project_path, prompt, context_section
+            "プロジェクト: {}\n\nタスク:\n{}{}{}",
+            project_path, prompt, doc_context_section, context_section
         );
 
         let raw = self
