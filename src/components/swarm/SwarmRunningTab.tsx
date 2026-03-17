@@ -30,6 +30,12 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
   const [resources, setResources] = useState<SystemResources | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
   const [logs, setLogs] = useState<WorkerLogLine[]>([]);
+  const [logOpen, setLogOpen] = useState(false);
+
+  // workerId → タスクラベルのマップ
+  const workerLabelMap = Object.fromEntries(
+    (currentRun?.assignments ?? []).map((a) => [a.workerId, a.task.title])
+  );
 
   // Orchestrator イベントリスナー
   useEffect(() => {
@@ -182,43 +188,60 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
           </div>
         </div>
 
-        {/* 右ペイン: TerminalGrid + ライブログ */}
+        {/* 右ペイン: TerminalGrid + ライブログ（折りたたみ） */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* ターミナルグリッド */}
-          <div style={{ flex: 1, overflow: "hidden" }}>
+          <div style={{ flex: 1, overflow: "hidden", padding: 8 }}>
             <TerminalGrid workingDir={workingDir} />
           </div>
 
-          {/* ライブログ */}
-          <div style={logPanel} data-testid="live-log-panel">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={panelTitle}>ライブログ</span>
-              {selectedWorker && (
-                <span style={{ fontSize: 11, color: "#58a6ff", fontFamily: "monospace" }}>
-                  [{selectedWorker.split("-").pop()}]
+          {/* ライブログ（折りたたみ） */}
+          <div style={{ flexShrink: 0, borderTop: "1px solid #21262d" }} data-testid="live-log-panel">
+            {/* ヘッダー（クリックで開閉） */}
+            <div
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", cursor: "pointer", userSelect: "none" }}
+              onClick={() => setLogOpen((v) => !v)}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#8b949e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                ライブログ
+              </span>
+              {selectedWorker && workerLabelMap[selectedWorker] && (
+                <span style={{ fontSize: 11, color: "#58a6ff" }}>
+                  — {workerLabelMap[selectedWorker]}
                 </span>
               )}
+              {!selectedWorker && (
+                <span style={{ fontSize: 11, color: "#484f58" }}>（Worker一覧からWorkerを選択してフィルター）</span>
+              )}
+              <span style={{ marginLeft: "auto", color: "#484f58", fontSize: 11 }}>{logOpen ? "▲ 閉じる" : "▼ 開く"}</span>
               {logs.length > 0 && (
                 <button
-                  onClick={() => setLogs([])}
-                  style={{ marginLeft: "auto", background: "none", border: "none", color: "#484f58", cursor: "pointer", fontSize: 11 }}
+                  onClick={(e) => { e.stopPropagation(); setLogs([]); }}
+                  style={{ background: "none", border: "none", color: "#484f58", cursor: "pointer", fontSize: 11, padding: "0 4px" }}
                 >
                   クリア
                 </button>
               )}
             </div>
-            <div style={logBody} data-testid="log-body">
-              {filteredLogs.length === 0 ? (
-                <div style={{ color: "#484f58", fontSize: 11 }}>ログがありません</div>
-              ) : (
-                filteredLogs.map((l, i) => (
-                  <div key={i} style={{ fontFamily: "monospace", fontSize: 11, color: "#8b949e", lineHeight: 1.5 }}>
-                    <span style={{ color: "#484f58" }}>[{l.workerId.split("-").pop()}]</span>{" "}
-                    {l.line}
-                  </div>
-                ))
-              )}
-            </div>
+
+            {/* ログ本体 */}
+            {logOpen && (
+              <div style={logBody} data-testid="log-body">
+                {filteredLogs.length === 0 ? (
+                  <div style={{ color: "#484f58", fontSize: 11, padding: "4px 12px" }}>ログがありません</div>
+                ) : (
+                  filteredLogs.map((l, i) => {
+                    const label = workerLabelMap[l.workerId] ?? l.workerId.slice(0, 8);
+                    return (
+                      <div key={i} style={{ fontFamily: "monospace", fontSize: 11, color: "#8b949e", lineHeight: 1.5, padding: "0 12px" }}>
+                        <span style={{ color: "#388bfd", marginRight: 6 }}>[{label}]</span>
+                        {l.line}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -344,18 +367,8 @@ const actionButton: React.CSSProperties = {
   fontFamily: "monospace",
 };
 
-const logPanel: React.CSSProperties = {
-  height: 140,
-  flexShrink: 0,
-  padding: "8px 12px",
-  borderTop: "1px solid #21262d",
-  background: "#0d1117",
-  overflow: "hidden",
-  display: "flex",
-  flexDirection: "column",
-};
-
 const logBody: React.CSSProperties = {
-  flex: 1,
+  maxHeight: 160,
   overflowY: "auto",
+  paddingBottom: 6,
 };

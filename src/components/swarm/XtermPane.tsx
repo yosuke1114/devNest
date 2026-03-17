@@ -4,7 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
-import type { WorkerInfo, WorkerStatus } from "./types";
+import type { WorkerInfo, WorkerStatus, WorkerRole } from "./types";
+import { ROLE_ICON } from "./types";
 
 // Shell アイドル検出: 行末が $/%/>/#/❯/→ で終わる場合にプロンプト表示と判定 (F-12-10)
 const SHELL_PROMPT_RE = /[\$%>#❯→]\s*$/m;
@@ -40,6 +41,11 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
   const isShell = worker.config.kind === "shell";
   // Shell アイドル状態: プロンプトが検出されたら true (F-12-11)
   const [shellIdle, setShellIdle] = useState(false);
+  // 役割: 未指定の場合は "shell" をデフォルトとする (Phase 13)
+  const role: WorkerRole = worker.config.role ?? "shell";
+  // Watchdog: スタック/ナッジ状態 (Phase 13)
+  const [isStalled, setIsStalled] = useState(false);
+  const [isNudged, setIsNudged] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -60,7 +66,10 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(containerRef.current);
-    try { fitAddon.fit(); } catch { /* ignore initial layout */ }
+    // レイアウト確定後にフィット（初回は rAF で遅延）
+    requestAnimationFrame(() => {
+      try { fitAddon.fit(); } catch { /* ignore */ }
+    });
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
@@ -111,6 +120,31 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
     };
   }, [worker.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Watchdog: worker-nudged / worker-stalled イベントを監視 (Phase 13)
+  useEffect(() => {
+    let unlistenNudged: (() => void) | undefined;
+    let unlistenStalled: (() => void) | undefined;
+
+    listen<{ workerId: string }>("worker-nudged", (event) => {
+      if (event.payload.workerId === worker.id) {
+        setIsNudged(true);
+        setIsStalled(false);
+        setTimeout(() => setIsNudged(false), 2000);
+      }
+    }).then((fn) => { unlistenNudged = fn; });
+
+    listen<{ workerId: string }>("worker-stalled", (event) => {
+      if (event.payload.workerId === worker.id) {
+        setIsStalled(true);
+      }
+    }).then((fn) => { unlistenStalled = fn; });
+
+    return () => {
+      unlistenNudged?.();
+      unlistenStalled?.();
+    };
+  }, [worker.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const borderColor = isActive ? "#388bfd" : STATUS_COLOR[worker.status];
 
   return (
@@ -144,6 +178,32 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span data-testid={`worker-kind-icon-${worker.id}`}>{isShell ? "🐚" : "🤖"}</span>
+          {/* 役割バッジ (Phase 13) */}
+          <span
+            data-testid={`worker-role-icon-${worker.id}`}
+            data-role={role}
+            style={{ fontSize: 12 }}
+          >
+            {ROLE_ICON[role]}
+          </span>
+          {/* Watchdog ナッジ通知 (Phase 13) */}
+          {isNudged && (
+            <span
+              data-testid={`worker-nudged-icon-${worker.id}`}
+              style={{ color: "#f6ad55", fontSize: 12 }}
+            >
+              ⚡
+            </span>
+          )}
+          {/* Watchdog スタック警告 (Phase 13) */}
+          {isStalled && (
+            <span
+              data-testid={`worker-stalled-badge-${worker.id}`}
+              style={{ color: "#fc8181", fontSize: 11, fontFamily: "monospace" }}
+            >
+              ⚠️ Stalled
+            </span>
+          )}
           <span style={{ color: "#e6edf3", fontSize: 12, fontFamily: "monospace" }}>
             {worker.config.label}
           </span>
@@ -192,8 +252,8 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
         </button>
       </div>
 
-      {/* ターミナル本体 */}
-      <div data-testid={`worker-terminal-${worker.id}`} ref={containerRef} style={{ flex: 1, padding: 4 }} />
+      {/* ターミナル本体 — padding なし (fitAddon の列計算がズレるため) */}
+      <div data-testid={`worker-terminal-${worker.id}`} ref={containerRef} style={{ flex: 1, overflow: "hidden" }} />
     </div>
   );
 }
