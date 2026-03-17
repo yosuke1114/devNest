@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useSwarmStore } from "../../stores/swarmStore";
 import { XtermPane } from "./XtermPane";
-import type { WorkerConfig, WorkerInfo, WorkerStatus } from "./types";
+import { RoleSelector } from "./RoleSelector";
+import type { WorkerConfig, WorkerInfo, WorkerRole, WorkerStatus } from "./types";
 
 const MAX_WORKERS = 8;
 
@@ -14,7 +15,20 @@ interface TerminalGridProps {
 export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<WorkerRole>("builder");
   const notifyWorkerDone = useSwarmStore((s) => s.notifyWorkerDone);
+
+  // マウント時に既存 Worker を取得（タブ切り替えで遅れてマウントした場合の取り逃し対策）
+  useEffect(() => {
+    Promise.resolve(invoke<WorkerInfo[]>("list_workers"))
+      .then((existing) => {
+        if (Array.isArray(existing) && existing.length > 0) {
+          setWorkers(existing);
+          setActiveId(existing[existing.length - 1].id);
+        }
+      })
+      .catch(() => {/* list_workers 未実装環境ではスキップ */});
+  }, []);
 
   // worker-spawned: Rust 側で起動された Worker（手動・Orchestrator 問わず）を追加
   useEffect(() => {
@@ -58,6 +72,7 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
       workingDir,
       dependsOn: [],
       metadata: {},
+      role: pendingRole,
     };
     try {
       await invoke("spawn_worker", { config });
@@ -94,7 +109,8 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   return (
     <div data-testid="terminal-grid" style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
       {/* ツールバー */}
-      <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+      <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+        <RoleSelector value={pendingRole} onChange={setPendingRole} />
         <button
           data-testid="add-shell-button"
           onClick={() => addWorker("shell")}
