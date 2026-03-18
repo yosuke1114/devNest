@@ -320,6 +320,20 @@ function SettingsPanel({ settings, onChange }: { settings: SwarmSettings; onChan
           />
           高信頼度コンフリクトの自動承認
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: "#e6edf3" }}>
+          <input
+            type="checkbox"
+            data-testid="claude-interactive-checkbox"
+            checked={settings.claudeInteractive}
+            onChange={(e) => onChange({ ...settings, claudeInteractive: e.target.checked })}
+          />
+          <span>
+            対話モード
+            <span style={{ color: "#484f58", fontSize: 10, marginLeft: 4 }}>
+              (タスク実行後も追加指示が可能。自動完了検出なし)
+            </span>
+          </span>
+        </label>
       </div>
     </div>
   );

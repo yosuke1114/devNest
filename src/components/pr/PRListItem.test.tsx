@@ -105,6 +105,31 @@ describe("PRListItem", () => {
     expect(hasSelected).toBe(true);
   });
 
+  // ─── ChecksIcon ───────────────────────────────────────────────────────────
+
+  it("checks_status='failing' のとき failing アイコンが表示される (line 43)", () => {
+    const { container } = render(
+      <PRListItem {...defaultProps} pr={makePr({ checks_status: "failing" })} />
+    );
+    // IconCircleX が描画される (SVG)
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("checks_status='pending' のとき pending アイコンが表示される (line 44)", () => {
+    const { container } = render(
+      <PRListItem {...defaultProps} pr={makePr({ checks_status: "pending" })} />
+    );
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("checks_status=null のとき ChecksIcon は何も表示しない (line 45)", () => {
+    render(
+      <PRListItem {...defaultProps} pr={makePr({ checks_status: null })} />
+    );
+    // passing/failing/pending どのテキストも表示されない
+    expect(screen.queryByText(/passing|failing|pending/)).toBeNull();
+  });
+
   // ─── クリック ─────────────────────────────────────────────────────────────
 
   it("クリックで onSelect が呼ばれる", () => {

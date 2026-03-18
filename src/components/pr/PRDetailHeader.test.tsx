@@ -74,4 +74,24 @@ describe("PRDetailHeader", () => {
     render(<PRDetailHeader pr={makePr({ author_login: "bob" })} />);
     expect(screen.getByText(/bob/)).toBeInTheDocument();
   });
+
+  it("state='merged' のとき merged アイコンが表示される (lines 15-17)", () => {
+    const { container } = render(<PRDetailHeader pr={makePr({ state: "merged" })} />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("state='closed' のとき closed アイコンが表示される", () => {
+    const { container } = render(<PRDetailHeader pr={makePr({ state: "closed" })} />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("checks_status='pending' のとき pending を表示する (lines 33-38)", () => {
+    render(<PRDetailHeader pr={makePr({ checks_status: "pending" })} />);
+    expect(screen.getByText(/pending/i)).toBeInTheDocument();
+  });
+
+  it("checks_status=null のとき unknown を表示する (line 39-41)", () => {
+    render(<PRDetailHeader pr={makePr({ checks_status: null })} />);
+    expect(screen.getByText("unknown")).toBeInTheDocument();
+  });
 });

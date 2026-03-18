@@ -282,6 +282,35 @@ describe("MaintenanceScreen", () => {
     expect(screen.queryByText("Doc Health")).not.toBeInTheDocument();
   });
 
+  // ─── DebtPanel AI修正PR (lines 106-113, 512-523) ────────────────────────────
+
+  it("DebtPanel: TodoFixme items があるとき AI修正PR ボタンが表示される (line 512)", () => {
+    maintenanceState.debtStatus = "success";
+    maintenanceState.debtReport = mockDebtReport;
+    render(<MaintenanceScreen />);
+    const aiFixBtns = screen.getAllByText("AI修正PR");
+    expect(aiFixBtns.length).toBeGreaterThan(0);
+  });
+
+  it("DebtPanel: TodoFixme items のある AI修正PR クリックで navigate が呼ばれる (lines 106-113)", () => {
+    maintenanceState.debtStatus = "success";
+    maintenanceState.debtReport = mockDebtReport; // has TodoFixme category
+    render(<MaintenanceScreen />);
+    const aiFixBtns = screen.getAllByText("AI修正PR");
+    // Debt panel の AI修正PR (DebtPanel の前にある Coverage のボタンがある可能性があるため最後のボタンを使用)
+    fireEvent.click(aiFixBtns[aiFixBtns.length - 1]);
+    expect(uiState.navigate).toHaveBeenCalledWith("terminal");
+  });
+
+  it("RefactorPanel: candidates がある AI修正PR クリックで navigate が呼ばれる (line 520)", () => {
+    maintenanceState.refactorStatus = "success";
+    maintenanceState.refactorCandidates = mockRefactorCandidates;
+    render(<MaintenanceScreen />);
+    const aiFixBtns = screen.getAllByText("AI修正PR");
+    fireEvent.click(aiFixBtns[aiFixBtns.length - 1]);
+    expect(uiState.navigate).toHaveBeenCalledWith("terminal");
+  });
+
   // ─── isLoading 状態 ──────────────────────────────────────────────────────────
 
   it("loading 中は 全スキャン ボタンが disabled", () => {

@@ -239,4 +239,16 @@ describe("TerminalScreen — 追加カバレッジ", () => {
     // running なので startSession は呼ばれない
     expect(terminalState.startSession).not.toHaveBeenCalled();
   });
+
+  it("currentProject なしのとき空メッセージが表示される", () => {
+    projectState.currentProject = null;
+    render(<TerminalScreen />);
+    expect(screen.getByText("プロジェクトを選択してください")).toBeInTheDocument();
+  });
+
+  it("session.status=completed のとき completed ステータスが表示される", () => {
+    terminalState.session = { id: 1, status: "completed" };
+    render(<TerminalScreen />);
+    expect(screen.getByText(/completed/)).toBeInTheDocument();
+  });
 });

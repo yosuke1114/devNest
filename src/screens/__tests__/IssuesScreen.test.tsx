@@ -447,4 +447,32 @@ describe("IssuesScreen — AI Wizard タブ", () => {
     fireEvent.click(screen.getByText("Issue 一覧"));
     expect(screen.getByRole("combobox")).toBeInTheDocument(); // statusFilter select
   });
+
+  it("生成後に contextChunks が表示される (lines 545-566)", async () => {
+    mockIpc.documentSearchSemantic = vi.fn(() =>
+      Promise.resolve([
+        { path: "docs/design.md", section_heading: "Overview", content: "Some content", score: 0.9 },
+        { path: "docs/api.md", section_heading: null, content: "API details", score: 0.8 },
+      ])
+    );
+    issueState.currentDraft = mockDraft;
+    goWizard();
+    fireEvent.click(screen.getByTestId("wizard-generate-draft"));
+    await waitFor(() => {
+      expect(screen.getByText(/docs\/design\.md/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/docs\/api\.md/)).toBeInTheDocument();
+    expect(screen.getByText("関連設計書")).toBeInTheDocument();
+  });
+
+  it("Preview ボタンクリックで bodyPreview モードになる (lines 608-616)", () => {
+    issueState.currentDraft = mockDraft;
+    goWizard();
+    // body ありなので Preview/Edit ボタンが表示
+    expect(screen.getByText("Edit")).toBeInTheDocument();
+    // Preview ボタンクリックで bodyPreview=true
+    fireEvent.click(screen.getByText("Preview"));
+    // "本文" テキストが表示される（bodyPreview state で分岐）
+    expect(screen.getByText("本文")).toBeInTheDocument();
+  });
 });

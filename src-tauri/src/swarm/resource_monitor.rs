@@ -11,6 +11,8 @@ pub struct ResourceUsage {
     pub cpu_pct: f32,
     /// 空きメモリ (GB)
     pub mem_free_gb: f32,
+    /// 総メモリ (GB)
+    pub mem_total_gb: f32,
     /// 起動抑制中かどうか (CPU > 75% または mem_free < 1 GB)
     pub spawn_suppressed: bool,
 }
@@ -25,19 +27,21 @@ pub fn get_resource_usage() -> ResourceUsage {
     sys.refresh_memory();
 
     let cpu_pct = sys.global_cpu_usage();
-    let mem_free_bytes = sys.available_memory();
-    let mem_free_gb = mem_free_bytes as f32 / 1024.0 / 1024.0 / 1024.0;
+    let mem_free_gb = sys.available_memory() as f32 / 1024.0 / 1024.0 / 1024.0;
+    let mem_total_gb = sys.total_memory() as f32 / 1024.0 / 1024.0 / 1024.0;
 
     let spawn_suppressed = cpu_pct > 75.0 || mem_free_gb < 1.0;
 
     ResourceUsage {
         cpu_pct,
         mem_free_gb,
+        mem_total_gb,
         spawn_suppressed,
     }
 }
 
-/// Worker を新規起動してよいかを判定する（起動OK条件: CPU < 60% かつ mem_free > 2 GB）
+/// Worker を新規起動してよいかを判定する（起動OK条件: CPU < 75% かつ mem_free > 1 GB）
+/// spawn_suppressed の閾値（UI表示）と統一する
 pub fn can_spawn_worker() -> bool {
     let mut sys = System::new_all();
     sys.refresh_cpu_all();
@@ -48,7 +52,7 @@ pub fn can_spawn_worker() -> bool {
     let cpu_pct = sys.global_cpu_usage();
     let mem_free_gb = sys.available_memory() as f32 / 1024.0 / 1024.0 / 1024.0;
 
-    cpu_pct < 60.0 && mem_free_gb > 2.0
+    cpu_pct < 75.0 && mem_free_gb > 1.0
 }
 
 #[cfg(test)]

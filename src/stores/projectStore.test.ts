@@ -263,4 +263,87 @@ describe("projectStore", () => {
       expect.objectContaining({ projectId: 1, documentId: null })
     );
   });
+
+  // ─── 未カバーブランチ補完 ─────────────────────────────────────────────────
+
+  it("deleteProject() 失敗時に error がセットされ例外がスローされる (lines 114-115)", async () => {
+    const project = makeProject({ id: 7 });
+    useProjectStore.setState({ projects: [project], currentProject: project });
+    mockInvoke.mockRejectedValueOnce(new Error("delete failed"));
+
+    await expect(useProjectStore.getState().deleteProject(7)).rejects.toBeTruthy();
+    expect(useProjectStore.getState().error).toBeTruthy();
+  });
+
+  it("fetchStatus() 失敗時に error がセットされる (line 124)", async () => {
+    mockInvoke.mockRejectedValueOnce(new Error("status failed"));
+
+    await useProjectStore.getState().fetchStatus(1);
+
+    expect(useProjectStore.getState().error).toBeTruthy();
+  });
+
+  it("reset() で全状態がリセットされる (line 133)", () => {
+    const project = makeProject();
+    useProjectStore.setState({
+      projects: [project],
+      currentProject: project,
+      listStatus: "success",
+      error: { code: "Git", message: "err" } as any,
+    });
+
+    useProjectStore.getState().reset();
+
+    const s = useProjectStore.getState();
+    expect(s.projects).toEqual([]);
+    expect(s.currentProject).toBeNull();
+    expect(s.listStatus).toBe("idle");
+    expect(s.error).toBeNull();
+  });
+
+  it("fetchProjects() 時に currentProject が null なら updated も null (branch: line 43)", async () => {
+    useProjectStore.setState({ currentProject: null });
+    mockInvoke.mockResolvedValueOnce([makeProject({ id: 1 })]);
+
+    await useProjectStore.getState().fetchProjects();
+
+    expect(useProjectStore.getState().currentProject).toBeNull();
+  });
+
+  it("selectProject() 同じIDのプロジェクトに切り替える場合 pollingStop は呼ばれない (branch: line 58)", () => {
+    const project = makeProject({ id: 1 });
+    useProjectStore.setState({ currentProject: project });
+
+    useProjectStore.getState().selectProject(project);
+
+    // polling_stop は呼ばれず polling_start は呼ばれる
+    const calls = mockInvoke.mock.calls.map((c) => c[0]);
+    expect(calls).not.toContain("polling_stop");
+    expect(calls).toContain("polling_start");
+  });
+
+  it("selectProject() 異なるIDのプロジェクトに切り替えると pollingStop が呼ばれる (line 59)", () => {
+    const prev = makeProject({ id: 1 });
+    const next = makeProject({ id: 2, name: "Next" });
+    useProjectStore.setState({ currentProject: prev });
+
+    useProjectStore.getState().selectProject(next);
+
+    const calls = mockInvoke.mock.calls.map((c) => c[0]);
+    expect(calls).toContain("polling_stop");
+  });
+
+  it("updateProject() で currentProject が別IDの場合は更新されない (branch: line 97)", async () => {
+    const p1 = makeProject({ id: 1, name: "P1" });
+    const p2 = makeProject({ id: 2, name: "P2" });
+    useProjectStore.setState({ projects: [p1, p2], currentProject: p2 });
+    const updated = makeProject({ id: 1, name: "P1-Updated" });
+    mockInvoke.mockResolvedValueOnce(updated);
+
+    await useProjectStore.getState().updateProject({ id: 1, name: "P1-Updated" });
+
+    // currentProject は p2 のまま
+    expect(useProjectStore.getState().currentProject?.id).toBe(2);
+    expect(useProjectStore.getState().projects[0].name).toBe("P1-Updated");
+  });
 });

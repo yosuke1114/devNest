@@ -33,17 +33,16 @@ export function SwarmScreen({ workingDir, projectPath }: SwarmScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>("split");
   const { currentRun } = useSwarmStore();
 
-  // 実行中タブのバッジ
-  const runningBadge =
-    currentRun &&
-    currentRun.status !== "done" &&
-    currentRun.status !== "partialDone" &&
-    currentRun.status !== "failed" &&
-    currentRun.status !== "cancelled"
-      ? currentRun.doneCount < currentRun.total
-        ? `${currentRun.doneCount}/${currentRun.total}`
-        : null
-      : null;
+  // 実行中タブのバッジ（実行中worker数 / 合計タスク数）
+  const runningBadge = (() => {
+    if (!currentRun) return null;
+    if (currentRun.status === "done" || currentRun.status === "partialDone" ||
+        currentRun.status === "failed" || currentRun.status === "cancelled") return null;
+    const runningCount = currentRun.assignments.filter(
+      (a) => a.executionState === "running"
+    ).length;
+    return `${runningCount}/${currentRun.total}`;
+  })();
 
   // コンフリクトタブのバッジ
   const conflictCount =

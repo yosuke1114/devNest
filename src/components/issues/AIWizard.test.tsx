@@ -114,4 +114,49 @@ describe("AIWizard", () => {
     fireEvent.click(screen.getByText("クリックドラフト"));
     expect(onSelectDraft).toHaveBeenCalledWith(draft);
   });
+
+  it("title input を変更できる (line 138)", () => {
+    const draft = makeDraft({ title: "初期タイトル" });
+    render(<AIWizard {...defaultProps} currentDraft={draft} />);
+    const input = screen.getByDisplayValue("初期タイトル") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "更新タイトル" } });
+    expect(input.value).toBe("更新タイトル");
+  });
+
+  it("title input blur で onUpdateDraft が呼ばれる (lines 63-64, 139)", () => {
+    const onUpdateDraft = vi.fn(async () => {});
+    const draft = makeDraft({ id: 1, title: "タイトル" });
+    render(<AIWizard {...defaultProps} currentDraft={draft} onUpdateDraft={onUpdateDraft} />);
+    const input = screen.getByDisplayValue("タイトル");
+    fireEvent.blur(input);
+    expect(onUpdateDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, title: "タイトル" })
+    );
+  });
+
+  it("context textarea を変更できる (lines 148-154)", () => {
+    const draft = makeDraft({ wizard_context: "初期コンテキスト" });
+    render(<AIWizard {...defaultProps} currentDraft={draft} />);
+    const textarea = screen.getByDisplayValue("初期コンテキスト") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "更新コンテキスト" } });
+    expect(textarea.value).toBe("更新コンテキスト");
+  });
+
+  it("context textarea blur で onUpdateDraft が呼ばれる (line 150)", () => {
+    const onUpdateDraft = vi.fn(async () => {});
+    const draft = makeDraft({ id: 1, wizard_context: "ctx" });
+    render(<AIWizard {...defaultProps} currentDraft={draft} onUpdateDraft={onUpdateDraft} />);
+    const textarea = screen.getByDisplayValue("ctx");
+    fireEvent.blur(textarea);
+    expect(onUpdateDraft).toHaveBeenCalled();
+  });
+
+  it("生成ボタンクリックで onGenerate が呼ばれる (line 157)", () => {
+    const onGenerate = vi.fn(async () => {});
+    const draft = makeDraft({ id: 1 });
+    render(<AIWizard {...defaultProps} currentDraft={draft} onGenerate={onGenerate} />);
+    const btn = screen.getByRole("button", { name: /生成|generate/i });
+    fireEvent.click(btn);
+    expect(onGenerate).toHaveBeenCalledWith(1);
+  });
 });

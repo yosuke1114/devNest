@@ -169,4 +169,48 @@ describe("SplitPaneContainer", () => {
 
     localStorageMock2.removeItem("devnest-split-layout");
   });
+
+  it("ネスト構造のペインを削除できる (line 48: recursive removePaneFromLayout)", async () => {
+    // 入れ子レイアウト: horizontal > [browser, vertical > [kanban, terminal]]
+    const nested: SplitLayout = {
+      direction: "horizontal",
+      children: [
+        { id: "outer-browser", type: "browser", props: {} },
+        {
+          direction: "vertical",
+          children: [
+            { id: "inner-kanban", type: "kanban", props: {} },
+            { id: "inner-terminal", type: "terminal", props: {} },
+          ],
+        } as SplitLayout,
+      ],
+    };
+    render(<SplitPaneContainer initialLayout={nested} />);
+    expect(screen.getByTestId("pane-inner-kanban")).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("カンバンペインを閉じる"));
+    expect(screen.queryByTestId("pane-inner-kanban")).toBeNull();
+    expect(screen.getByTestId("pane-inner-terminal")).toBeInTheDocument();
+  });
+
+  it("キーボードショートカット Ctrl+Shift+1 でプリセット適用 (lines 95-107)", async () => {
+    render(<SplitPaneContainer />);
+    await userEvent.keyboard("{Control>}{Shift>}{1}{/Shift}{/Control}");
+    // code-review プリセット: pane-findings が存在
+    expect(screen.getByTestId("pane-findings")).toBeInTheDocument();
+  });
+
+  it("キーボードショートカット Ctrl+Shift+3 で doc-driven プリセット (lines 95-107)", async () => {
+    render(<SplitPaneContainer />);
+    await userEvent.keyboard("{Control>}{Shift>}{3}{/Shift}{/Control}");
+    // doc-driven プリセット: pane-code が存在
+    expect(screen.getByTestId("pane-code")).toBeInTheDocument();
+  });
+
+  it("Ctrl なしのキーは無視される (line 95)", async () => {
+    render(<SplitPaneContainer />);
+    // Shift+1 だけでは何も起こらない
+    const before = document.body.innerHTML;
+    await userEvent.keyboard("{Shift>}{1}{/Shift}");
+    expect(document.body.innerHTML).toBe(before);
+  });
 });

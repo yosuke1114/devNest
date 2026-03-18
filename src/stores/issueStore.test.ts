@@ -524,6 +524,20 @@ describe("issueStore", () => {
     expect(s.generateStatus).toBe("success");
   });
 
+  // ─── fetchIssueLinks / fetchLabels error (lines 103, 198) ───────────────
+
+  it("fetchIssueLinks() 失敗時に error がセットされる (line 103)", async () => {
+    mockIpc.issueDocLinkList.mockRejectedValueOnce({ code: "DB", message: "link error" });
+    await useIssueStore.getState().fetchIssueLinks(1);
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  it("fetchLabels() 失敗時に error がセットされる (line 198)", async () => {
+    mockIpc.githubLabelsList.mockRejectedValueOnce({ code: "GitHub", message: "no labels" });
+    await useIssueStore.getState().fetchLabels(1);
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
   // ─── reset ────────────────────────────────────────────────────────────────
 
   it("reset() で全状態が初期値に戻る", () => {

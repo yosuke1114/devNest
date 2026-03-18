@@ -108,4 +108,22 @@ describe("BrowserContextBar", () => {
       expect(screen.queryByTestId("browser-context-bar")).not.toBeInTheDocument();
     });
   });
+
+  it("affectedDocPaths が非空のとき影響設計書が表示される (line 63-74)", async () => {
+    mockInvoke.mockResolvedValue({
+      kind: "pull_request",
+      prNumber: 5,
+      owner: "org",
+      repo: "repo",
+      affectedDocPaths: ["docs/design.md", "docs/api.md"],
+    });
+
+    render(<BrowserContextBar url="https://github.com/org/repo/pull/5" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("影響設計書:")).toBeInTheDocument();
+      expect(screen.getByText("docs/design.md")).toBeInTheDocument();
+      expect(screen.getByText("docs/api.md")).toBeInTheDocument();
+    });
+  });
 });

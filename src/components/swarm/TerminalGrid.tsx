@@ -22,13 +22,25 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   useEffect(() => {
     Promise.resolve(invoke<WorkerInfo[]>("list_workers"))
       .then((existing) => {
-        if (Array.isArray(existing) && existing.length > 0) {
-          setWorkers(existing);
-          setActiveId(existing[existing.length - 1].id);
+        if (!Array.isArray(existing) || existing.length === 0) return;
+        // replace ではなく merge（list_workers 呼び出し中に届いた worker-spawned を消さないため）
+        setWorkers((prev) => {
+          const merged = [...prev];
+          for (const w of existing) {
+            if (!merged.some((p) => p.id === w.id)) merged.push(w);
+          }
+          return merged;
+        });
+        setActiveId(existing[existing.length - 1].id);
+        // 既に完了しているワーカーをオーケストレーターに通知（タブ切り替えで通知漏れした分）
+        for (const w of existing) {
+          if (w.status === "done" || w.status === "error") {
+            notifyWorkerDone(w.id, w.status);
+          }
         }
       })
       .catch(() => {/* list_workers 未実装環境ではスキップ */});
-  }, []);
+  }, [notifyWorkerDone]);
 
   // worker-spawned: Rust 側で起動された Worker（手動・Orchestrator 問わず）を追加
   useEffect(() => {

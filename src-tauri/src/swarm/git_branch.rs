@@ -104,11 +104,7 @@ fn list_conflict_files(repo_path: &Path) -> Vec<String> {
         .args(["diff", "--name-only", "--diff-filter=U"])
         .current_dir(repo_path)
         .output()
-        .unwrap_or_else(|_| std::process::Output {
-            status: std::process::ExitStatus::default(),
-            stdout: vec![],
-            stderr: vec![],
-        });
+        .unwrap_or_else(|_| std::process::Command::new("true").output().unwrap());
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .filter(|l| !l.is_empty())

@@ -46,6 +46,7 @@ pub fn run() {
                 app_handle.manage(state);
                 app_handle.manage(swarm::create_manager());
                 app_handle.manage(swarm::create_orchestrator());
+                app_handle.manage(swarm::create_hook_registry());
                 app_handle.manage(browser::create_browser());
                 // Socket API サーバー起動
                 let api_handle = app_handle.clone();

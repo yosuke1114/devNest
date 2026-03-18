@@ -66,4 +66,12 @@ describe("ConflictBlockItem", () => {
     render(<ConflictBlockItem {...defaultProps} resolution="ours" />);
     expect(screen.getByText(/OURS を選択/)).toBeInTheDocument();
   });
+
+  it("manual textarea 変更で onManualChange が呼ばれる (line 98)", () => {
+    const onManualChange = vi.fn();
+    render(<ConflictBlockItem {...defaultProps} resolution="manual" onManualChange={onManualChange} />);
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "edited content" } });
+    expect(onManualChange).toHaveBeenCalledWith("edited content");
+  });
 });

@@ -3,16 +3,21 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use crate::notification::ring::{emit_ring_event, RingEvent, RingUrgency};
 
+use super::completion::{CompletionDetector, CompletionResult};
+use super::hooks::{setup_claude_hooks, teardown_claude_hooks};
 use super::worker::{WorkerConfig, WorkerInfo, WorkerKind, WorkerMode, WorkerStatus};
 
 /// Claude Code 起動コマンド引数を構築する純粋関数。
 /// - `instruction` 内の `'` はシェルインジェクション防止のためエスケープする
 /// - `metadata` に応じてオプションフラグを付与する
+/// センチネル文字列（PTY出力でタスク完了を検出するために使用）
+pub(crate) const SWARM_DONE_SENTINEL: &str = "__SWARM_TASK_DONE__";
+
 pub(crate) fn build_claude_arg(instruction: &str, metadata: &HashMap<String, String>) -> String {
     let safe_instr = instruction.replace('\'', "'\\''");
     let mut flags = String::new();
@@ -22,7 +27,25 @@ pub(crate) fn build_claude_arg(instruction: &str, metadata: &HashMap<String, Str
     if metadata.get("claude_flag_no_stream").map(|v| v == "1").unwrap_or(false) {
         flags.push_str(" --no-stream");
     }
-    format!("claude{} '{}'", flags, safe_instr)
+    let interactive = metadata.get("claude_interactive").map(|v| v == "1").unwrap_or(false);
+    let default_shell = metadata
+        .get("default_shell")
+        .cloned()
+        .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "zsh".to_string()));
+
+    if interactive {
+        // 対話モード: TUI で起動（-p なし）→ ユーザーが /quit で終了後にセンチネル出力 → exec でシェル継続
+        format!(
+            "claude{flags} '{instr}' ; echo '{sentinel}' ; exec {shell}",
+            flags = flags,
+            instr = safe_instr,
+            sentinel = SWARM_DONE_SENTINEL,
+            shell = default_shell,
+        )
+    } else {
+        // バッチモード: -p で非インタラクティブ実行し、完了後に自動終了
+        format!("claude -p{} '{}'", flags, safe_instr)
+    }
 }
 
 // Safety: WorkerManager は Arc<Mutex<WorkerManager>> 経由でのみアクセスされる。
@@ -77,8 +100,12 @@ impl WorkerManager {
             .map_err(|e| e.to_string())?;
 
         // コマンド構築
-        // Batch + ClaudeCode の場合は `<shell> -c 'claude [flags] "instruction"'` で起動する
         let task_instruction = config.metadata.get("task_instruction").cloned();
+        let is_interactive_claude = config
+            .metadata
+            .get("claude_interactive")
+            .map(|v| v == "1")
+            .unwrap_or(false);
         let default_shell = config
             .metadata
             .get("default_shell")
@@ -86,6 +113,9 @@ impl WorkerManager {
             .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "zsh".to_string()));
         let mut cmd = match (&config.kind, &config.mode, task_instruction) {
             (WorkerKind::ClaudeCode, WorkerMode::Batch, Some(instruction)) => {
+                // 対話/バッチ共通: `<shell> -c '<cmd>'` 形式
+                // - バッチ: claude -p '...' → 完了後プロセス終了
+                // - 対話:  claude '...'    → ユーザーが /quit 後センチネル → exec shell
                 let mut c = CommandBuilder::new(&default_shell);
                 let claude_arg = build_claude_arg(&instruction, &config.metadata);
                 c.arg("-c");
@@ -99,12 +129,37 @@ impl WorkerManager {
         // 子プロセス起動（exit code 取得のために child を保持）
         let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
 
+        // Claude Code フック通知チャネル（PostTask/TaskError → Socket API → ここ）
+        let (hook_tx, hook_rx) = std::sync::mpsc::channel::<()>();
+        {
+            use crate::swarm::SharedHookRegistry;
+            if let Some(registry) = app.try_state::<SharedHookRegistry>() {
+                if let Ok(mut reg) = registry.lock() {
+                    reg.insert(id.clone(), hook_tx);
+                }
+            }
+        }
+
+        // NOTE: setup_claude_hooks は並列 Worker 実行時に .claude/settings.json を
+        // 上書きし合う競合が発生するため現在は使用しない。
+        // 並列実行対応（SWARM_WORKER_ID 環境変数方式）が実装されたら有効化する。
+        // 現在の完了検出: バッチ→EOF、対話→センチネル、フック通知は補完的。
+        let is_batch_claude = matches!(
+            (&config.kind, &config.mode),
+            (WorkerKind::ClaudeCode, WorkerMode::Batch)
+        ) && !config
+            .metadata
+            .get("claude_interactive")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+
         // 読み取りスレッド起動（PTY出力のストリーミング + プロセス終了検出）
         let mut reader = pair
             .master
             .try_clone_reader()
             .map_err(|e| e.to_string())?;
         let worker_id = id.clone();
+        let working_dir = config.working_dir.clone();
         let app_clone = app.clone();
         let statuses_clone = Arc::clone(&self.statuses);
 
@@ -119,8 +174,37 @@ impl WorkerManager {
                 serde_json::json!({ "workerId": worker_id, "status": "running" }),
             );
 
+            let detector = CompletionDetector::new();
             let mut buf = [0u8; 1024];
+            // 対話モード: センチネル / PTYパターン でタスク完了を検出しつつ PTY を継続
+            // バッチモード: フック通知 → PTYパターン → EOF の順で完了を検出
+            let mut done_emitted = false;
+
             loop {
+                // ① フック通知チェック（Claude Code PostTask/TaskError → Socket API）
+                // バッチモードで有効。先にフックが来た場合は PTY が閉じる前に done を発火する。
+                if !done_emitted && !is_interactive_claude {
+                    if let Ok(()) = hook_rx.try_recv() {
+                        done_emitted = true;
+                        {
+                            let mut s = statuses_clone.lock().unwrap();
+                            s.insert(worker_id.clone(), WorkerStatus::Done);
+                        }
+                        let _ = app_clone.emit(
+                            "worker-status-changed",
+                            serde_json::json!({ "workerId": worker_id, "status": "done" }),
+                        );
+                        emit_ring_event(&app_clone, RingEvent::AgentAttention {
+                            task_id: worker_id.clone(),
+                            task_type: "swarm_worker".to_string(),
+                            product_id: String::new(),
+                            urgency: RingUrgency::Info,
+                            message: format!("Worker {} がタスクを完了しました（フック検出）", worker_id),
+                        });
+                        // PTY が閉じるまで読み続ける（done 済みなので追加発火しない）
+                    }
+                }
+
                 match reader.read(&mut buf) {
                     Ok(0) => break, // EOF: プロセス終了
                     Ok(n) => {
@@ -132,46 +216,108 @@ impl WorkerManager {
                                 "data": data,
                             }),
                         );
+
+                        if !done_emitted {
+                            // ② PTYパターン検出（センチネル / Claude完了マーカー）
+                            let completion = detector.check(&data);
+                            match completion {
+                                Some(CompletionResult::Done) => {
+                                    done_emitted = true;
+                                    {
+                                        let mut s = statuses_clone.lock().unwrap();
+                                        s.insert(worker_id.clone(), WorkerStatus::Done);
+                                    }
+                                    let _ = app_clone.emit(
+                                        "worker-status-changed",
+                                        serde_json::json!({ "workerId": worker_id, "status": "done" }),
+                                    );
+                                    let msg = if is_interactive_claude {
+                                        format!("Worker {} がタスクを完了しました（追加指示可能）", worker_id)
+                                    } else {
+                                        format!("Worker {} がタスクを完了しました（PTY検出）", worker_id)
+                                    };
+                                    emit_ring_event(&app_clone, RingEvent::AgentAttention {
+                                        task_id: worker_id.clone(),
+                                        task_type: "swarm_worker".to_string(),
+                                        product_id: String::new(),
+                                        urgency: RingUrgency::Info,
+                                        message: msg,
+                                    });
+                                }
+                                Some(CompletionResult::Error) => {
+                                    done_emitted = true;
+                                    {
+                                        let mut s = statuses_clone.lock().unwrap();
+                                        s.insert(worker_id.clone(), WorkerStatus::Error);
+                                    }
+                                    let _ = app_clone.emit(
+                                        "worker-status-changed",
+                                        serde_json::json!({ "workerId": worker_id, "status": "error" }),
+                                    );
+                                    emit_ring_event(&app_clone, RingEvent::AgentAttention {
+                                        task_id: worker_id.clone(),
+                                        task_type: "swarm_worker".to_string(),
+                                        product_id: String::new(),
+                                        urgency: RingUrgency::Warning,
+                                        message: format!("Worker {} がエラーを検出しました（PTY検出）", worker_id),
+                                    });
+                                }
+                                None => {}
+                            }
+                        }
                     }
                     Err(_) => break,
                 }
             }
 
-            // exit code を確認して Done/Error を判定
-            let exit_success = child
-                .wait()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            let final_status = if exit_success {
-                WorkerStatus::Done
-            } else {
-                WorkerStatus::Error
-            };
-            let status_str = if exit_success { "done" } else { "error" };
+            // ③ プロセス終了時: done 済みでなければ exit code で判定
+            if !done_emitted {
+                let exit_success = child
+                    .wait()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                let final_status = if exit_success { WorkerStatus::Done } else { WorkerStatus::Error };
+                let status_str = if exit_success { "done" } else { "error" };
 
-            {
-                let mut s = statuses_clone.lock().unwrap();
-                s.insert(worker_id.clone(), final_status);
+                {
+                    let mut s = statuses_clone.lock().unwrap();
+                    s.insert(worker_id.clone(), final_status);
+                }
+                let _ = app_clone.emit(
+                    "worker-status-changed",
+                    serde_json::json!({ "workerId": worker_id, "status": status_str }),
+                );
+
+                let urgency = if exit_success { RingUrgency::Info } else { RingUrgency::Warning };
+                let message = if exit_success {
+                    format!("Worker {} が完了しました（EOF検出）", worker_id)
+                } else {
+                    format!("Worker {} がエラーで終了しました", worker_id)
+                };
+                emit_ring_event(&app_clone, RingEvent::AgentAttention {
+                    task_id: worker_id.clone(),
+                    task_type: "swarm_worker".to_string(),
+                    product_id: String::new(),
+                    urgency,
+                    message,
+                });
+            } else {
+                // done 済みなので wait だけ回収（ゾンビプロセス防止）
+                let _ = child.wait();
             }
-            let _ = app_clone.emit(
-                "worker-status-changed",
-                serde_json::json!({ "workerId": worker_id, "status": status_str }),
-            );
 
-            // Ring notification（F-11-19）
-            let urgency = if exit_success { RingUrgency::Info } else { RingUrgency::Warning };
-            let message = if exit_success {
-                format!("Worker {} が完了しました", worker_id)
-            } else {
-                format!("Worker {} がエラーで終了しました", worker_id)
-            };
-            emit_ring_event(&app_clone, RingEvent::AgentAttention {
-                task_id: worker_id.clone(),
-                task_type: "swarm_worker".to_string(),
-                product_id: String::new(),
-                urgency,
-                message,
-            });
+            // フック設定のクリーンアップ（現在は setup を使っていないため noop）
+            let _ = &working_dir; // 将来の teardown_claude_hooks 用に変数を保持
+
+            // レジストリから自分自身を除去
+            {
+                use crate::swarm::SharedHookRegistry;
+                if let Some(registry) = app_clone.try_state::<SharedHookRegistry>() {
+                    if let Ok(mut reg) = registry.lock() {
+                        reg.remove(&worker_id);
+                    }
+                }
+            }
         });
 
         // writer と master を保持
@@ -272,27 +418,28 @@ mod tests {
 
     #[test]
     fn build_claude_arg_basic() {
+        // -p フラグ付きで非インタラクティブ実行
         let arg = build_claude_arg("fix the bug", &meta(&[]));
-        assert_eq!(arg, "claude 'fix the bug'");
+        assert_eq!(arg, "claude -p 'fix the bug'");
     }
 
     #[test]
     fn build_claude_arg_escapes_single_quote() {
         // シェルインジェクション防止: ' → '\'' にエスケープされる
         let arg = build_claude_arg("it's broken", &meta(&[]));
-        assert_eq!(arg, "claude 'it'\\''s broken'");
+        assert_eq!(arg, "claude -p 'it'\\''s broken'");
     }
 
     #[test]
     fn build_claude_arg_skip_permissions_flag() {
         let arg = build_claude_arg("do x", &meta(&[("claude_flag_skip_permissions", "1")]));
-        assert_eq!(arg, "claude --dangerously-skip-permissions 'do x'");
+        assert_eq!(arg, "claude -p --dangerously-skip-permissions 'do x'");
     }
 
     #[test]
     fn build_claude_arg_no_stream_flag() {
         let arg = build_claude_arg("do x", &meta(&[("claude_flag_no_stream", "1")]));
-        assert_eq!(arg, "claude --no-stream 'do x'");
+        assert_eq!(arg, "claude -p --no-stream 'do x'");
     }
 
     #[test]
@@ -301,6 +448,7 @@ mod tests {
             ("claude_flag_skip_permissions", "1"),
             ("claude_flag_no_stream", "1"),
         ]));
+        assert!(arg.contains("-p"));
         assert!(arg.contains("--dangerously-skip-permissions"));
         assert!(arg.contains("--no-stream"));
         assert!(arg.ends_with("'do x'"));
@@ -310,7 +458,7 @@ mod tests {
     fn build_claude_arg_flag_off_when_zero() {
         let arg = build_claude_arg("do x", &meta(&[("claude_flag_skip_permissions", "0")]));
         assert!(!arg.contains("--dangerously-skip-permissions"));
-        assert_eq!(arg, "claude 'do x'");
+        assert_eq!(arg, "claude -p 'do x'");
     }
 
     #[test]

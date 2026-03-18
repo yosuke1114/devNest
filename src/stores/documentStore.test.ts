@@ -447,4 +447,50 @@ describe("documentStore", () => {
     expect(s.fileTreeLoading).toBe(false);
     expect(s.codeSaveStatus).toBe("idle");
   });
+
+  // ─── 未カバーブランチ補完 ─────────────────────────────────────────────────
+
+  // fetchLinkedIssues: currentDoc.project_id が存在するパス (lines 161-162)
+  it("fetchLinkedIssues() currentDoc に project_id があると projectId を使って呼ぶ", async () => {
+    useDocumentStore.setState({
+      currentDoc: makeDocWithContent({ project_id: 5 }),
+    });
+    mockIpc.documentLinkedIssues.mockResolvedValueOnce([]);
+
+    await useDocumentStore.getState().fetchLinkedIssues(10);
+
+    expect(mockIpc.documentLinkedIssues).toHaveBeenCalledWith(5, 10);
+  });
+
+  // renameDocument: currentDoc?.id !== documentId のとき currentDoc は変わらない (line 210/213)
+  it("renameDocument() currentDoc が別の id なら currentDoc は更新されない", async () => {
+    const original = makeDocument({ id: 1, path: "docs/old.md" });
+    const renamed = makeDocument({ id: 1, path: "docs/new.md" });
+    const other = makeDocWithContent({ id: 99, path: "docs/other.md" });
+    useDocumentStore.setState({ documents: [original], currentDoc: other });
+    mockIpc.documentRename.mockResolvedValueOnce(renamed);
+
+    await useDocumentStore.getState().renameDocument(1, 1, "docs/new.md");
+
+    // currentDoc は id=99 のまま変わらない
+    expect(useDocumentStore.getState().currentDoc?.id).toBe(99);
+  });
+
+  // listenCodeSaveProgress のコールバックが codeSaveProgress を更新する (line 233)
+  it("listenCodeSaveProgress() コールバックが codeSaveProgress をセットする", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const mockListen = vi.mocked(listen);
+    let capturedCb: ((e: { payload: unknown }) => void) | null = null;
+    mockListen.mockImplementationOnce((_evt, cb) => {
+      capturedCb = cb as (e: { payload: unknown }) => void;
+      return Promise.resolve(vi.fn());
+    });
+
+    await useDocumentStore.getState().listenCodeSaveProgress();
+
+    const payload = { file: "docs/spec.md", progress: 50, total: 100 };
+    capturedCb?.({ payload });
+
+    expect(useDocumentStore.getState().codeSaveProgress).toEqual(payload);
+  });
 });

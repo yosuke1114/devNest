@@ -46,6 +46,9 @@ enum Commands {
     /// 設計書操作
     #[command(subcommand)]
     Docs(DocsAction),
+    /// Worker 操作（Swarm フックから呼ばれる）
+    #[command(subcommand)]
+    Worker(WorkerAction),
     /// ヘルスチェック
     Health,
 }
@@ -84,6 +87,16 @@ enum ProductAction {
     Current,
     /// アクティブプロダクトを切り替える
     Switch { product_id: i64 },
+}
+
+#[derive(Subcommand)]
+enum WorkerAction {
+    /// Swarm ワーカーのタスク完了を DevNest に通知する（Claude Code フックから呼ばれる）
+    Done {
+        /// 完了した Worker の ID
+        #[arg(long)]
+        worker_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -244,6 +257,11 @@ fn main() {
             }
             DocsAction::Affected { doc } => {
                 send_request("docs.affected", json!({ "doc": doc }))
+            }
+        },
+        Commands::Worker(action) => match action {
+            WorkerAction::Done { worker_id } => {
+                send_request("worker.done", json!({ "worker_id": worker_id }))
             }
         },
         Commands::Health => send_request("health.status", json!({})),
