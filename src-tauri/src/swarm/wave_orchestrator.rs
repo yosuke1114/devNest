@@ -37,13 +37,13 @@ pub struct WaveOrchestrator {
     /// 算出された Wave 構造（初期表示用。開始後は orchestrator.current_run.waves が最新）
     waves: Vec<Wave>,
     /// Swarm 設定
-    settings: SwarmSettings,
+    pub(crate) settings: SwarmSettings,
     /// プロジェクトパス
-    project_path: String,
+    pub(crate) project_path: String,
     /// 内部 Orchestrator（全 Wave のタスクを管理）
-    orchestrator: Orchestrator,
+    pub(crate) orchestrator: Orchestrator,
     /// 全体ステータス
-    status: WaveOrchestratorStatus,
+    pub(crate) status: WaveOrchestratorStatus,
 }
 
 /// WaveOrchestrator 全体のステータス
@@ -323,7 +323,7 @@ mod tests {
         }
         wo.update_worker_status("w0", WorkerStatus::Done);
         wo.update_worker_status("w1", WorkerStatus::Done);
-        let result = wo.update_worker_status("w2", WorkerStatus::Done);
+        let _result = wo.update_worker_status("w2", WorkerStatus::Done);
 
         // 単一 Wave → フラット実行のため、is_current_wave_complete は false
         // (Wave フィールドが None なので)
