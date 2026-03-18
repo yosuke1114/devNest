@@ -92,3 +92,85 @@ pub struct WorkerInfo {
     pub config: WorkerConfig,
     pub status: WorkerStatus,
 }
+
+// ─── Orchestrator 用型（Wave Orchestrator との統合） ────────────────────
+
+use super::subtask::SubTask;
+
+/// タスクの実行状態（Orchestrator が管理する論理状態）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum ExecutionState {
+    /// 依存タスク待ち（まだ実行不可）
+    Waiting,
+    /// 依存解決済み・実行可能
+    Ready,
+    /// ワーカーが実行中
+    Running,
+    /// 正常完了
+    Done,
+    /// エラー終了
+    Error,
+    /// スキップ（依存先がエラー等）
+    Skipped,
+}
+
+/// ワーカーへのタスク割り当て（Orchestrator 管理用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerAssignment {
+    pub worker_id: String,
+    pub task: SubTask,
+    pub branch_name: String,
+    pub status: WorkerStatus,
+    pub execution_state: ExecutionState,
+    pub retry_count: u32,
+}
+
+/// Orchestrator タスク設定（起動時に渡す情報）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrchestratorTaskConfig {
+    pub task: SubTask,
+    pub branch_name: String,
+    pub project_path: String,
+    pub run_id: String,
+}
+
+/// ワーカー起動リクエスト
+#[derive(Debug, Clone)]
+pub struct SpawnRequest {
+    pub worker_config: OrchestratorTaskConfig,
+    pub task_id: u32,
+    pub is_retry: bool,
+    pub old_worker_id: Option<String>,
+}
+
+/// Run 全体のステータス
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum RunStatus {
+    Running,
+    Done,
+    PartialDone,
+    Cancelled,
+}
+
+impl From<OrchestratorTaskConfig> for WorkerConfig {
+    fn from(cfg: OrchestratorTaskConfig) -> Self {
+        let mut metadata = HashMap::new();
+        metadata.insert("task_instruction".to_string(), cfg.task.instruction.clone());
+        metadata.insert("task_branch".to_string(), cfg.branch_name.clone());
+        metadata.insert("run_id".to_string(), cfg.run_id.clone());
+        WorkerConfig {
+            kind: WorkerKind::ClaudeCode,
+            mode: WorkerMode::Batch,
+            role: WorkerRole::Builder,
+            label: cfg.task.title.clone(),
+            working_dir: std::path::PathBuf::from(&cfg.project_path),
+            assigned_files: cfg.task.files.iter().map(|f| std::path::PathBuf::from(f)).collect(),
+            depends_on: vec![],
+            metadata,
+        }
+    }
+}

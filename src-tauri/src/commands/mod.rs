@@ -181,6 +181,17 @@ macro_rules! all_commands {
             commands::swarm::orchestrator_run_wave_gate,
             commands::swarm::orchestrator_get_waves,
             commands::swarm::get_system_resources,
+            // Swarm Wave モード
+            commands::swarm::swarm_wave_start,
+            commands::swarm::swarm_wave_worker_update,
+            commands::swarm::swarm_wave_assign_worker,
+            commands::swarm::swarm_wave_run_gate,
+            commands::swarm::swarm_wave_get_status,
+            commands::swarm::swarm_wave_list,
+            commands::swarm::swarm_wave_cancel,
+            // ハイブリッド: Orchestrator Wave 直接アクセス
+            commands::swarm::orchestrator_wave_status,
+            commands::swarm::orchestrator_advance_wave,
         ]
     };
 }

@@ -62,6 +62,15 @@ pub fn run() {
                 // バックグラウンドポーリング起動
                 services::poller::start(app_handle.clone(), pool);
 
+                // Swarm Wave Orchestrator 状態を登録
+                let wave_orch: swarm::wave_orchestrator::SharedWaveOrchestrator =
+                    std::sync::Arc::new(std::sync::Mutex::new(
+                        swarm::wave_orchestrator::WaveOrchestrator::new(
+                            vec![], swarm::settings::SwarmSettings::default(), String::new(),
+                        ),
+                    ));
+                app_handle.manage(wave_orch);
+
                 Ok(())
             })
         })

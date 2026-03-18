@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::orchestrator::SwarmSettings;
+use super::settings::SwarmSettings;
 use super::subtask::SubTask;
 
 // ─── TaskType 拡張 ────────────────────────────────────────────
