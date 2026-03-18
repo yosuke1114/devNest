@@ -30,20 +30,22 @@ pub struct OrchestratorRun {
     pub project_path: String,
     pub base_branch: String,
     pub total: u32,
+    /// フロントエンドの doneCount と対応（camelCase で "doneCount" に変換）
+    #[serde(rename = "doneCount")]
     pub completed: u32,
     pub failed: u32,
     pub status: RunStatus,
 
-    /// Wave 構造（Wave モード時のみ Some）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Wave 構造（Wave モード時のみ Some、None は [] としてシリアライズ）
+    #[serde(default)]
     pub waves: Option<Vec<Wave>>,
 
     /// 現在実行中の Wave 番号（1-indexed、Wave モード時のみ Some）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub current_wave: Option<u32>,
 
     /// 各 Wave の Gate 結果（Wave モード時のみ Some）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub gate_results: Option<Vec<WaveGateResult>>,
 }
 
@@ -558,6 +560,10 @@ fn collect_spawn_requests(run: &mut OrchestratorRun) -> Vec<SpawnRequest> {
                 branch_name: assign.branch_name.clone(),
                 project_path: run.project_path.clone(),
                 run_id: run.run_id.clone(),
+                default_shell: run.settings.default_shell.clone(),
+                claude_skip_permissions: run.settings.claude_skip_permissions,
+                claude_no_stream: run.settings.claude_no_stream,
+                claude_interactive: run.settings.claude_interactive,
             },
             task_id: assign.task.id,
             is_retry,

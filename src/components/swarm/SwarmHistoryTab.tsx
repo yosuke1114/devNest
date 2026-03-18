@@ -25,7 +25,7 @@ export function SwarmHistoryTab() {
     let unlisten: (() => void) | undefined;
     listen<OrchestratorRun>("orchestrator-merge-done", (event) => {
       const run = event.payload;
-      const hasConflicts = run.mergeResults.some((r) => !r.success);
+      const hasConflicts = run.status === "partialDone";
       setHistory((prev) => [
         {
           runId: run.runId,

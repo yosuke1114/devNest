@@ -148,7 +148,7 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
 
       {/* Wave 進捗バー（Wave が複数のときのみ表示） */}
       {currentRun.waves && currentRun.waves.length > 1 && (
-        <WaveProgressBar waves={currentRun.waves} currentWave={currentRun.currentWave} />
+        <WaveProgressBar waves={currentRun.waves} currentWave={currentRun.currentWave ?? 1} />
       )}
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>

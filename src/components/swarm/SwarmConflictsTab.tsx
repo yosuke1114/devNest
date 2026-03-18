@@ -22,9 +22,10 @@ export function SwarmConflictsTab() {
   }
 
   // コンフリクト一覧
-  const conflictOutcomes = currentRun?.mergeResults.filter(
-    (r) => !r.success && r.conflictFiles.length > 0
-  ) ?? [];
+  // conflictOutcome は orchestrator_merge_all 後にストアが設定するもの
+  const conflictOutcomes = useSwarmStore((s) =>
+    s.conflictOutcome && !s.conflictOutcome.success ? [s.conflictOutcome] : []
+  );
 
   if (!currentRun) {
     return (
@@ -36,7 +37,7 @@ export function SwarmConflictsTab() {
   }
 
   if (conflictOutcomes.length === 0) {
-    const hasMergeResults = currentRun.mergeResults.length > 0;
+    const hasMergeResults = currentRun.status === "done" || currentRun.status === "partialDone";
     return (
       <div style={emptyStyle} data-testid="swarm-conflicts-tab">
         {hasMergeResults ? (

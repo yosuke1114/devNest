@@ -20,10 +20,9 @@ export function ResultSummaryPanel({
   const isPartial = run.status === "partialDone";
   const isFailed = run.status === "failed";
 
-  const conflictedOutcomes = run.mergeResults.filter(
-    (r) => r.conflictFiles.length > 0
-  );
-  const hasConflicts = conflictedOutcomes.length > 0;
+  // mergeResults は廃止。conflictOutcome はストアで管理
+  const conflictedOutcomes: MergeOutcome[] = [];
+  const hasConflicts = isPartial;
 
   return (
     <div style={panelStyle} data-testid="result-summary-panel">

@@ -54,12 +54,12 @@ export interface OrchestratorRun {
   assignments: WorkerAssignment[];
   baseBranch: string;
   projectPath: string;
-  mergeResults: MergeOutcome[];
   total: number;
   doneCount: number;
-  waves: Wave[];
-  currentWave: number;
-  gateResults: import("../components/swarm/types").WaveGateResult[];
+  failed: number;
+  waves: Wave[] | null;
+  currentWave: number | null;
+  gateResults: import("../components/swarm/types").WaveGateResult[] | null;
 }
 
 // ─── Store ───────────────────────────────────────────────────

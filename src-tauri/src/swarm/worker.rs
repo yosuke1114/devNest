@@ -135,6 +135,11 @@ pub struct OrchestratorTaskConfig {
     pub branch_name: String,
     pub project_path: String,
     pub run_id: String,
+    // Settings から引き継ぐフィールド（manager が参照）
+    pub default_shell: String,
+    pub claude_skip_permissions: bool,
+    pub claude_no_stream: bool,
+    pub claude_interactive: bool,
 }
 
 /// ワーカー起動リクエスト
@@ -162,9 +167,20 @@ impl From<OrchestratorTaskConfig> for WorkerConfig {
         metadata.insert("task_instruction".to_string(), cfg.task.instruction.clone());
         metadata.insert("task_branch".to_string(), cfg.branch_name.clone());
         metadata.insert("run_id".to_string(), cfg.run_id.clone());
+        metadata.insert("default_shell".to_string(), cfg.default_shell.clone());
+        if cfg.claude_skip_permissions {
+            metadata.insert("claude_flag_skip_permissions".to_string(), "1".to_string());
+        }
+        if cfg.claude_no_stream {
+            metadata.insert("claude_flag_no_stream".to_string(), "1".to_string());
+        }
+        if cfg.claude_interactive {
+            metadata.insert("claude_interactive".to_string(), "1".to_string());
+        }
+        let mode = if cfg.claude_interactive { WorkerMode::Interactive } else { WorkerMode::Batch };
         WorkerConfig {
             kind: WorkerKind::ClaudeCode,
-            mode: WorkerMode::Batch,
+            mode,
             role: WorkerRole::Builder,
             label: cfg.task.title.clone(),
             working_dir: std::path::PathBuf::from(&cfg.project_path),

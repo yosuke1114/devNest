@@ -45,8 +45,7 @@ export function SwarmScreen({ workingDir, projectPath }: SwarmScreenProps) {
   })();
 
   // コンフリクトタブのバッジ
-  const conflictCount =
-    currentRun?.mergeResults.filter((r) => !r.success && r.conflictFiles.length > 0).length ?? 0;
+  const conflictCount = useSwarmStore((s) => s.conflictOutcome?.conflictFiles.length ?? 0);
 
   const handleRunStarted = () => {
     setActiveTab("running");
