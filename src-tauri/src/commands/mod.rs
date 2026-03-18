@@ -8,6 +8,7 @@ pub mod pr;
 pub mod project;
 pub mod search;
 pub mod settings;
+pub mod swarm;
 pub mod terminal;
 pub mod util;
 
@@ -95,6 +96,14 @@ macro_rules! all_commands {
             commands::polling::polling_start,
             commands::polling::polling_stop,
             commands::polling::polling_status,
+            // Swarm Wave モード
+            commands::swarm::swarm_wave_start,
+            commands::swarm::swarm_wave_worker_update,
+            commands::swarm::swarm_wave_assign_worker,
+            commands::swarm::swarm_wave_run_gate,
+            commands::swarm::swarm_wave_get_status,
+            commands::swarm::swarm_wave_list,
+            commands::swarm::swarm_wave_cancel,
         ]
     };
 }
