@@ -21,11 +21,9 @@ export function SwarmConflictsTab() {
     );
   }
 
-  // コンフリクト一覧
-  // conflictOutcome は orchestrator_merge_all 後にストアが設定するもの
-  const conflictOutcomes = useSwarmStore((s) =>
-    s.conflictOutcome && !s.conflictOutcome.success ? [s.conflictOutcome] : []
-  );
+  // コンフリクト一覧（conflictOutcome はストアからすでに取得済みの変数を使う）
+  const conflictOutcomes: MergeOutcome[] =
+    conflictOutcome && !conflictOutcome.success ? [conflictOutcome] : [];
 
   if (!currentRun) {
     return (
