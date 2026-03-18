@@ -5,3 +5,4 @@ pub mod subtask;
 pub mod wave;
 pub mod wave_gate;
 pub mod wave_orchestrator;
+pub mod worker;

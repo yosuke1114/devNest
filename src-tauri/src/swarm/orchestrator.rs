@@ -188,6 +188,7 @@ impl Orchestrator {
         worker_id: &str,
         new_status: WorkerStatus,
     ) -> Vec<SpawnRequest> {
+        let is_wave_mode = self.is_wave_mode();
         let run = match self.current_run.as_mut() {
             Some(r) => r,
             None => return vec![],
@@ -263,7 +264,21 @@ impl Orchestrator {
                 }
             }
 
-            // エラーになったタスクに依存するタスクをスキップ
+        }
+
+        // エラーになったタスクに依存するタスクをスキップ
+        {
+            // Wave モード時、現在 Wave のタスク ID を取得
+            let current_wave_task_ids: Option<HashSet<u32>> =
+                run.waves.as_ref().and_then(|waves| {
+                    run.current_wave.and_then(|cw| {
+                        waves
+                            .iter()
+                            .find(|w| w.wave_number == cw)
+                            .map(|w| w.task_ids.iter().cloned().collect())
+                    })
+                });
+
             let error_ids: HashSet<u32> = run
                 .assignments
                 .iter()
@@ -287,7 +302,7 @@ impl Orchestrator {
         }
 
         // 全体完了チェック（非 Wave モード時のみ RunStatus を更新）
-        if !self.is_wave_mode() {
+        if !is_wave_mode {
             let all_terminal = run.assignments.iter().all(|a| {
                 matches!(
                     a.execution_state,

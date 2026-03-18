@@ -145,17 +145,18 @@ pub fn merge_worker_branch(
     };
 
     if index.has_conflicts() {
-        let conflict_files: Vec<String> = index
-            .conflicts()
-            .into_iter()
-            .flatten()
-            .filter_map(|c| {
-                c.our
-                    .as_ref()
-                    .or(c.their.as_ref())
-                    .and_then(|e| std::str::from_utf8(&e.path).ok().map(|s| s.to_string()))
-            })
-            .collect();
+        let conflict_files: Vec<String> = match index.conflicts() {
+            Ok(conflicts) => conflicts
+                .flatten()
+                .filter_map(|c| {
+                    c.our
+                        .as_ref()
+                        .or(c.their.as_ref())
+                        .and_then(|e| std::str::from_utf8(&e.path).ok().map(|s| s.to_string()))
+                })
+                .collect(),
+            Err(_) => vec![],
+        };
 
         // マージ状態をクリーンアップ
         let _ = repo.cleanup_state();
@@ -217,14 +218,16 @@ mod tests {
         // 初回コミット
         let path = dir.path().join("readme.md");
         std::fs::write(&path, "# Test").unwrap();
-        let mut index = repo.index().unwrap();
-        index.add_path(Path::new("readme.md")).unwrap();
-        index.write().unwrap();
-        let tree_id = index.write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        let sig = repo.signature().unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
-            .unwrap();
+        {
+            let mut index = repo.index().unwrap();
+            index.add_path(Path::new("readme.md")).unwrap();
+            index.write().unwrap();
+            let tree_id = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_id).unwrap();
+            let sig = repo.signature().unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+                .unwrap();
+        }
 
         repo
     }

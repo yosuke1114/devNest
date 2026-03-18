@@ -105,11 +105,24 @@ pub async fn swarm_wave_run_gate(
 ) -> Result<WaveOrchestratorSnapshot, String> {
     use tauri::Emitter;
 
-    // Gate 実行
-    let gate_result = {
-        let mut wo = wave_orch.lock().map_err(|e| e.to_string())?;
-        wo.run_gate().await?
+    // Gate 実行: ロックを保持したまま await しないよう分離
+    let (project_path, base_branch, branches) = {
+        let wo = wave_orch.lock().map_err(|e| e.to_string())?;
+        if wo.status != crate::swarm::wave_orchestrator::WaveOrchestratorStatus::Gating {
+            return Err("Gate 実行可能な状態ではありません".into());
+        }
+        let current_wave = wo
+            .orchestrator
+            .current_run
+            .as_ref()
+            .and_then(|r| r.current_wave)
+            .unwrap_or(1);
+        let branches = wo.orchestrator.completed_branches_for_wave(current_wave);
+        (wo.project_path.clone(), wo.settings.base_branch.clone(), branches)
     };
+
+    let gate = crate::swarm::wave_gate::WaveGate::new(&project_path, &base_branch);
+    let gate_result = gate.execute(&branches).await;
 
     // Gate 結果を適用して次 Wave の SpawnRequest を取得
     let (spawns, snapshot) = {
