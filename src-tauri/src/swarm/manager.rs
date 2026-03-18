@@ -112,17 +112,29 @@ impl WorkerManager {
             .cloned()
             .unwrap_or_else(|| std::env::var("SHELL").unwrap_or_else(|_| "zsh".to_string()));
         let mut cmd = match (&config.kind, &config.mode, task_instruction) {
-            (WorkerKind::ClaudeCode, WorkerMode::Batch, Some(instruction)) => {
-                // 対話/バッチ共通: `<shell> -c '<cmd>'` 形式
-                // - バッチ: claude -p '...' → 完了後プロセス終了
-                // - 対話:  claude '...'    → ユーザーが /quit 後センチネル → exec shell
+            (WorkerKind::ClaudeCode, WorkerMode::Batch, Some(ref instruction)) if !instruction.is_empty() => {
+                // バッチモード: ログインシェル (-l) で起動して ~/.zprofile を読み claude を PATH に含める
                 let mut c = CommandBuilder::new(&default_shell);
-                let claude_arg = build_claude_arg(&instruction, &config.metadata);
+                let claude_arg = build_claude_arg(instruction, &config.metadata);
+                eprintln!("[Swarm] spawning claude command: {} -l -c {:?}", default_shell, claude_arg);
+                c.arg("-l");
                 c.arg("-c");
                 c.arg(claude_arg);
                 c
             }
-            _ => CommandBuilder::new(&default_shell),
+            (WorkerKind::ClaudeCode, WorkerMode::Interactive, Some(ref instruction)) if !instruction.is_empty() => {
+                let mut c = CommandBuilder::new(&default_shell);
+                let claude_arg = build_claude_arg(instruction, &config.metadata);
+                eprintln!("[Swarm] spawning interactive claude: {} -l -c {:?}", default_shell, claude_arg);
+                c.arg("-l");
+                c.arg("-c");
+                c.arg(claude_arg);
+                c
+            }
+            (kind, mode, ref instr) => {
+                eprintln!("[Swarm] fallback shell: kind={:?} mode={:?} instruction={:?}", kind, mode, instr.as_deref().unwrap_or("(none)"));
+                CommandBuilder::new(&default_shell)
+            }
         };
         cmd.cwd(&config.working_dir);
 
