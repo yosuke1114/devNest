@@ -64,6 +64,14 @@ pub enum RingEvent {
         has_conflicts: bool,
         urgency: RingUrgency,
     },
+
+    /// Wave Gate の完了通知（Wave間のマージ・テスト・レビュー結果）
+    SwarmWaveGate {
+        wave_number: u32,
+        /// "Passed" | "PassedWithWarnings" | "Blocked"
+        overall: String,
+        urgency: RingUrgency,
+    },
 }
 
 impl RingEvent {
@@ -85,6 +93,7 @@ impl RingEvent {
             RingEvent::GitHubEvent { .. } => &RingUrgency::Info,
             RingEvent::SwarmWorkerUpdate { urgency, .. } => urgency,
             RingEvent::SwarmRunComplete { urgency, .. } => urgency,
+            RingEvent::SwarmWaveGate { urgency, .. } => urgency,
         }
     }
 
@@ -100,6 +109,7 @@ impl RingEvent {
             RingEvent::GitHubEvent { title, .. } => title,
             RingEvent::SwarmWorkerUpdate { .. } => "Swarm Worker 通知",
             RingEvent::SwarmRunComplete { .. } => "Swarm 完了",
+            RingEvent::SwarmWaveGate { .. } => "Swarm Wave Gate",
         }
     }
 
@@ -122,6 +132,9 @@ impl RingEvent {
                 } else {
                     format!("{}/{} タスクが正常に完了しました", done, total)
                 }
+            }
+            RingEvent::SwarmWaveGate { wave_number, overall, .. } => {
+                format!("Wave {} Gate: {}", wave_number, overall)
             }
         }
     }

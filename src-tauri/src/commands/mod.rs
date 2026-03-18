@@ -178,6 +178,8 @@ macro_rules! all_commands {
             commands::swarm::orchestrator_resolve_conflict,
             commands::swarm::orchestrator_commit_resolution,
             commands::swarm::orchestrator_ai_resolve_conflict,
+            commands::swarm::orchestrator_run_wave_gate,
+            commands::swarm::orchestrator_get_waves,
             commands::swarm::get_system_resources,
         ]
     };

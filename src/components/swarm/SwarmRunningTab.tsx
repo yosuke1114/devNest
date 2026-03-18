@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useSwarmStore } from "../../stores/swarmStore";
-import type { ExecutionState } from "./types";
+import type { ExecutionState, Wave, WaveGateResult } from "./types";
 import { TerminalGrid } from "./TerminalGrid";
 
 // ─── 型 ───────────────────────────────────────────────────────
@@ -10,12 +10,19 @@ import { TerminalGrid } from "./TerminalGrid";
 interface SystemResources {
   cpuPct: number;
   memFreeGb: number;
+  memTotalGb: number;
   spawnSuppressed: boolean;
 }
 
 interface WorkerLogLine {
   workerId: string;
-  line: string;
+  data: string;
+}
+
+// ANSIエスケープコードと制御文字を除去
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").replace(/[\x00-\x09\x0b-\x1f\x7f]/g, "");
 }
 
 // ─── Component ────────────────────────────────────────────────
@@ -57,12 +64,38 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
     return () => clearInterval(id);
   }, []);
 
+  // wave-gate-ready: Wave 完了時に Gate を自動実行
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<{ runId: string; waveNumber: number }>("wave-gate-ready", async (event) => {
+      console.log(`[Swarm] Wave ${event.payload.waveNumber} 完了 → Gate 自動実行`);
+      try {
+        const result = await invoke<WaveGateResult>("orchestrator_run_wave_gate");
+        if (result.overall === "blocked") {
+          console.warn("[Swarm] Wave Gate: マージにコンフリクトがあります");
+        } else if (result.overall === "passedWithWarnings") {
+          console.warn("[Swarm] Wave Gate: 警告ありで次 Wave に進行");
+        } else {
+          console.info("[Swarm] Wave Gate: 全パス → 次 Wave 開始");
+        }
+      } catch (e) {
+        console.error("[Swarm] Wave Gate 実行エラー:", e);
+      }
+    }).then((fn) => { unlisten = fn; });
+    return () => unlisten?.();
+  }, []);
+
   // ライブログリッスン
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<{ workerId: string; line: string }>("worker-output", (event) => {
+    listen<{ workerId: string; data: string }>("worker-output", (event) => {
+      const lines = event.payload.data.split(/\r?\n/).map(stripAnsi).filter((l) => l.trim().length > 0);
+      if (lines.length === 0) return;
       setLogs((prev) => {
-        const next = [...prev, event.payload];
+        const next = [
+          ...prev,
+          ...lines.map((l) => ({ workerId: event.payload.workerId, data: l })),
+        ];
         return next.slice(-200); // 最大200行保持
       });
     }).then((fn) => {
@@ -91,6 +124,10 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
     ? logs.filter((l) => l.workerId === selectedWorker)
     : logs;
 
+  const memUsagePct = resources && resources.memTotalGb > 0
+    ? Math.round((1 - resources.memFreeGb / resources.memTotalGb) * 100)
+    : 0;
+
   return (
     <div style={containerStyle} data-testid="swarm-running-tab">
       {/* ヘッダー情報 */}
@@ -109,6 +146,11 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
         </div>
       </div>
 
+      {/* Wave 進捗バー（Wave が複数のときのみ表示） */}
+      {currentRun.waves && currentRun.waves.length > 1 && (
+        <WaveProgressBar waves={currentRun.waves} currentWave={currentRun.currentWave} />
+      )}
+
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* 左ペイン: Worker一覧 + リソース */}
         <div style={{ width: 320, flexShrink: 0, borderRight: "1px solid #21262d", overflowY: "auto" }}>
@@ -117,7 +159,7 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
             <div style={panelTitle}>Worker一覧</div>
             {currentRun.assignments.map((a) => (
               <div
-                key={a.workerId}
+                key={a.workerId || String(a.task.id)}
                 data-testid={`worker-row-${a.workerId}`}
                 style={{
                   display: "flex",
@@ -153,8 +195,8 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
               <div style={panelTitle}>リソース</div>
               <ResourceBar label="CPU" pct={resources.cpuPct} color="#58a6ff" />
               <ResourceBar
-                label="MEM (Free)"
-                pct={Math.max(0, 100 - resources.memFreeGb * 8)}
+                label={`MEM (空き ${resources.memFreeGb.toFixed(1)}GB)`}
+                pct={memUsagePct}
                 color="#68d391"
               />
               <div style={{ fontSize: 11, color: "#8b949e", marginTop: 6 }}>
@@ -235,7 +277,7 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
                     return (
                       <div key={i} style={{ fontFamily: "monospace", fontSize: 11, color: "#8b949e", lineHeight: 1.5, padding: "0 12px" }}>
                         <span style={{ color: "#388bfd", marginRight: 6 }}>[{label}]</span>
-                        {l.line}
+                        {l.data}
                       </div>
                     );
                   })
@@ -250,6 +292,84 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
 }
 
 // ─── サブコンポーネント ────────────────────────────────────────
+
+function WaveProgressBar({ waves, currentWave }: { waves: Wave[]; currentWave: number }) {
+  const waveStatusIcon: Record<string, string> = {
+    pending:            "⏳",
+    running:            "🔄",
+    gating:             "🔍",
+    passed:             "✅",
+    passedWithWarnings: "⚠️",
+    failed:             "❌",
+  };
+
+  return (
+    <div
+      data-testid="wave-progress-bar"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "8px 16px",
+        borderBottom: "1px solid #21262d",
+        flexShrink: 0,
+        overflowX: "auto",
+        background: "#0d1117",
+      }}
+    >
+      <span style={{ fontSize: 11, color: "#8b949e", marginRight: 4, whiteSpace: "nowrap" }}>Wave:</span>
+      {waves.map((wave, idx) => (
+        <div key={wave.waveNumber} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {/* Wave ノード */}
+          <div
+            data-testid={`wave-node-${wave.waveNumber}`}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              padding: "4px 8px",
+              borderRadius: 6,
+              border: `1px solid ${wave.waveNumber === currentWave ? "#388bfd" : "#30363d"}`,
+              background: wave.waveNumber === currentWave ? "#1c2d4f" : "#161b22",
+              minWidth: 56,
+            }}
+          >
+            <span style={{ fontSize: 10, color: "#8b949e" }}>W{wave.waveNumber}</span>
+            <span style={{ fontSize: 14 }}>{waveStatusIcon[wave.status] ?? "●"}</span>
+            <span style={{ fontSize: 9, color: "#484f58" }}>{wave.taskIds.length}タスク</span>
+          </div>
+
+          {/* Wave Gate（最後の Wave 以外） */}
+          {idx < waves.length - 1 && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                fontSize: 10,
+                color: "#484f58",
+                padding: "0 4px",
+              }}
+            >
+              {wave.gateResult ? (
+                <>
+                  <span>{wave.gateResult.merge.passed ? "✅" : "❌"}M</span>
+                  <span>{wave.gateResult.test.passed ? "✅" : "❌"}T</span>
+                  <span>{wave.gateResult.review.passed ? "✅" : "⚠️"}R</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ color: "#30363d" }}>→</span>
+                  {wave.status === "gating" && <span>🔍</span>}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { color: string; label: string }> = {

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { SubTask, SwarmSettings, WorkerStatus, ExecutionState } from "../components/swarm/types";
+import type { SubTask, SwarmSettings, WorkerStatus, ExecutionState, Wave } from "../components/swarm/types";
 
 // ─── Rust 側と対応する型 ──────────────────────────────────────
 
@@ -57,6 +57,9 @@ export interface OrchestratorRun {
   mergeResults: MergeOutcome[];
   total: number;
   doneCount: number;
+  waves: Wave[];
+  currentWave: number;
+  gateResults: import("../components/swarm/types").WaveGateResult[];
 }
 
 // ─── Store ───────────────────────────────────────────────────
@@ -101,6 +104,12 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
           maxWorkers: settings.maxWorkers,
           timeoutMinutes: settings.timeoutMinutes,
           branchPrefix: settings.branchPrefix,
+          defaultShell: settings.defaultShell,
+          promptPatterns: settings.promptPatterns,
+          claudeSkipPermissions: settings.claudeSkipPermissions,
+          claudeNoStream: settings.claudeNoStream,
+          autoApproveHighConfidence: settings.autoApproveHighConfidence,
+          claudeInteractive: settings.claudeInteractive,
         },
         projectPath,
       });
@@ -134,9 +143,9 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   notifyWorkerDone: async (workerId, status) => {
     const { currentRun } = get();
     if (!currentRun) return;
-    const isInRun = currentRun.assignments.some((a) => a.workerId === workerId);
-    if (!isInRun) return;
-
+    // isInRun チェックを削除: worker-status-changed と orchestrator-status-changed の
+    // レースコンディションで currentRun が古い状態のとき通知が飛ばないバグを防ぐ。
+    // Orchestrator 側で未知の workerId は無視するため安全。
     try {
       await invoke("orchestrator_notify_worker_done", { workerId, status });
     } catch {/* ベストエフォート */}

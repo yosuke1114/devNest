@@ -7,10 +7,12 @@ use crate::swarm::{
     ai_resolver::{AiConflictResolver, AiResolution},
     resource_monitor::{get_resource_usage, ResourceUsage},
     conflict_resolver::{self, commit_conflict_resolution, parse_conflict_blocks, ConflictBlock, ConflictResolution},
-    orchestrator::{OrchestratorRun, SwarmSettings},
+    orchestrator::{ExecutionState, OrchestratorRun, SwarmSettings},
     result_aggregator::AggregatedResult,
     subtask::{detect_circular_deps, detect_file_conflicts, SplitTaskRequest, SplitTaskResult, SubTask},
     task_splitter::TaskSplitter,
+    wave::{Wave, WaveGateResult},
+    wave_gate::WaveGate,
     worker::WorkerConfig,
     worker::WorkerInfo,
     worker::WorkerStatus,
@@ -146,21 +148,37 @@ pub async fn orchestrator_notify_worker_done(
         orch.update_worker_status(&worker_id, status, &app)
     };
 
-    // SpawnRequest ごとに Worker を起動
+    // SpawnRequest ごとに Worker を起動（spawn 完了後に一括で Running 状態を emit）
     for req in spawn_requests {
-        let new_id = {
+        let new_id = match {
             let mut mgr = manager.lock().map_err(|e| e.to_string())?;
-            mgr.spawn_worker(req.worker_config, app.clone())?
+            mgr.spawn_worker(req.worker_config, app.clone())
+        } {
+            Ok(id) => id,
+            Err(e) => {
+                // spawn 失敗: Ready のまま残るので Error に更新してフロントに通知
+                eprintln!("[Orchestrator] spawn_worker failed for task {}: {}", req.task_id, e);
+                let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+                orch.mark_task_error(req.task_id);
+                if let Some(run) = &orch.current_run {
+                    let _ = app.emit("orchestrator-status-changed", run);
+                }
+                continue;
+            }
         };
 
-        // Orchestrator の worker_id を更新
+        // Orchestrator の worker_id を更新（Ready → Running）
         {
             let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
             orch.update_worker_id_for_task(req.task_id, new_id.clone());
-            // イベント発行
-            if let Some(run) = &orch.current_run {
-                let _ = app.emit("orchestrator-status-changed", run);
-            }
+        }
+    }
+
+    // 全 spawn 完了後に一度だけ Running 状態をフロントに通知
+    {
+        let orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        if let Some(run) = &orch.current_run {
+            let _ = app.emit("orchestrator-status-changed", run);
         }
     }
 
@@ -252,6 +270,81 @@ pub async fn orchestrator_cancel(
     let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
     orch.cancel(manager.inner(), &app);
     Ok(())
+}
+
+/// Wave Gate を実行する（Wave 完了時にフロントエンドから自動呼び出し）
+#[tauri::command]
+pub async fn orchestrator_run_wave_gate(
+    orchestrator: State<'_, SharedOrchestrator>,
+    manager: State<'_, SharedWorkerManager>,
+    app: tauri::AppHandle,
+) -> Result<WaveGateResult, String> {
+    // 現在 Wave の情報を取得
+    let (project_path, base_branch, succeeded_branches, wave_number) = {
+        let orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        let run = orch.current_run.as_ref().ok_or("No active run")?;
+
+        let current_wave = run
+            .waves
+            .iter()
+            .find(|w| w.wave_number == run.current_wave)
+            .ok_or("Current wave not found")?;
+
+        let branches: Vec<String> = run
+            .assignments
+            .iter()
+            .filter(|a| current_wave.task_ids.contains(&a.task.id))
+            .filter(|a| a.execution_state == ExecutionState::Done)
+            .map(|a| a.branch_name.clone())
+            .collect();
+
+        (
+            run.project_path.clone(),
+            run.base_branch.clone(),
+            branches,
+            run.current_wave,
+        )
+    };
+
+    // Gate 実行（非同期: マージ・テスト・AIレビュー）
+    let gate = WaveGate::new(&project_path, &base_branch);
+    let result = gate
+        .execute(&succeeded_branches, wave_number, &app)
+        .await;
+
+    // Gate 結果を Orchestrator に渡して次 Wave へ進む
+    let spawn_requests = {
+        let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        orch.advance_to_next_wave(result.clone(), &app)
+    };
+
+    // 次 Wave の Worker を起動
+    for req in spawn_requests {
+        let new_id = {
+            let mut mgr = manager.lock().map_err(|e| e.to_string())?;
+            mgr.spawn_worker(req.worker_config, app.clone())
+                .map_err(|e| e.to_string())?
+        };
+        {
+            let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+            orch.update_worker_id_for_task(req.task_id, new_id);
+        }
+    }
+
+    Ok(result)
+}
+
+/// Wave 構造を取得する（UI 表示用）
+#[tauri::command]
+pub async fn orchestrator_get_waves(
+    orchestrator: State<'_, SharedOrchestrator>,
+) -> Result<Vec<Wave>, String> {
+    let orch = orchestrator.lock().map_err(|e| e.to_string())?;
+    Ok(orch
+        .current_run
+        .as_ref()
+        .map(|r| r.waves.clone())
+        .unwrap_or_default())
 }
 
 /// CPU・メモリ使用率を返す (F-12-17, F-12-19)

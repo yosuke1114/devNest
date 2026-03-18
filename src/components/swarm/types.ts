@@ -30,6 +30,8 @@ export interface SwarmSettings {
   claudeSkipPermissions: boolean;
   claudeNoStream: boolean;
   autoApproveHighConfidence: boolean;
+  /** true のとき -p を省略し TUI モードで起動（追加指示・対話が可能になる） */
+  claudeInteractive: boolean;
 }
 
 export const DEFAULT_SWARM_SETTINGS: SwarmSettings = {
@@ -41,6 +43,7 @@ export const DEFAULT_SWARM_SETTINGS: SwarmSettings = {
   claudeSkipPermissions: false,
   claudeNoStream: false,
   autoApproveHighConfidence: false,
+  claudeInteractive: false,
 };
 
 export type WorkerKind = "claudeCode" | "shell";
@@ -54,10 +57,74 @@ export interface WorkerConfig {
   workingDir: string;
   dependsOn: string[];
   metadata: Record<string, string>;
+  role?: WorkerRole;
 }
 
 export interface WorkerInfo {
   id: string;
   config: WorkerConfig;
   status: WorkerStatus;
+}
+
+// Phase 13追加
+export type WorkerRole =
+  | "scout"
+  | "builder"
+  | "reviewer"
+  | "merger"
+  | "shell";
+
+export const ROLE_ICON: Record<WorkerRole, string> = {
+  scout:    "🔍",
+  builder:  "🔨",
+  reviewer: "👁️",
+  merger:   "🔀",
+  shell:    "🐚",
+};
+
+export const ROLE_LABEL: Record<WorkerRole, string> = {
+  scout:    "Scout",
+  builder:  "Builder",
+  reviewer: "Reviewer",
+  merger:   "Merger",
+  shell:    "Shell",
+};
+
+// ─── Wave Orchestrator 型 ────────────────────────────────────────
+
+export type WaveStatus =
+  | "pending"
+  | "running"
+  | "gating"
+  | "passed"
+  | "passedWithWarnings"
+  | "failed";
+
+export type GateOverall = "passed" | "passedWithWarnings" | "blocked";
+
+export interface GateStepResult {
+  passed: boolean;
+  summary: string;
+  details: string[];
+  durationSecs: number;
+}
+
+export interface WaveGateResult {
+  merge: GateStepResult;
+  test: GateStepResult;
+  review: GateStepResult;
+  overall: GateOverall;
+}
+
+export interface Wave {
+  waveNumber: number;
+  taskIds: number[];
+  status: WaveStatus;
+  gateResult: WaveGateResult | null;
+}
+
+// WorkerConfigにrole・assignedFilesを追加（Phase 13拡張）
+export interface WorkerConfigV13 extends WorkerConfig {
+  role: WorkerRole;
+  assignedFiles: string[];
 }
