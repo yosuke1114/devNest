@@ -6,20 +6,26 @@ use super::settings::SwarmSettings;
 use super::subtask::SubTask;
 use super::wave::{compute_waves, Wave, WaveGateResult, WaveStatus};
 use super::wave_gate::WaveGate;
-use super::worker::{ExecutionState, RunStatus, SpawnRequest, WorkerStatus};
+use super::worker::{RunStatus, SpawnRequest, WorkerStatus};
 
 pub type SharedWaveOrchestrator = Arc<Mutex<WaveOrchestrator>>;
 
 /// WaveOrchestrator: Wave レベルの進行を管理する上位レイヤー。
 /// 各 Wave 内のワーカー管理は内部の Orchestrator に委譲する。
 ///
+/// ハイブリッド設計:
+///   - Orchestrator が全 Wave のタスクを1つの Run で管理（start_run_with_waves）
+///   - WaveOrchestrator が Wave 間遷移・Gate チェックを調整
+///   - 単一 Run なので completed/failed カウントが Wave 横断で正確に累積
+///
 /// ```text
-/// WaveOrchestrator
-///   ├── Wave 1 → Orchestrator.start_run(wave1_tasks)
+/// WaveOrchestrator (Wave 進行管理)
+///   ├── Wave 1 → Orchestrator.start_run_with_waves(全タスク)
 ///   │     ├── Worker A (task 1)
 ///   │     └── Worker B (task 2)
 ///   │     → Gate check (merge + test + review)
-///   ├── Wave 2 → Orchestrator.start_run(wave2_tasks)
+///   │     → Orchestrator.advance_wave(gate_result)
+///   ├── Wave 2 → タスク自動昇格
 ///   │     └── Worker C (task 3)
 ///   │     → Gate check
 ///   └── Wave 3 → ...
@@ -28,18 +34,14 @@ pub type SharedWaveOrchestrator = Arc<Mutex<WaveOrchestrator>>;
 pub struct WaveOrchestrator {
     /// 全タスク（Wave 分割前の元データ）
     all_tasks: Vec<SubTask>,
-    /// 算出された Wave 構造
+    /// 算出された Wave 構造（初期表示用。開始後は orchestrator.current_run.waves が最新）
     waves: Vec<Wave>,
-    /// 現在実行中の Wave 番号（1-indexed）
-    current_wave: u32,
     /// Swarm 設定
     settings: SwarmSettings,
     /// プロジェクトパス
     project_path: String,
-    /// 内部 Orchestrator（現在の Wave のワーカーを管理）
+    /// 内部 Orchestrator（全 Wave のタスクを管理）
     orchestrator: Orchestrator,
-    /// 各 Wave の Gate 結果
-    gate_results: Vec<WaveGateResult>,
     /// 全体ステータス
     status: WaveOrchestratorStatus,
 }
@@ -77,26 +79,20 @@ pub struct WaveOrchestratorSnapshot {
 
 impl WaveOrchestrator {
     /// 新しい WaveOrchestrator を作成し、Wave 構造を算出する。
-    /// Wave が 1 つしかない場合もそのまま動作する（フラット実行と同等）。
-    pub fn new(
-        tasks: Vec<SubTask>,
-        settings: SwarmSettings,
-        project_path: String,
-    ) -> Self {
+    pub fn new(tasks: Vec<SubTask>, settings: SwarmSettings, project_path: String) -> Self {
         let waves = compute_waves(&tasks);
         Self {
             all_tasks: tasks,
             waves,
-            current_wave: 0,
             settings,
             project_path,
             orchestrator: Orchestrator::new(),
-            gate_results: vec![],
             status: WaveOrchestratorStatus::Idle,
         }
     }
 
-    /// Wave 1 を開始する。戻り値の SpawnRequest でワーカーを起動する。
+    /// Wave モードで実行を開始する。
+    /// Orchestrator.start_run_with_waves() に全タスクを委譲し、Wave 1 の SpawnRequest を返す。
     pub fn start(&mut self) -> Result<Vec<SpawnRequest>, String> {
         if self.waves.is_empty() {
             return Err("タスクがありません".into());
@@ -105,16 +101,16 @@ impl WaveOrchestrator {
             return Err("既に実行中です".into());
         }
 
-        self.current_wave = 1;
         self.status = WaveOrchestratorStatus::Running;
-        self.waves[0].status = WaveStatus::Running;
 
-        let wave1_tasks = self.tasks_for_wave(1);
-        let (_, spawns) = self.orchestrator.start_run(
-            wave1_tasks,
+        let (_, spawns) = self.orchestrator.start_run_with_waves(
+            self.all_tasks.clone(),
             self.settings.clone(),
             self.project_path.clone(),
         )?;
+
+        // orchestrator が Wave 構造を持っているので、ローカルの waves を同期
+        self.sync_waves_from_orchestrator();
 
         Ok(spawns)
     }
@@ -126,18 +122,24 @@ impl WaveOrchestrator {
         worker_id: &str,
         new_status: WorkerStatus,
     ) -> WorkerUpdateResult {
-        let new_spawns = self.orchestrator.update_worker_status(worker_id, new_status);
+        let new_spawns = self
+            .orchestrator
+            .update_worker_status(worker_id, new_status);
 
-        if self.orchestrator.is_all_terminal() {
-            // 現在の Wave の全タスクが終端状態
-            if let Some(wave) = self
-                .waves
-                .iter_mut()
-                .find(|w| w.wave_number == self.current_wave)
-            {
-                wave.status = WaveStatus::Gating;
-            }
+        if self.orchestrator.is_current_wave_complete() {
+            // 現在の Wave の全タスクが終端状態 → Gate チェックへ
             self.status = WaveOrchestratorStatus::Gating;
+            self.sync_waves_from_orchestrator();
+
+            // 現在 Wave を Gating に更新
+            if let Some(run) = &mut self.orchestrator.current_run {
+                let current = run.current_wave.unwrap_or(0);
+                if let Some(waves) = &mut run.waves {
+                    if let Some(wave) = waves.iter_mut().find(|w| w.wave_number == current) {
+                        wave.status = WaveStatus::Gating;
+                    }
+                }
+            }
 
             WorkerUpdateResult {
                 new_spawns: vec![],
@@ -162,111 +164,81 @@ impl WaveOrchestrator {
             return Err("Gate 実行可能な状態ではありません".into());
         }
 
-        let branches = self.orchestrator.completed_branches();
+        // 現在 Wave の完了ブランチのみ取得
+        let current_wave = self
+            .orchestrator
+            .current_run
+            .as_ref()
+            .and_then(|r| r.current_wave)
+            .unwrap_or(1);
+        let branches = self.orchestrator.completed_branches_for_wave(current_wave);
         let gate = WaveGate::new(&self.project_path, &self.settings.base_branch);
         let result = gate.execute(&branches).await;
 
-        self.apply_gate_result(result.clone());
         Ok(result)
     }
 
     /// Gate 結果を適用し、次の Wave に進むか判定する。
-    /// 外部から Gate 結果を渡す場合に使用（テスト等）。
+    /// Orchestrator.advance_wave() に委譲して Wave 遷移を行う。
     pub fn apply_gate_result(&mut self, result: WaveGateResult) -> Vec<SpawnRequest> {
-        // 現在 Wave の状態を更新
-        if let Some(wave) = self
-            .waves
-            .iter_mut()
-            .find(|w| w.wave_number == self.current_wave)
-        {
-            wave.gate_result = Some(result.clone());
-            wave.status = match result.overall {
-                super::wave::GateOverall::Passed => WaveStatus::Passed,
-                super::wave::GateOverall::PassedWithWarnings => WaveStatus::PassedWithWarnings,
-                super::wave::GateOverall::Blocked => WaveStatus::Failed,
-            };
-        }
-        self.gate_results.push(result.clone());
+        // Orchestrator に Gate 結果を渡して次 Wave に進む
+        let spawns = self.orchestrator.advance_wave(result.clone());
 
-        // Blocked → 停止
+        // WaveOrchestrator のステータスを更新
         if result.overall == super::wave::GateOverall::Blocked {
             self.status = WaveOrchestratorStatus::Blocked;
-            return vec![];
+        } else {
+            // 次 Wave があるか確認
+            let has_next_wave = !spawns.is_empty();
+            let run_done = self
+                .orchestrator
+                .current_run
+                .as_ref()
+                .map(|r| r.status == RunStatus::Done)
+                .unwrap_or(false);
+
+            if run_done || !has_next_wave {
+                self.status = WaveOrchestratorStatus::Done;
+            } else {
+                self.status = WaveOrchestratorStatus::Running;
+            }
         }
 
-        // 次 Wave に進む
-        self.advance_to_next_wave()
-    }
+        // Wave 状態を同期
+        self.sync_waves_from_orchestrator();
 
-    /// 次 Wave のタスクを Orchestrator に渡して実行開始する
-    fn advance_to_next_wave(&mut self) -> Vec<SpawnRequest> {
-        let next = self.current_wave + 1;
-
-        // 次 Wave が存在するか
-        let next_exists = self.waves.iter().any(|w| w.wave_number == next);
-        if !next_exists {
-            self.status = WaveOrchestratorStatus::Done;
-            return vec![];
-        }
-
-        // Orchestrator をリセットして次 Wave のタスクを投入
-        self.orchestrator.clear_run();
-        self.current_wave = next;
-        self.status = WaveOrchestratorStatus::Running;
-
-        if let Some(wave) = self.waves.iter_mut().find(|w| w.wave_number == next) {
-            wave.status = WaveStatus::Running;
-        }
-
-        let next_tasks = self.tasks_for_wave(next);
-        match self.orchestrator.start_run(
-            next_tasks,
-            self.settings.clone(),
-            self.project_path.clone(),
-        ) {
-            Ok((_, spawns)) => spawns,
-            Err(_) => vec![],
-        }
-    }
-
-    /// Wave 番号に該当するタスクを取得する
-    fn tasks_for_wave(&self, wave_number: u32) -> Vec<SubTask> {
-        let task_ids: Vec<u32> = self
-            .waves
-            .iter()
-            .find(|w| w.wave_number == wave_number)
-            .map(|w| w.task_ids.clone())
-            .unwrap_or_default();
-
-        self.all_tasks
-            .iter()
-            .filter(|t| task_ids.contains(&t.id))
-            .cloned()
-            .collect()
+        spawns
     }
 
     /// キャンセルする
     pub fn cancel(&mut self) {
         self.orchestrator.cancel();
         self.status = WaveOrchestratorStatus::Cancelled;
-        for wave in &mut self.waves {
-            if wave.status == WaveStatus::Pending || wave.status == WaveStatus::Running {
-                wave.status = WaveStatus::Failed;
-            }
-        }
+        self.sync_waves_from_orchestrator();
     }
 
     /// 状態スナップショットを生成する
     pub fn snapshot(&self) -> WaveOrchestratorSnapshot {
-        let (completed, failed) = self.count_tasks();
-        WaveOrchestratorSnapshot {
-            waves: self.waves.clone(),
-            current_wave: self.current_wave,
-            status: self.status.clone(),
-            gate_results: self.gate_results.clone(),
-            total_tasks: self.all_tasks.len() as u32,
-            completed_tasks: completed,
-            failed_tasks: failed,
+        if let Some(run) = &self.orchestrator.current_run {
+            WaveOrchestratorSnapshot {
+                waves: run.waves.clone().unwrap_or_else(|| self.waves.clone()),
+                current_wave: run.current_wave.unwrap_or(0),
+                status: self.status.clone(),
+                gate_results: run.gate_results.clone().unwrap_or_default(),
+                total_tasks: run.total,
+                completed_tasks: run.completed,
+                failed_tasks: run.failed,
+            }
+        } else {
+            WaveOrchestratorSnapshot {
+                waves: self.waves.clone(),
+                current_wave: 0,
+                status: self.status.clone(),
+                gate_results: vec![],
+                total_tasks: self.all_tasks.len() as u32,
+                completed_tasks: 0,
+                failed_tasks: 0,
+            }
         }
     }
 
@@ -280,14 +252,22 @@ impl WaveOrchestrator {
         self.waves.len()
     }
 
-    /// 完了・失敗タスク数をカウントする
-    fn count_tasks(&self) -> (u32, u32) {
+    /// 内部 Orchestrator への参照（ハイブリッドアクセス用）
+    pub fn orchestrator(&self) -> &Orchestrator {
+        &self.orchestrator
+    }
+
+    /// 内部 Orchestrator への可変参照（ハイブリッドアクセス用）
+    pub fn orchestrator_mut(&mut self) -> &mut Orchestrator {
+        &mut self.orchestrator
+    }
+
+    /// Orchestrator の Wave 状態をローカルの waves フィールドに同期する
+    fn sync_waves_from_orchestrator(&mut self) {
         if let Some(run) = &self.orchestrator.current_run {
-            (run.completed, run.failed)
-        } else {
-            // 過去の Wave の合計を含めるには別途追跡が必要
-            // 現時点では現在 Wave のみ
-            (0, 0)
+            if let Some(waves) = &run.waves {
+                self.waves = waves.clone();
+            }
         }
     }
 }
@@ -303,8 +283,8 @@ pub struct WorkerUpdateResult {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::wave_gate::{make_blocked_result, make_passed_result, make_warning_result};
+    use super::*;
 
     fn task(id: u32, deps: Vec<u32>) -> SubTask {
         SubTask {
@@ -345,12 +325,14 @@ mod tests {
         wo.update_worker_status("w1", WorkerStatus::Done);
         let result = wo.update_worker_status("w2", WorkerStatus::Done);
 
-        assert!(result.wave_gate_ready);
-        assert_eq!(wo.status, WaveOrchestratorStatus::Gating);
+        // 単一 Wave → フラット実行のため、is_current_wave_complete は false
+        // (Wave フィールドが None なので)
+        // ただし is_all_terminal は true
+        assert!(wo.orchestrator().is_all_terminal());
 
-        // Gate パス → Done
-        wo.apply_gate_result(make_passed_result());
-        assert_eq!(wo.status, WaveOrchestratorStatus::Done);
+        // フラット実行時は RunStatus::Done になる
+        let snap = wo.snapshot();
+        assert_eq!(snap.completed_tasks, 3);
     }
 
     #[test]
@@ -372,12 +354,16 @@ mod tests {
         wo.update_worker_status("w0", WorkerStatus::Done);
         let result = wo.update_worker_status("w1", WorkerStatus::Done);
         assert!(result.wave_gate_ready);
+        assert_eq!(wo.status, WaveOrchestratorStatus::Gating);
 
         // Gate パス → Wave 2 開始
         let wave2_spawns = wo.apply_gate_result(make_passed_result());
         assert_eq!(wo.status, WaveOrchestratorStatus::Running);
-        assert_eq!(wo.current_wave, 2);
         assert_eq!(wave2_spawns.len(), 1); // Task 3
+
+        let snap = wo.snapshot();
+        assert_eq!(snap.current_wave, 2);
+        assert_eq!(snap.completed_tasks, 2); // Wave 1 の2タスク
 
         // Wave 2 完了
         wo.assign_worker_id(wave2_spawns[0].task_id, "w3".into());
@@ -387,6 +373,9 @@ mod tests {
         // Gate パス → Done
         wo.apply_gate_result(make_passed_result());
         assert_eq!(wo.status, WaveOrchestratorStatus::Done);
+
+        let snap = wo.snapshot();
+        assert_eq!(snap.completed_tasks, 3);
     }
 
     #[test]
@@ -437,7 +426,6 @@ mod tests {
 
         let snap = wo.snapshot();
         assert_eq!(snap.total_tasks, 2);
-        assert_eq!(snap.current_wave, 1);
         assert_eq!(snap.status, WaveOrchestratorStatus::Running);
     }
 
@@ -477,5 +465,46 @@ mod tests {
         wo.apply_gate_result(make_passed_result());
 
         assert_eq!(wo.status, WaveOrchestratorStatus::Done);
+        let snap = wo.snapshot();
+        assert_eq!(snap.completed_tasks, 4);
+    }
+
+    #[test]
+    fn gate_results_accumulate() {
+        let tasks = vec![task(1, vec![]), task(2, vec![1])];
+        let mut wo = WaveOrchestrator::new(tasks, settings(), "/tmp".into());
+
+        let spawns = wo.start().unwrap();
+        wo.assign_worker_id(spawns[0].task_id, "w0".into());
+        wo.update_worker_status("w0", WorkerStatus::Done);
+
+        // Wave 1 Gate
+        let wave2 = wo.apply_gate_result(make_passed_result());
+        wo.assign_worker_id(wave2[0].task_id, "w1".into());
+        wo.update_worker_status("w1", WorkerStatus::Done);
+
+        // Wave 2 Gate
+        wo.apply_gate_result(make_warning_result());
+
+        let snap = wo.snapshot();
+        assert_eq!(snap.gate_results.len(), 2);
+        assert_eq!(wo.status, WaveOrchestratorStatus::Done);
+    }
+
+    #[test]
+    fn orchestrator_accessor() {
+        let tasks = vec![task(1, vec![]), task(2, vec![1])];
+        let mut wo = WaveOrchestrator::new(tasks, settings(), "/tmp".into());
+        wo.start().unwrap();
+
+        // ハイブリッドアクセス: Orchestrator の Wave メソッドに直接アクセス
+        assert!(wo.orchestrator().is_wave_mode());
+        assert!(!wo.orchestrator().is_current_wave_complete());
+
+        wo.assign_worker_id(1, "w0".into());
+        wo.orchestrator_mut()
+            .update_worker_status("w0", WorkerStatus::Done);
+
+        assert!(wo.orchestrator().is_current_wave_complete());
     }
 }

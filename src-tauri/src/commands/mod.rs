@@ -104,6 +104,10 @@ macro_rules! all_commands {
             commands::swarm::swarm_wave_get_status,
             commands::swarm::swarm_wave_list,
             commands::swarm::swarm_wave_cancel,
+            // ハイブリッド: Orchestrator Wave 直接アクセス
+            commands::swarm::orchestrator_get_waves,
+            commands::swarm::orchestrator_wave_status,
+            commands::swarm::orchestrator_advance_wave,
         ]
     };
 }

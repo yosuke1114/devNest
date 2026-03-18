@@ -1,6 +1,5 @@
 use tauri::State;
 
-use crate::swarm::orchestrator::SharedOrchestrator;
 use crate::swarm::settings::SwarmSettings;
 use crate::swarm::subtask::SubTask;
 use crate::swarm::wave::Wave;
@@ -22,18 +21,19 @@ pub async fn swarm_wave_start(
 
     let spawns = {
         let mut wo = wave_orch.lock().map_err(|e| e.to_string())?;
-        *wo = crate::swarm::wave_orchestrator::WaveOrchestrator::new(
-            tasks, settings, project_path,
-        );
+        *wo = crate::swarm::wave_orchestrator::WaveOrchestrator::new(tasks, settings, project_path);
         wo.start()?
     };
 
     // ワーカー起動（実際のワーカー起動は別途 WorkerManager で行う）
     // ここでは SpawnRequest をイベントで通知
-    let _ = app.emit("swarm-spawn-workers", &serde_json::json!({
-        "count": spawns.len(),
-        "taskIds": spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
-    }));
+    let _ = app.emit(
+        "swarm-spawn-workers",
+        &serde_json::json!({
+            "count": spawns.len(),
+            "taskIds": spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
+        }),
+    );
 
     let wo = wave_orch.lock().map_err(|e| e.to_string())?;
     Ok(wo.snapshot())
@@ -64,16 +64,22 @@ pub async fn swarm_wave_worker_update(
     };
 
     if result.wave_gate_ready {
-        let _ = app.emit("swarm-wave-gate-ready", &serde_json::json!({
-            "waveNumber": snapshot.current_wave,
-        }));
+        let _ = app.emit(
+            "swarm-wave-gate-ready",
+            &serde_json::json!({
+                "waveNumber": snapshot.current_wave,
+            }),
+        );
     }
 
     if !result.new_spawns.is_empty() {
-        let _ = app.emit("swarm-spawn-workers", &serde_json::json!({
-            "count": result.new_spawns.len(),
-            "taskIds": result.new_spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
-        }));
+        let _ = app.emit(
+            "swarm-spawn-workers",
+            &serde_json::json!({
+                "count": result.new_spawns.len(),
+                "taskIds": result.new_spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
+            }),
+        );
     }
 
     Ok(snapshot)
@@ -114,17 +120,23 @@ pub async fn swarm_wave_run_gate(
     };
 
     // Gate 結果をイベント通知
-    let _ = app.emit("swarm-wave-gate-result", &serde_json::json!({
-        "overall": format!("{:?}", gate_result.overall),
-        "waveNumber": snapshot.current_wave,
-    }));
+    let _ = app.emit(
+        "swarm-wave-gate-result",
+        &serde_json::json!({
+            "overall": format!("{:?}", gate_result.overall),
+            "waveNumber": snapshot.current_wave,
+        }),
+    );
 
     // 次 Wave のワーカー起動通知
     if !spawns.is_empty() {
-        let _ = app.emit("swarm-spawn-workers", &serde_json::json!({
-            "count": spawns.len(),
-            "taskIds": spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
-        }));
+        let _ = app.emit(
+            "swarm-spawn-workers",
+            &serde_json::json!({
+                "count": spawns.len(),
+                "taskIds": spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
+            }),
+        );
     }
 
     Ok(snapshot)
@@ -163,5 +175,78 @@ pub async fn swarm_wave_cancel(
     };
 
     let _ = app.emit("swarm-wave-cancelled", &serde_json::json!({}));
+    Ok(snapshot)
+}
+
+// ===== ハイブリッドコマンド: Orchestrator の Wave メソッドに直接アクセス =====
+
+/// Orchestrator の Wave 構造を直接取得する
+#[tauri::command]
+pub async fn orchestrator_get_waves(
+    wave_orch: State<'_, SharedWaveOrchestrator>,
+) -> Result<Option<Vec<Wave>>, String> {
+    let wo = wave_orch.lock().map_err(|e| e.to_string())?;
+    Ok(wo
+        .orchestrator()
+        .current_run
+        .as_ref()
+        .and_then(|r| r.waves.clone()))
+}
+
+/// Orchestrator の現在 Wave 完了状態を取得する
+#[tauri::command]
+pub async fn orchestrator_wave_status(
+    wave_orch: State<'_, SharedWaveOrchestrator>,
+) -> Result<serde_json::Value, String> {
+    let wo = wave_orch.lock().map_err(|e| e.to_string())?;
+    let orch = wo.orchestrator();
+    let run = orch.current_run.as_ref();
+
+    Ok(serde_json::json!({
+        "isWaveMode": orch.is_wave_mode(),
+        "isCurrentWaveComplete": orch.is_current_wave_complete(),
+        "isAllTerminal": orch.is_all_terminal(),
+        "currentWave": run.and_then(|r| r.current_wave),
+        "totalWaves": run.and_then(|r| r.waves.as_ref()).map(|w| w.len()),
+        "completed": run.map(|r| r.completed),
+        "failed": run.map(|r| r.failed),
+        "total": run.map(|r| r.total),
+    }))
+}
+
+/// Orchestrator の advance_wave を直接呼び出す（Gate 結果を外部から渡す場合）
+#[tauri::command]
+pub async fn orchestrator_advance_wave(
+    gate_result: crate::swarm::wave::WaveGateResult,
+    wave_orch: State<'_, SharedWaveOrchestrator>,
+    app: tauri::AppHandle,
+) -> Result<WaveOrchestratorSnapshot, String> {
+    use tauri::Emitter;
+
+    let (spawns, snapshot) = {
+        let mut wo = wave_orch.lock().map_err(|e| e.to_string())?;
+        let spawns = wo.apply_gate_result(gate_result.clone());
+        let snapshot = wo.snapshot();
+        (spawns, snapshot)
+    };
+
+    let _ = app.emit(
+        "swarm-wave-gate-result",
+        &serde_json::json!({
+            "overall": format!("{:?}", gate_result.overall),
+            "waveNumber": snapshot.current_wave,
+        }),
+    );
+
+    if !spawns.is_empty() {
+        let _ = app.emit(
+            "swarm-spawn-workers",
+            &serde_json::json!({
+                "count": spawns.len(),
+                "taskIds": spawns.iter().map(|s| s.task_id).collect::<Vec<_>>(),
+            }),
+        );
+    }
+
     Ok(snapshot)
 }
