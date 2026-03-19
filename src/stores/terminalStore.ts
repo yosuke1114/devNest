@@ -16,12 +16,16 @@ interface TerminalState {
   /** Issue コンテキスト検索結果（search_context_for_issue の結果）。
    *  startSession 前に呼び側がセットし、Claude Code の context として利用する。 */
   contextChunks: IssueContextChunk[];
+  /** 外部（Maintenance等）から渡されるプロンプト。TerminalScreen マウント時に自動起動に使用。 */
+  pendingPrompt: string | null;
 
-  startSession: (projectId: number, promptSummary?: string) => Promise<void>;
+  startSession: (projectId: number, promptSummary?: string, ptySize?: { cols: number; rows: number }) => Promise<void>;
   stopSession: () => Promise<void>;
   sendInput: (input: string) => Promise<void>;
+  sendResize: (cols: number, rows: number) => void;
   loadSessions: (projectId: number) => Promise<void>;
   dismissBanner: () => void;
+  setPendingPrompt: (prompt: string | null) => void;
   listenEvents: () => () => void;
 
   // terminal イベントハンドラ（外部から呼べるようにexport）
@@ -39,8 +43,9 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   changedFiles: [],
   error: null,
   contextChunks: [],
+  pendingPrompt: null,
 
-  startSession: async (projectId, promptSummary) => {
+  startSession: async (projectId, promptSummary, ptySize) => {
     set({ startStatus: "loading", error: null, showPrReadyBanner: false });
     try {
       // F-K02: issueStore の issueLinks からリンク済みドキュメントパスを context として注入
@@ -52,7 +57,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
         docPaths.length > 0
           ? `関連設計書: ${docPaths.join(", ")}${promptSummary ? `\n${promptSummary}` : ""}`
           : promptSummary;
-      const session = await ipc.terminalSessionStart(projectId, contextSummary);
+      const session = await ipc.terminalSessionStart(projectId, contextSummary, ptySize);
       set({ session, startStatus: "success" });
     } catch (e) {
       set({ startStatus: "error", error: String(e) });
@@ -72,12 +77,20 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     await ipc.terminalInputSend(session.id, input).catch(() => {});
   },
 
+  sendResize: (cols, rows) => {
+    const { session } = get();
+    if (!session || session.status !== "running") return;
+    ipc.terminalResize(session.id, cols, rows).catch(() => {});
+  },
+
   loadSessions: async (projectId) => {
     const sessions = await ipc.terminalSessionList(projectId).catch(() => []);
     set({ sessions });
   },
 
   dismissBanner: () => set({ showPrReadyBanner: false }),
+
+  setPendingPrompt: (prompt) => set({ pendingPrompt: prompt }),
 
   onTerminalDone: (payload) => {
     set((s) => ({
@@ -124,5 +137,6 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       changedFiles: [],
       error: null,
       contextChunks: [],
+      pendingPrompt: null,
     }),
 }));

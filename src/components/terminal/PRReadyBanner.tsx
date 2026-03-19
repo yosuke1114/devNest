@@ -1,4 +1,5 @@
 import { IconGitBranch, IconGitMerge, IconX } from "@tabler/icons-react";
+import { Button } from "../ui/button";
 
 interface PRReadyBannerProps {
   branchName: string;
@@ -25,22 +26,25 @@ export function PRReadyBanner({
           <span className="ml-2 text-[10px] text-green-400">（設計書変更あり）</span>
         )}
       </div>
-      <button
+      <Button
         onClick={onCreatePR}
         data-testid="create-pr"
-        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-green-700 hover:bg-green-600 text-white transition-colors shrink-0"
+        size="sm"
+        className="shrink-0 h-7 px-2.5 text-xs bg-green-700 hover:bg-green-600 text-white"
       >
         <IconGitMerge size={11} /> CREATE PR
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={onReviewChanges}
-        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-white/10 hover:bg-white/20 text-gray-300 transition-colors shrink-0"
+        variant="outline"
+        size="sm"
+        className="shrink-0 h-7 px-2.5 text-xs"
       >
         REVIEW CHANGES
-      </button>
-      <button onClick={onDismiss} className="text-gray-500 hover:text-gray-300">
+      </Button>
+      <Button variant="ghost" size="icon" onClick={onDismiss} className="h-7 w-7 text-muted-foreground">
         <IconX size={12} />
-      </button>
+      </Button>
     </div>
   );
 }

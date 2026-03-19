@@ -1,3 +1,5 @@
+import { Badge } from "../ui/badge";
+import { cn } from "../../lib/utils";
 import type { AsyncStatus } from "../../types";
 
 interface StatusPillProps {
@@ -6,10 +8,10 @@ interface StatusPillProps {
   className?: string;
 }
 
-const DEFAULTS: Record<Exclude<AsyncStatus, "idle">, { text: string; color: string; bg: string }> = {
-  loading: { text: "処理中…", color: "#f0a500", bg: "#f0a50020" },
-  success: { text: "完了", color: "#2ecc71", bg: "#2ecc7120" },
-  error: { text: "エラー", color: "#e74c3c", bg: "#e74c3c20" },
+const DEFAULTS: Record<Exclude<AsyncStatus, "idle">, { text: string; className: string }> = {
+  loading: { text: "処理中…", className: "border border-yellow-600/40 bg-yellow-500/10 text-yellow-400" },
+  success: { text: "完了", className: "border border-green-600/40 bg-green-500/10 text-green-400" },
+  error: { text: "エラー", className: "border border-destructive/40 bg-destructive/10 text-destructive" },
 };
 
 export function StatusPill({ status, label, className }: StatusPillProps) {
@@ -19,21 +21,12 @@ export function StatusPill({ status, label, className }: StatusPillProps) {
   const text = label ?? cfg.text;
 
   return (
-    <span
+    <Badge
       data-testid="status-pill"
-      className={className}
-      style={{
-        fontSize: 12,
-        color: cfg.color,
-        background: cfg.bg,
-        padding: "2px 8px",
-        borderRadius: 4,
-        border: `1px solid ${cfg.color}40`,
-        display: "inline-block",
-        whiteSpace: "nowrap",
-      }}
+      variant="outline"
+      className={cn(cfg.className, className)}
     >
       {text}
-    </span>
+    </Badge>
   );
 }

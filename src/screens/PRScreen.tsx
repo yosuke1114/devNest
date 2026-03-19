@@ -14,6 +14,8 @@ import { TabOverview } from "../components/pr/TabOverview";
 import { TabCodeDiff } from "../components/pr/TabCodeDiff";
 import { ReviewPanel } from "../components/pr/ReviewPanel";
 import { MergePanel } from "../components/pr/MergePanel";
+import { Button } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
 
 // ─── TabDesignDocs ────────────────────────────────────────────────────────────
 
@@ -30,29 +32,27 @@ function RequestChangesPanel({
   return (
     <div className="border border-yellow-700/50 rounded-lg p-3 bg-yellow-900/20 space-y-2">
       <div className="text-xs font-medium text-yellow-300">↩ Claude Code に修正を依頼</div>
-      <textarea
+      <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="修正指示を入力…（例: retry 回数を 5 回に変更してください）"
-        className="w-full bg-white/5 border border-white/10 rounded p-2 text-xs text-gray-200 resize-none h-20 focus:outline-none focus:border-purple-500"
+        className="text-xs resize-none h-20"
       />
       {status === "error" && (
-        <div className="text-xs text-red-400">送信に失敗しました。もう一度お試しください。</div>
+        <div className="text-xs text-destructive">送信に失敗しました。もう一度お試しください。</div>
       )}
       <div className="flex gap-2 justify-end">
-        <button
-          onClick={onCancel}
-          className="px-3 py-1 rounded text-xs text-gray-400 hover:bg-white/10 transition-colors"
-        >
+        <Button variant="ghost" size="sm" onClick={onCancel} className="h-7 px-3 text-xs">
           CANCEL
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
           onClick={() => { if (text.trim()) onSubmit(text.trim()); }}
           disabled={!text.trim() || status === "loading"}
-          className="flex items-center gap-1 px-3 py-1 rounded text-xs bg-purple-700 hover:bg-purple-600 text-white disabled:opacity-50 transition-colors"
+          className="h-7 px-3 text-xs flex items-center gap-1"
         >
           <IconSend size={11} /> SEND TO CLAUDE CODE
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -76,25 +76,22 @@ function TabDesignDocs({
   if (docDiffStatus === "idle") {
     return (
       <div className="p-4">
-        <button
-          onClick={onLoadDocDiff}
-          className="px-3 py-2 rounded text-xs bg-white/10 hover:bg-white/20 text-gray-300 transition-colors"
-        >
+        <Button variant="outline" size="sm" onClick={onLoadDocDiff}>
           Load Design Docs diff
-        </button>
+        </Button>
       </div>
     );
   }
 
   if (docDiffStatus === "loading") {
-    return <div className="p-4 text-xs text-gray-400">Loading…</div>;
+    return <div className="p-4 text-xs text-muted-foreground">Loading…</div>;
   }
 
   if (docDiffStatus === "error") {
     return (
-      <div className="p-4 text-xs text-red-400">
+      <div className="p-4 text-xs text-destructive">
         diff の取得に失敗しました。
-        <button onClick={onLoadDocDiff} className="ml-2 text-purple-400 hover:underline">
+        <button onClick={onLoadDocDiff} className="ml-2 text-primary hover:underline">
           RETRY
         </button>
       </div>
@@ -103,7 +100,7 @@ function TabDesignDocs({
 
   if (docDiffs.length === 0) {
     return (
-      <div className="p-4 text-xs text-gray-500">
+      <div className="p-4 text-xs text-muted-foreground">
         設計書（.md ファイル）の変更はありません。
       </div>
     );
@@ -121,26 +118,27 @@ function TabDesignDocs({
   return (
     <div className="overflow-y-auto p-4 space-y-4">
       {/* ヘッダー */}
-      <div className="rounded-lg border border-white/10 p-3 space-y-2">
+      <div className="rounded-lg border border-border p-3 space-y-2">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-gray-300">Design Docs Changes</span>
+          <span className="text-xs font-medium text-foreground">Design Docs Changes</span>
           <span className="text-xs text-green-400">+{totalAdd}</span>
-          <span className="text-xs text-red-400">-{totalDel}</span>
-          <button
+          <span className="text-xs text-destructive">-{totalDel}</span>
+          <Button
+            size="sm"
             onClick={() => setShowRequestChanges((v) => !v)}
-            className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-yellow-800/60 hover:bg-yellow-700/60 text-yellow-200 transition-colors"
+            className="ml-auto h-7 px-2.5 text-xs bg-yellow-800/60 hover:bg-yellow-700/60 text-yellow-200"
           >
             ↩ REQUEST CHANGES
-          </button>
+          </Button>
         </div>
         {docDiffs.map((f) => (
           <div key={f.filename} className="flex items-center gap-2 text-xs">
-            <IconFileText size={11} className="text-gray-500 shrink-0" />
-            <span className="font-mono text-gray-300 flex-1 truncate">{f.filename}</span>
+            <IconFileText size={11} className="text-muted-foreground shrink-0" />
+            <span className="font-mono text-foreground flex-1 truncate">{f.filename}</span>
             <span className="text-green-400">
               +{f.hunks.flatMap((h) => h.lines).filter((l) => l.type === "add").length}
             </span>
-            <span className="text-red-400">
+            <span className="text-destructive">
               -{f.hunks.flatMap((h) => h.lines).filter((l) => l.type === "remove").length}
             </span>
           </div>
@@ -160,8 +158,8 @@ function TabDesignDocs({
 
       {/* Diff hunks */}
       {docDiffs.map((fd) => (
-        <div key={fd.filename} className="rounded-lg border border-white/10 overflow-hidden">
-          <div className="px-3 py-2 bg-white/5 text-xs font-mono text-blue-200 border-b border-white/10">
+        <div key={fd.filename} className="rounded-lg border border-border overflow-hidden">
+          <div className="px-3 py-2 bg-secondary text-xs font-mono text-blue-200 border-b border-border">
             {fd.filename}
           </div>
           {fd.hunks.map((hunk, hi) => (
@@ -178,13 +176,13 @@ function TabDesignDocs({
                         ? "bg-green-950/40 text-green-300"
                         : line.type === "remove"
                         ? "bg-red-950/40 text-red-300"
-                        : "text-gray-400"
+                        : "text-muted-foreground"
                     }`}
                   >
-                    <span className="w-10 px-2 text-right text-gray-600 select-none shrink-0">
+                    <span className="w-10 px-2 text-right text-muted-foreground select-none shrink-0">
                       {line.oldLineNo ?? ""}
                     </span>
-                    <span className="w-10 px-2 text-right text-gray-600 select-none shrink-0">
+                    <span className="w-10 px-2 text-right text-muted-foreground select-none shrink-0">
                       {line.newLineNo ?? ""}
                     </span>
                     <span className="px-2 whitespace-pre flex-1 overflow-x-auto">
@@ -228,7 +226,7 @@ function PRDetailPanel({ projectId }: { projectId: number }) {
 
   if (detailStatus === "loading") {
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
         Loading...
       </div>
     );
@@ -236,23 +234,20 @@ function PRDetailPanel({ projectId }: { projectId: number }) {
 
   if (!detail) {
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
         Select a PR to view details
       </div>
     );
   }
 
-  // canMerge: passing checks + approved review
   const canMerge =
     detail.pr.checks_status === "passing" &&
     detail.reviews.some((r) => r.state === "approved");
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* PR ヘッダー */}
       <PRDetailHeader pr={detail.pr} />
 
-      {/* タブバー */}
       <PRDetailTabs
         activeTab={activeTab}
         onChange={setActiveTab}
@@ -336,7 +331,7 @@ export function PRScreen() {
 
   if (!currentProject) {
     return (
-      <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
         Select a project first
       </div>
     );
@@ -345,7 +340,7 @@ export function PRScreen() {
   return (
     <div className="flex-1 flex overflow-hidden" data-testid="pr-screen">
       {/* PR List panel */}
-      <div className="w-72 shrink-0 flex flex-col border-r border-white/10 overflow-hidden">
+      <div className="w-72 shrink-0 flex flex-col border-r border-border overflow-hidden">
         <PRFilterBar
           filter={stateFilter}
           onChange={(f) => {

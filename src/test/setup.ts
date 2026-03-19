@@ -29,3 +29,13 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
   save: vi.fn(),
 }));
+
+// ─── Browser API ポリフィル ─────────────────────────────────────────────────
+// JSDOM に存在しない Web API をスタブ化する
+if (typeof ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe = vi.fn();
+    unobserve = vi.fn();
+    disconnect = vi.fn();
+  };
+}

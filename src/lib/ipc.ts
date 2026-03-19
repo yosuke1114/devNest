@@ -5,6 +5,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BlockResolutionInput,
+  FileContent,
+  FileNode,
   ConflictScanResult,
   Document,
   DocumentWithContent,
@@ -29,6 +31,7 @@ import type {
   ProjectPatch,
   ProjectStatus,
   SaveResult,
+  ScanResult,
   SearchHistory,
   SearchResult,
   SettingValue,
@@ -68,7 +71,7 @@ export const documentGet = (projectId: number, documentId: number) =>
   invoke<DocumentWithContent>("document_get", { projectId, documentId });
 
 export const documentScan = (projectId: number) =>
-  invoke<{ count: number }>("document_scan", { projectId });
+  invoke<ScanResult>("document_scan", { projectId });
 
 export const documentSave = (projectId: number, documentId: number, content: string) =>
   invoke<SaveResult>("document_save", { projectId, documentId, content });
@@ -81,6 +84,22 @@ export const documentPushRetry = (projectId: number, documentId: number) =>
 
 export const documentLinkedIssues = (projectId: number, documentId: number) =>
   invoke<Issue[]>("document_linked_issues", { projectId, documentId });
+
+export const documentCreate = (projectId: number, relPath: string) =>
+  invoke<Document>("document_create", { projectId, relPath });
+
+export const documentRename = (projectId: number, documentId: number, newRelPath: string) =>
+  invoke<Document>("document_rename", { projectId, documentId, newRelPath });
+
+// ─── CodeViewer ───────────────────────────────────────────────────────────────
+export const fileTree = (projectId: number) =>
+  invoke<FileNode[]>("file_tree", { projectId });
+
+export const fileRead = (projectId: number, path: string, maxLines?: number) =>
+  invoke<FileContent>("file_read", { projectId, path, maxLines });
+
+export const fileSave = (projectId: number, path: string, content: string) =>
+  invoke<{ sha: string; push_status: string }>("file_save", { projectId, path, content });
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 export const settingsGet = (key: string) =>
@@ -232,6 +251,8 @@ export const terminalSessionStart = (
     contextDocIds?: number[];
     branchName?: string;
     requestChangesComment?: string;
+    cols?: number;
+    rows?: number;
   }
 ) =>
   invoke<TerminalSession>("terminal_session_start", {
@@ -242,6 +263,8 @@ export const terminalSessionStart = (
     contextDocIds: options?.contextDocIds,
     branchName: options?.branchName,
     requestChangesComment: options?.requestChangesComment,
+    cols: options?.cols,
+    rows: options?.rows,
   });
 
 export const terminalSessionStop = (sessionId: number) =>
@@ -249,6 +272,9 @@ export const terminalSessionStop = (sessionId: number) =>
 
 export const terminalInputSend = (sessionId: number, input: string) =>
   invoke<void>("terminal_input_send", { sessionId, input });
+
+export const terminalResize = (sessionId: number, cols: number, rows: number) =>
+  invoke<void>("terminal_resize", { sessionId, cols, rows });
 
 export const terminalSessionList = (projectId: number) =>
   invoke<TerminalSession[]>("terminal_session_list", { projectId });
@@ -314,3 +340,97 @@ export const conflictResolve = (
 
 export const conflictResolveAll = (projectId: number) =>
   invoke<ResolveAllResult>("conflict_resolve_all", { projectId });
+
+// ─── Maintenance ──────────────────────────────────────────────────────────────
+export const maintenanceScanDependencies = (projectPath: string) =>
+  invoke<import("../types").DependencyReport>("maintenance_scan_dependencies", { projectPath });
+
+export const maintenanceScanTechDebt = (projectPath: string) =>
+  invoke<import("../types").TechDebtReport>("maintenance_scan_tech_debt", { projectPath });
+
+export const maintenanceRunCoverage = (projectPath: string) =>
+  invoke<import("../types").CoverageReport>("maintenance_run_coverage", { projectPath });
+
+export const maintenanceGenerateCoverage = (projectPath: string, target: "node" | "rust" | "all" = "node") =>
+  invoke<import("../types").CoverageReport>("maintenance_generate_coverage", { projectPath, target });
+
+export const maintenanceRefactorCandidates = (projectPath: string, topN: number = 20) =>
+  invoke<import("../types").RefactorCandidate[]>("maintenance_refactor_candidates", { projectPath, topN });
+
+// ─── Doc Mapping ──────────────────────────────────────────────────────────────
+export const rebuildDocIndex = (projectPath: string) =>
+  invoke<import("../types").DocIndex>("rebuild_doc_index", { projectPath });
+
+export const checkDocStaleness = (projectPath: string) =>
+  invoke<import("../types").DocStaleness[]>("check_doc_staleness", { projectPath });
+
+// ─── Phase 6: AI アシスタント ─────────────────────────────────────────────────
+
+export const aiGetContext = (projectPath: string, filePath?: string) =>
+  invoke<import("../types").AiContext>("ai_get_context", { projectPath, filePath });
+
+export const aiReviewChanges = (
+  projectPath: string,
+  request: import("../types").ReviewRequest,
+) => invoke<import("../types").ReviewResult>("ai_review_changes", { projectPath, request });
+
+export const aiGenerateCode = (
+  projectPath: string,
+  request: import("../types").CodegenRequest,
+) => invoke<import("../types").CodegenResult>("ai_generate_code", { projectPath, request });
+
+// Phase 7: Analytics
+export const getVelocityMetrics = (projectPath: string, period: import("../types").DateRange) =>
+  invoke<import("../types").VelocityMetrics>("get_velocity_metrics", { projectPath, period });
+export const getAiImpact = (projectPath: string, period: import("../types").DateRange) =>
+  invoke<import("../types").AiImpactMetrics>("get_ai_impact", { projectPath, period });
+export const getSprintAnalysis = (projectPath: string, sprint: import("../types").SprintInfo) =>
+  invoke<import("../types").SprintAnalysis>("get_sprint_analysis", { projectPath, sprint });
+export const getSprintHistory = (projectPath: string, count: number) =>
+  invoke<import("../types").SprintAnalysis[]>("get_sprint_history", { projectPath, count });
+
+// Phase 8: Agile
+export const kanbanGetBoard = (projectPath: string, productId: string) =>
+  invoke<import("../types").KanbanBoard>("kanban_get_board", { projectPath, productId });
+export const kanbanMoveCard = (projectPath: string, productId: string, cardId: string, toColumn: string) =>
+  invoke<import("../types").KanbanBoard>("kanban_move_card", { projectPath, productId, cardId, toColumn });
+export const kanbanCreateCard = (projectPath: string, productId: string, card: import("../types").NewCard) =>
+  invoke<import("../types").KanbanCard>("kanban_create_card", { projectPath, productId, card });
+export const kanbanDeleteCard = (projectPath: string, productId: string, cardId: string) =>
+  invoke<import("../types").KanbanBoard>("kanban_delete_card", { projectPath, productId, cardId });
+export const sprintSuggestPlan = (projectPath: string, sprintInfo: import("../types").SprintInfo) =>
+  invoke<import("../types").SprintPlan>("sprint_suggest_plan", { projectPath, sprintInfo });
+export const sprintGenerateRetro = (projectPath: string, sprintInfo: import("../types").SprintInfo) =>
+  invoke<import("../types").Retrospective>("sprint_generate_retro", { projectPath, sprintInfo });
+export const storyMapGet = (projectPath: string, productId: string) =>
+  invoke<import("../types").StoryMap>("story_map_get", { projectPath, productId });
+export const storyMapSave = (projectPath: string, map: import("../types").StoryMap) =>
+  invoke<void>("story_map_save", { projectPath, map });
+export const flowAnalyze = (projectPath: string, productId: string) =>
+  invoke<import("../types").FlowAnalysis>("flow_analyze", { projectPath, productId });
+
+// Phase 9: MCP
+export const mcpGetStatus = (projectPath: string) =>
+  invoke<import("../types").McpHubStatus>("mcp_get_status", { projectPath });
+export const mcpAddServer = (projectPath: string, config: import("../types").McpServerConfig) =>
+  invoke<void>("mcp_add_server", { projectPath, config });
+export const mcpRemoveServer = (projectPath: string, name: string) =>
+  invoke<void>("mcp_remove_server", { projectPath, name });
+export const mcpListServers = (projectPath: string) =>
+  invoke<import("../types").McpServerConfig[]>("mcp_list_servers", { projectPath });
+export const mcpGetPolicy = (projectPath: string) =>
+  invoke<import("../types").PolicyConfig>("mcp_get_policy", { projectPath });
+export const mcpSavePolicy = (projectPath: string, config: import("../types").PolicyConfig) =>
+  invoke<void>("mcp_save_policy", { projectPath, config });
+
+// Phase 10: Collaboration
+export const teamGetDashboard = (projectPath: string) =>
+  invoke<import("../types").TeamDashboard>("team_get_dashboard", { projectPath });
+export const knowledgeList = (projectPath: string) =>
+  invoke<import("../types").KnowledgeEntry[]>("knowledge_list", { projectPath });
+export const knowledgeSearch = (projectPath: string, query: string) =>
+  invoke<import("../types").KnowledgeEntry[]>("knowledge_search", { projectPath, query });
+export const knowledgeAdd = (projectPath: string, title: string, content: string, entryType: string, tags: string[], linkedDocs: string[], author: string) =>
+  invoke<import("../types").KnowledgeEntry>("knowledge_add", { projectPath, title, content, entryType, tags, linkedDocs, author });
+export const knowledgeAddComment = (projectPath: string, entryId: string, author: string, content: string) =>
+  invoke<import("../types").KnowledgeEntry>("knowledge_add_comment", { projectPath, entryId, author, content });

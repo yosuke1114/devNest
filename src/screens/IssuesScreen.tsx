@@ -15,6 +15,11 @@ import { useDocumentStore } from "../stores/documentStore";
 import { useTerminalStore } from "../stores/terminalStore";
 import { useUiStore } from "../stores/uiStore";
 import { IssueDetail } from "../components/issues/IssueDetail";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
+import { Badge } from "../components/ui/badge";
+import { cn } from "../lib/utils";
 import * as ipc from "../lib/ipc";
 import type { Issue, IssueDraft, IssueDraftPatch, IssueContextChunk } from "../types";
 
@@ -76,7 +81,9 @@ export function IssuesScreen() {
 
   if (!currentProject) {
     return (
-      <div style={centerStyle}>プロジェクトを選択してください</div>
+      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+        プロジェクトを選択してください
+      </div>
     );
   }
 
@@ -91,40 +98,29 @@ export function IssuesScreen() {
     navigate("terminal");
   };
 
-  const headerStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: 0,
-    padding: "0 16px",
-    borderBottom: "1px solid #2a2a3a",
-    background: "#1a1a2e",
-    height: 48,
-    flexShrink: 0,
-  };
-
   if (tab === "wizard") {
     return (
       <div className="flex-1 flex flex-col overflow-hidden" data-testid="issues-screen">
-        <header style={headerStyle}>
+        <header className="flex items-center gap-0 px-4 border-b border-border bg-background h-12 shrink-0">
           <TabBtn active={false} onClick={() => setTab("list")}>
             Issue 一覧
           </TabBtn>
           <TabBtn active={true} onClick={() => setTab("wizard")}>
-            <IconSparkles size={14} style={{ marginRight: 4 }} />
+            <IconSparkles size={14} className="mr-1" />
             AI Wizard
           </TabBtn>
-          <div style={{ flex: 1 }} />
-          <button
+          <div className="flex-1" />
+          <Button
+            size="sm"
+            className="h-7 px-2.5 text-xs"
             onClick={async () => {
               const draft = await createDraft(currentProject.id);
               selectDraft(draft);
             }}
-            className="btn-primary"
-            style={{ padding: "4px 10px", fontSize: 12 }}
           >
             <IconPlus size={14} />
             新規
-          </button>
+          </Button>
         </header>
         <WizardPanel
           projectId={currentProject.id}
@@ -148,70 +144,76 @@ export function IssuesScreen() {
   }
 
   return (
-    <div className="flex-1 flex overflow-hidden" data-testid="issues-screen">
-      {/* 左ペイン: リスト + タブヘッダー */}
-      <div className="w-72 shrink-0 flex flex-col border-r border-white/10">
-        <header style={headerStyle}>
-          <TabBtn active={true} onClick={() => setTab("list")}>
-            Issue 一覧
-          </TabBtn>
-          <TabBtn active={false} onClick={() => setTab("wizard")}>
-            <IconSparkles size={14} style={{ marginRight: 4 }} />
-            AI Wizard
-          </TabBtn>
-          <div style={{ flex: 1 }} />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
-            <option value="">すべて</option>
-          </select>
-          <button
-            onClick={() => syncIssues(currentProject.id)}
-            disabled={syncStatus === "loading"}
-            className="btn-icon"
-            title="GitHub から同期"
-          >
-            <IconRefresh
-              size={15}
-              style={{
-                animation:
-                  syncStatus === "loading" ? "spin 1s linear infinite" : undefined,
-              }}
-            />
-          </button>
-        </header>
-        <IssueList
-          issues={issues}
-          loading={listStatus === "loading"}
-          selectedId={currentIssue?.id ?? null}
-          onSelect={handleSelectIssue}
-        />
-      </div>
+    <div className="flex-1 flex flex-col overflow-hidden" data-testid="issues-screen">
+      {/* ヘッダー（全幅） */}
+      <header className="flex items-center gap-0 px-4 border-b border-border bg-background h-12 shrink-0">
+        <TabBtn active={true} onClick={() => setTab("list")}>
+          Issue 一覧
+        </TabBtn>
+        <TabBtn active={false} onClick={() => setTab("wizard")}>
+          <IconSparkles size={14} className="mr-1" />
+          AI Wizard
+        </TabBtn>
+        <div className="flex-1" />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="bg-secondary text-foreground border border-border rounded px-2 py-1 text-[13px] mr-2"
+        >
+          <option value="open">Open</option>
+          <option value="closed">Closed</option>
+          <option value="">すべて</option>
+        </select>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => syncIssues(currentProject.id)}
+          disabled={syncStatus === "loading"}
+          title="GitHub から同期"
+          className="h-8 w-8"
+        >
+          <IconRefresh
+            size={15}
+            style={{
+              animation:
+                syncStatus === "loading" ? "spin 1s linear infinite" : undefined,
+            }}
+          />
+        </Button>
+      </header>
 
-      {/* 右ペイン: Issue 詳細 */}
-      {currentIssue ? (
-        <IssueDetail
-          issue={currentIssue}
-          links={issueLinks}
-          linksStatus="success"
-          documents={documents}
-          onAddLink={(issueId, documentId) => addIssueLink(issueId, documentId)}
-          onRemoveLink={(issueId, documentId) => removeIssueLink(issueId, documentId)}
-          onLaunchTerminal={handleLaunchTerminal}
-          onOpenDocument={(documentId) => {
-            openDocument(documentId);
-            navigate("editor");
-          }}
-        />
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
-          Issue を選択してください
+      {/* コンテンツ（左: リスト / 右: 詳細） */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-72 shrink-0 flex flex-col border-r border-border overflow-y-auto">
+          <IssueList
+            issues={issues}
+            loading={listStatus === "loading"}
+            selectedId={currentIssue?.id ?? null}
+            onSelect={handleSelectIssue}
+          />
         </div>
-      )}
+
+        {/* 右ペイン: Issue 詳細 */}
+        {currentIssue ? (
+          <IssueDetail
+            issue={currentIssue}
+            links={issueLinks}
+            linksStatus="success"
+            documents={documents}
+            onAddLink={(issueId, documentId) => addIssueLink(issueId, documentId)}
+            onRemoveLink={(issueId, documentId) => removeIssueLink(issueId, documentId)}
+            onLaunchTerminal={handleLaunchTerminal}
+            onOpenDocument={(documentId) => {
+              openDocument(documentId);
+              navigate("editor");
+            }}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+            Issue を選択してください
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -230,17 +232,17 @@ function IssueList({
   onSelect: (issue: Issue) => void;
 }) {
   if (loading) {
-    return <div style={centerStyle}>読み込み中…</div>;
+    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8">読み込み中…</div>;
   }
   if (issues.length === 0) {
     return (
-      <div style={centerStyle}>
+      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8">
         Issue がありません。右上の ↻ で GitHub から同期してください。
       </div>
     );
   }
   return (
-    <div style={{ overflow: "auto", flex: 1 }}>
+    <div className="overflow-auto flex-1">
       {issues.map((issue) => (
         <IssueRow
           key={issue.id}
@@ -269,41 +271,26 @@ function IssueRow({
   return (
     <div
       onClick={() => onSelect(issue)}
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        padding: "12px 16px",
-        borderBottom: "1px solid #2a2a3a",
-        gap: 12,
-        cursor: "pointer",
-        background: selected ? "#2a2a42" : "transparent",
-      }}
+      className={cn(
+        "flex items-start px-4 py-3 border-b border-border gap-3 cursor-pointer transition-colors",
+        selected ? "bg-secondary" : "hover:bg-secondary/50"
+      )}
     >
       {issue.status === "closed" ? (
-        <IconCircleCheck size={18} color="#8e44ad" style={{ marginTop: 2, flexShrink: 0 }} />
+        <IconCircleCheck size={18} color="#8e44ad" className="mt-0.5 shrink-0" />
       ) : (
-        <IconCircleDot size={18} color="#2ecc71" style={{ marginTop: 2, flexShrink: 0 }} />
+        <IconCircleDot size={18} color="#2ecc71" className="mt-0.5 shrink-0" />
       )}
-      <div style={{ flex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>{issue.title}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-sm text-foreground">{issue.title}</span>
           {labels.map((l) => (
-            <span
-              key={l}
-              style={{
-                fontSize: 11,
-                padding: "1px 6px",
-                borderRadius: 10,
-                background: "#2a3a4a",
-                color: "#6ab0de",
-                border: "1px solid #3a4a5a",
-              }}
-            >
+            <Badge key={l} variant="outline" className="text-[11px] px-1.5 py-0 text-blue-300 border-blue-800/50 bg-blue-900/20">
               {l}
-            </span>
+            </Badge>
           ))}
         </div>
-        <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+        <div className="text-xs text-muted-foreground mt-1">
           #{issue.github_number} · {issue.author_login}
           {issue.assignee_login && ` → ${issue.assignee_login}`}
         </div>
@@ -329,8 +316,6 @@ interface WizardPanelProps {
   onLaunchTerminal: () => void;
 }
 
-type WizardStep = "edit" | "labels" | "confirm" | "done";
-
 function WizardPanel({
   projectId,
   drafts,
@@ -349,7 +334,10 @@ function WizardPanel({
   const [context, setContext] = useState(currentDraft?.wizard_context ?? "");
   const [assignee, setAssignee] = useState(currentDraft?.assignee_login ?? "");
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
-  const [step, setStep] = useState<WizardStep>("edit");
+  const [editBody, setEditBody] = useState("");
+  const [bodyPreview, setBodyPreview] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
+  const [labelsLoaded, setLabelsLoaded] = useState(false);
   const [filing, setFiling] = useState(false);
   const [filedIssue, setFiledIssue] = useState<Issue | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -360,45 +348,53 @@ function WizardPanel({
     setContext(currentDraft?.wizard_context ?? "");
     setAssignee(currentDraft?.assignee_login ?? "");
     try { setSelectedLabels(JSON.parse(currentDraft?.labels ?? "[]")); } catch { setSelectedLabels([]); }
-    setStep("edit");
+    const body = currentDraft?.draft_body ?? currentDraft?.body ?? "";
+    setEditBody(body);
+    setBodyPreview(true);
+    setShowDetails(false);
+    setLabelsLoaded(false);
     setFiledIssue(null);
     setFileError(null);
+    setContextChunks([]);
   }, [currentDraft?.id]);
+
+  useEffect(() => {
+    if (streamBuffer) setEditBody(streamBuffer);
+  }, [streamBuffer]);
 
   const handleBlur = () => {
     if (!currentDraft) return;
     onUpdateDraft({ id: currentDraft.id, title, wizard_context: context });
   };
 
-  const handleGoToLabels = () => {
-    if (!currentDraft) return;
-    onFetchLabels();
-    setStep("labels");
+  const handleTitleChange = (v: string) => {
+    setTitle(v);
   };
 
-  const handleSaveLabels = async () => {
+  const handleGenerate = async () => {
     if (!currentDraft) return;
-    await onUpdateDraft({
-      id: currentDraft.id,
-      labels: JSON.stringify(selectedLabels),
-      assignee_login: assignee || undefined,
-    });
-    setStep("confirm");
-  };
-
-  const handleFile = async () => {
-    if (!currentDraft) return;
-    setFiling(true);
-    setFileError(null);
+    await onUpdateDraft({ id: currentDraft.id, title, wizard_context: context });
+    onGenerate(currentDraft.id);
+    setBodyPreview(true);
     try {
-      const issue = await onCreateIssue(currentDraft.id);
-      setFiledIssue(issue);
-      setStep("done");
-    } catch (e) {
-      setFileError(String(e));
-    } finally {
-      setFiling(false);
+      const query = `${title} ${context}`.trim();
+      if (query.length >= 2) {
+        const chunks = await ipc.documentSearchSemantic(projectId, query);
+        setContextChunks(chunks.slice(0, 3).map((r) => ({
+          path: r.path,
+          section_heading: r.section_heading ?? null,
+          content: r.content,
+        })));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleToggleDetails = () => {
+    if (!labelsLoaded) {
+      onFetchLabels();
+      setLabelsLoaded(true);
     }
+    setShowDetails((v) => !v);
   };
 
   const toggleLabel = (name: string) => {
@@ -407,260 +403,254 @@ function WizardPanel({
     );
   };
 
+  const handleFile = async () => {
+    if (!currentDraft) return;
+    setFiling(true);
+    setFileError(null);
+    try {
+      await onUpdateDraft({
+        id: currentDraft.id,
+        labels: JSON.stringify(selectedLabels),
+        assignee_login: assignee || undefined,
+      });
+      const issue = await onCreateIssue(currentDraft.id);
+      setFiledIssue(issue);
+    } catch (e) {
+      setFileError(String(e));
+    } finally {
+      setFiling(false);
+    }
+  };
+
+  const hasBody = editBody.trim().length > 0;
+
   return (
-    <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-      {/* ドラフト一覧 */}
-      <aside
-        style={{
-          width: 200,
-          borderRight: "1px solid #2a2a3a",
-          overflow: "auto",
-          background: "#161622",
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            padding: "8px 12px",
-            fontSize: 11,
-            color: "#888",
-            textTransform: "uppercase",
-          }}
-        >
+    <div className="flex flex-1 overflow-hidden">
+      {/* ─── ドラフト一覧 ─── */}
+      <aside className="w-[200px] border-r border-border overflow-auto bg-card shrink-0 flex flex-col">
+        <div className="px-3 py-2 text-[11px] text-muted-foreground uppercase tracking-wider">
           Drafts
         </div>
+        {drafts.length === 0 && (
+          <div className="px-3 py-2 text-xs text-muted-foreground">
+            「新規」でドラフトを作成
+          </div>
+        )}
         {drafts.map((d) => (
           <button
             key={d.id}
             onClick={() => onSelectDraft(d)}
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "8px 12px",
-              background: currentDraft?.id === d.id ? "#2a2a42" : "transparent",
-              border: "none",
-              borderLeft:
-                currentDraft?.id === d.id
-                  ? "2px solid #7c6cf2"
-                  : "2px solid transparent",
-              color: "#ccc",
-              cursor: "pointer",
-              textAlign: "left",
-              fontSize: 13,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
+            className={cn(
+              "block w-full px-3 py-2.5 text-left text-[13px] overflow-hidden text-ellipsis whitespace-nowrap border-l-2 transition-colors",
+              currentDraft?.id === d.id
+                ? "bg-secondary border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-secondary/50"
+            )}
           >
             {d.title || "（無題）"}
           </button>
         ))}
       </aside>
 
-      {/* メインエリア */}
+      {/* ─── メインエリア ─── */}
       {!currentDraft ? (
-        <div style={{ ...centerStyle, flex: 1 }}>
-          ドラフトを選択するか、新規作成してください
+        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+          「新規」ボタンでドラフトを作成してください
         </div>
-      ) : step === "edit" ? (
-        <div style={{ flex: 1, display: "flex", gap: 0, overflow: "hidden" }}>
-          {/* 入力フォーム */}
-          <div style={{ flex: 1, padding: 20, overflow: "auto", borderRight: "1px solid #2a2a3a" }}>
-            <label style={labelStyle}>タイトル</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={handleBlur}
-              placeholder="Issue のタイトル"
-              data-testid="wizard-step1-input"
-              style={inputStyle}
-            />
-
-            <label style={{ ...labelStyle, marginTop: 16 }}>
-              コンテキスト（何を解決したいか）
-            </label>
-            <textarea
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              onBlur={handleBlur}
-              rows={8}
-              placeholder="Issue の背景・目的・詳細を自由に記入してください"
-              data-testid="wizard-context-input"
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
-
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              <button
-                onClick={async () => {
-                  onGenerate(currentDraft.id);
-                  // コンテキスト検索（エラーは無視）
-                  try {
-                    const query = `${title} ${context}`.trim();
-                    if (query.length >= 2) {
-                      const chunks = await ipc.documentSearchSemantic(projectId, query);
-                      setContextChunks(chunks.slice(0, 3).map((r) => ({
-                        path: r.path,
-                        section_heading: r.section_heading ?? null,
-                        content: r.content,
-                      })));
-                    }
-                  } catch { /* ignore */ }
-                }}
-                disabled={generating}
-                className="btn-primary"
-                data-testid="wizard-generate-draft"
-              >
-                <IconSparkles size={16} />
-                {generating ? "生成中…" : "AI で本文を生成"}
-              </button>
-              {streamBuffer && (
-                <button onClick={handleGoToLabels} className="btn-secondary" data-testid="wizard-looks-good">
-                  次へ →
-                </button>
-              )}
-            </div>
+      ) : filedIssue ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <div className="text-[40px]">✅</div>
+          <div className="text-lg font-bold text-foreground">Issue を提出しました！</div>
+          <div className="text-muted-foreground text-sm" data-testid="wizard-filed-number">
+            #{filedIssue.github_number} {filedIssue.title}
           </div>
-
-          {/* プレビュー */}
-          <div style={{ flex: 1, padding: 20, overflow: "auto", background: "#161622" }} data-testid="wizard-draft-content">
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 12, textTransform: "uppercase" }}>
-              Preview
-            </div>
-            <div className="markdown-body" style={{ fontSize: 14, lineHeight: 1.7 }}>
-              {streamBuffer ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamBuffer}</ReactMarkdown>
-              ) : (
-                <span style={{ color: "#555" }}>生成ボタンを押すと AI が本文を生成します</span>
-              )}
-            </div>
-
-            {/* セマンティック検索で見つかった関連設計書チャンク */}
-            {contextChunks.length > 0 && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ fontSize: 11, color: "#888", marginBottom: 8, textTransform: "uppercase" }}>
-                  関連設計書
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {contextChunks.map((chunk, i) => (
-                    <div
-                      key={i}
-                      style={{ background: "#1e2030", border: "1px solid #2a2a3a", borderRadius: 6, padding: "10px 12px" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                        <IconFileText size={13} style={{ color: "#7c6cf2", flexShrink: 0 }} />
-                        <span style={{ fontSize: 11, color: "#7c6cf2", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {chunk.path}
-                          {chunk.section_heading ? ` — ${chunk.section_heading}` : ""}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 12, color: "#aaa", margin: 0, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
-                        {chunk.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : step === "labels" ? (
-        <div style={{ flex: 1, padding: 24, overflow: "auto" }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: "#c0c0d0" }}>
-            ラベル・担当者
-          </h3>
-
-          <label style={labelStyle}>担当者 (GitHub ログイン名)</label>
-          <input
-            value={assignee}
-            onChange={(e) => setAssignee(e.target.value)}
-            placeholder="例: alice"
-            data-testid="wizard-assignee-select"
-            style={{ ...inputStyle, marginBottom: 20 }}
-          />
-
-          <label style={{ ...labelStyle, marginBottom: 10 }}>ラベル</label>
-          {labels.length === 0 ? (
-            <p style={{ color: "#666", fontSize: 13 }}>ラベルが取得できませんでした</p>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-              {labels.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => toggleLabel(l.name)}
-                  style={{
-                    padding: "4px 12px",
-                    borderRadius: 12,
-                    border: `1px solid #${l.color}`,
-                    background: selectedLabels.includes(l.name) ? `#${l.color}33` : "transparent",
-                    color: selectedLabels.includes(l.name) ? `#${l.color}` : "#888",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: selectedLabels.includes(l.name) ? 600 : 400,
-                  }}
-                >
-                  {l.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setStep("edit")} className="btn-secondary">← 戻る</button>
-            <button onClick={handleSaveLabels} className="btn-primary">確認へ →</button>
-          </div>
-        </div>
-      ) : step === "confirm" ? (
-        <div style={{ flex: 1, padding: 24, overflow: "auto" }}>
-          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, color: "#c0c0d0" }}>
-            Issue 確認
-          </h3>
-
-          <div style={{ background: "#1e1e30", border: "1px solid #2a2a3a", borderRadius: 8, padding: 16, marginBottom: 20 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{currentDraft.title}</div>
-            {selectedLabels.length > 0 && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                {selectedLabels.map((l) => (
-                  <span key={l} style={{ fontSize: 11, padding: "1px 8px", borderRadius: 10, background: "#2a3a4a", color: "#6ab0de", border: "1px solid #3a4a5a" }}>{l}</span>
-                ))}
-              </div>
-            )}
-            {assignee && (
-              <div style={{ fontSize: 12, color: "#888" }}>担当: @{assignee}</div>
-            )}
-          </div>
-
-          <div className="markdown-body" style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 24, background: "#161622", padding: 16, borderRadius: 8 }}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {currentDraft.draft_body ?? currentDraft.body}
-            </ReactMarkdown>
-          </div>
-
-          {fileError && (
-            <p style={{ color: "#e74c3c", fontSize: 13, marginBottom: 12 }}>{fileError}</p>
-          )}
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setStep("labels")} className="btn-secondary">← 戻る</button>
-            <button onClick={handleFile} disabled={filing} className="btn-primary" data-testid="wizard-file-issue">
-              <IconSparkles size={14} />
-              {filing ? "提出中…" : "GitHub に Issue を提出"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* step === "done" */
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
-          <div style={{ fontSize: 48 }}>✅</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#e0e0e0" }}>Issue を提出しました！</div>
-          {filedIssue && (
-            <div style={{ color: "#888", fontSize: 14 }} data-testid="wizard-filed-number">
-              #{filedIssue.github_number} {filedIssue.title}
-            </div>
-          )}
-          <button onClick={onLaunchTerminal} className="btn-primary" style={{ marginTop: 8 }} data-testid="wizard-launch-terminal">
+          <Button onClick={onLaunchTerminal} className="mt-2" data-testid="wizard-launch-terminal">
             <IconSparkles size={14} />
             LAUNCH TERMINAL
-          </button>
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          {/* ─── 左: 入力フォーム ─── */}
+          <div className="w-[380px] shrink-0 border-r border-border flex flex-col overflow-hidden">
+            <div className="flex-1 p-4 pb-0 overflow-auto">
+              {/* タイトル */}
+              <label className="block text-xs text-muted-foreground mb-1.5">タイトル</label>
+              <Input
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                onBlur={handleBlur}
+                placeholder="Issue のタイトル"
+                data-testid="wizard-step1-input"
+                className="mb-3.5 text-[15px]"
+              />
+
+              {/* コンテキスト */}
+              <label className="block text-xs text-muted-foreground mb-1.5">コンテキスト（何を解決したいか）</label>
+              <Textarea
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                onBlur={handleBlur}
+                placeholder="Issue の背景・目的・詳細を自由に記入してください"
+                data-testid="wizard-context-input"
+                className="resize-none h-[130px] mb-3.5"
+              />
+
+              {/* 詳細設定（ラベル・担当者）*/}
+              <button
+                onClick={handleToggleDetails}
+                className="w-full flex items-center justify-between bg-transparent border border-border rounded-md px-3 py-1.5 text-muted-foreground cursor-pointer text-xs mb-3.5 hover:bg-secondary transition-colors"
+              >
+                <span>ラベル・担当者</span>
+                <span>{showDetails ? "▲" : "▼"}</span>
+              </button>
+
+              {showDetails && (
+                <div className="border border-border border-t-0 rounded-b-md p-3 mb-3.5">
+                  <label className="block text-xs text-muted-foreground mb-1.5">担当者 (GitHub ログイン名)</label>
+                  <Input
+                    value={assignee}
+                    onChange={(e) => setAssignee(e.target.value)}
+                    placeholder="例: alice"
+                    data-testid="wizard-assignee-select"
+                    className="mb-2.5 text-[13px]"
+                  />
+
+                  <label className="block text-xs text-muted-foreground mb-2">ラベル</label>
+                  {labels.length === 0 ? (
+                    <p className="text-xs text-muted-foreground m-0">ラベルを取得中…</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {labels.map((l) => (
+                        <button
+                          key={l.id}
+                          onClick={() => toggleLabel(l.name)}
+                          className="px-2.5 py-0.5 rounded-full border text-[11px] cursor-pointer transition-colors"
+                          style={{
+                            borderColor: `#${l.color}`,
+                            background: selectedLabels.includes(l.name) ? `#${l.color}33` : "transparent",
+                            color: selectedLabels.includes(l.name) ? `#${l.color}` : "var(--color-muted-foreground)",
+                            fontWeight: selectedLabels.includes(l.name) ? 600 : 400,
+                          }}
+                        >
+                          {l.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 関連設計書 */}
+              {contextChunks.length > 0 && (
+                <div className="mb-3.5">
+                  <div className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wide">
+                    関連設計書
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {contextChunks.map((chunk, i) => (
+                      <div key={i} className="bg-secondary border border-border rounded-md px-2.5 py-2">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <IconFileText size={11} className="text-primary shrink-0" />
+                          <span className="text-[10px] text-primary font-mono overflow-hidden text-ellipsis whitespace-nowrap">
+                            {chunk.path}{chunk.section_heading ? ` — ${chunk.section_heading}` : ""}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground m-0 leading-snug overflow-hidden" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                          {chunk.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* アクションボタン（下部固定）*/}
+            <div className="p-4 border-t border-border flex flex-col gap-2 shrink-0">
+              <Button
+                onClick={handleGenerate}
+                disabled={generating || !title.trim()}
+                data-testid="wizard-generate-draft"
+                className="w-full justify-center"
+              >
+                <IconSparkles size={15} />
+                {generating ? "AI 生成中…" : "AI で本文を生成"}
+              </Button>
+
+              {hasBody && (
+                <>
+                  {fileError && (
+                    <p className="text-destructive text-xs m-0">{fileError}</p>
+                  )}
+                  <Button
+                    onClick={handleFile}
+                    disabled={filing}
+                    variant="outline"
+                    data-testid="wizard-file-issue"
+                    className="w-full justify-center"
+                  >
+                    {filing ? "提出中…" : "GitHub に Issue を提出"}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ─── 右: 本文エディタ / プレビュー ─── */}
+          <div className="flex-1 flex flex-col overflow-hidden bg-card">
+            {/* ツールバー */}
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-background shrink-0">
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wide flex-1">
+                {generating ? "生成中…" : hasBody ? "本文" : "Preview"}
+              </span>
+              {hasBody && (
+                <>
+                  <button
+                    onClick={() => setBodyPreview(true)}
+                    className={cn(
+                      "text-[11px] px-2.5 py-0.5 rounded border cursor-pointer transition-colors",
+                      bodyPreview
+                        ? "bg-secondary border-primary text-primary"
+                        : "bg-transparent border-border text-muted-foreground hover:bg-secondary"
+                    )}
+                  >
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => setBodyPreview(false)}
+                    className={cn(
+                      "text-[11px] px-2.5 py-0.5 rounded border cursor-pointer transition-colors",
+                      !bodyPreview
+                        ? "bg-secondary border-primary text-primary"
+                        : "bg-transparent border-border text-muted-foreground hover:bg-secondary"
+                    )}
+                  >
+                    Edit
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* 本文エリア */}
+            <div className="flex-1 overflow-auto p-5" data-testid="wizard-draft-content">
+              {!hasBody ? (
+                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                  タイトルを入力して「AI で本文を生成」を押してください
+                </div>
+              ) : bodyPreview ? (
+                <div className="markdown-body text-sm leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editBody}</ReactMarkdown>
+                </div>
+              ) : (
+                <textarea
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  className="w-full h-full resize-none bg-background border-none outline-none text-foreground text-[13px] font-mono leading-relaxed"
+                />
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -681,59 +671,14 @@ function TabBtn({
   return (
     <button
       onClick={onClick}
-      style={{
-        background: "transparent",
-        border: "none",
-        borderBottom: active ? "2px solid #7c6cf2" : "2px solid transparent",
-        color: active ? "#e0e0e0" : "#888",
-        padding: "0 16px",
-        height: 48,
-        cursor: "pointer",
-        fontSize: 14,
-        fontWeight: active ? 600 : 400,
-        display: "flex",
-        alignItems: "center",
-      }}
+      className={cn(
+        "flex items-center h-12 px-4 text-sm cursor-pointer whitespace-nowrap transition-colors border-b-2",
+        active
+          ? "border-primary text-foreground font-semibold"
+          : "border-transparent text-muted-foreground hover:text-foreground font-normal"
+      )}
     >
       {children}
     </button>
   );
 }
-
-const centerStyle: React.CSSProperties = {
-  flex: 1,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "#666",
-  fontSize: 14,
-  padding: 32,
-};
-
-const selectStyle: React.CSSProperties = {
-  background: "#2a2a42",
-  color: "#e0e0e0",
-  border: "1px solid #3a3a52",
-  borderRadius: 4,
-  padding: "4px 8px",
-  fontSize: 13,
-  marginRight: 8,
-};
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  color: "#888",
-  marginBottom: 6,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "#1a1a2e",
-  border: "1px solid #3a3a52",
-  borderRadius: 6,
-  padding: "8px 12px",
-  color: "#e0e0e0",
-  fontSize: 14,
-  boxSizing: "border-box",
-};

@@ -1,14 +1,23 @@
+pub mod agile;
+pub mod ai;
+pub mod analytics;
+pub mod collaboration;
 pub mod conflict;
+pub mod doc_mapping;
+pub mod swarm;
+pub mod browser;
 pub mod document;
+pub mod maintenance;
+pub mod file_viewer;
 pub mod github_auth;
 pub mod issue;
+pub mod mcp;
 pub mod notifications;
 pub mod polling;
 pub mod pr;
 pub mod project;
 pub mod search;
 pub mod settings;
-pub mod swarm;
 pub mod terminal;
 pub mod util;
 
@@ -31,6 +40,12 @@ macro_rules! all_commands {
             commands::document::document_set_dirty,
             commands::document::document_push_retry,
             commands::document::document_linked_issues,
+            commands::document::document_create,
+            commands::document::document_rename,
+            // CodeViewer (Phase A + B)
+            commands::file_viewer::file_tree,
+            commands::file_viewer::file_read,
+            commands::file_viewer::file_save,
             // Phase 1: settings / util
             commands::settings::settings_get,
             commands::settings::settings_set,
@@ -58,6 +73,7 @@ macro_rules! all_commands {
             commands::terminal::terminal_session_start,
             commands::terminal::terminal_session_stop,
             commands::terminal::terminal_input_send,
+            commands::terminal::terminal_resize,
             commands::terminal::terminal_session_list,
             // Phase 3: 検索
             commands::search::index_build,
@@ -96,6 +112,75 @@ macro_rules! all_commands {
             commands::polling::polling_start,
             commands::polling::polling_stop,
             commands::polling::polling_status,
+            // Maintenance
+            commands::maintenance::maintenance_scan_dependencies,
+            commands::maintenance::maintenance_scan_tech_debt,
+            commands::maintenance::maintenance_run_coverage,
+            commands::maintenance::maintenance_generate_coverage,
+            commands::maintenance::maintenance_refactor_candidates,
+            // Doc Mapping
+            commands::doc_mapping::rebuild_doc_index,
+            commands::doc_mapping::find_affected_docs_cmd,
+            commands::doc_mapping::check_doc_staleness,
+            commands::doc_mapping::generate_update_context,
+            // Phase 6: AI アシスタント
+            commands::ai::ai_get_context,
+            commands::ai::ai_review_changes,
+            commands::ai::ai_generate_code,
+            // Phase 7: Analytics
+            commands::analytics::get_velocity_metrics,
+            commands::analytics::get_ai_impact,
+            commands::analytics::get_sprint_analysis,
+            commands::analytics::get_sprint_history,
+            // Phase 8: Agile
+            commands::agile::kanban_get_board,
+            commands::agile::kanban_move_card,
+            commands::agile::kanban_create_card,
+            commands::agile::kanban_delete_card,
+            commands::agile::sprint_suggest_plan,
+            commands::agile::sprint_generate_retro,
+            commands::agile::story_map_get,
+            commands::agile::story_map_save,
+            commands::agile::flow_analyze,
+            // Phase 9: MCP
+            commands::mcp::mcp_get_status,
+            commands::mcp::mcp_add_server,
+            commands::mcp::mcp_remove_server,
+            commands::mcp::mcp_list_servers,
+            commands::mcp::mcp_get_policy,
+            commands::mcp::mcp_save_policy,
+            // Phase 10: Collaboration
+            commands::collaboration::team_get_dashboard,
+            commands::collaboration::knowledge_list,
+            commands::collaboration::knowledge_search,
+            commands::collaboration::knowledge_add,
+            commands::collaboration::knowledge_add_comment,
+            // Browser commands
+            commands::browser::open_browser_panel,
+            commands::browser::navigate_browser,
+            commands::browser::close_browser_panel,
+            commands::browser::get_browser_panels,
+            commands::browser::analyze_browser_context,
+            // Phase 11: Swarm
+            commands::swarm::spawn_worker,
+            commands::swarm::kill_worker,
+            commands::swarm::write_to_worker,
+            commands::swarm::resize_worker,
+            commands::swarm::list_workers,
+            commands::swarm::split_task,
+            commands::swarm::orchestrator_start,
+            commands::swarm::orchestrator_get_status,
+            commands::swarm::orchestrator_notify_worker_done,
+            commands::swarm::orchestrator_merge_all,
+            commands::swarm::orchestrator_cancel,
+            commands::swarm::orchestrator_get_result,
+            commands::swarm::orchestrator_get_conflicts,
+            commands::swarm::orchestrator_resolve_conflict,
+            commands::swarm::orchestrator_commit_resolution,
+            commands::swarm::orchestrator_ai_resolve_conflict,
+            commands::swarm::orchestrator_run_wave_gate,
+            commands::swarm::orchestrator_get_waves,
+            commands::swarm::get_system_resources,
             // Swarm Wave モード
             commands::swarm::swarm_wave_start,
             commands::swarm::swarm_wave_worker_update,
@@ -105,7 +190,6 @@ macro_rules! all_commands {
             commands::swarm::swarm_wave_list,
             commands::swarm::swarm_wave_cancel,
             // ハイブリッド: Orchestrator Wave 直接アクセス
-            commands::swarm::orchestrator_get_waves,
             commands::swarm::orchestrator_wave_status,
             commands::swarm::orchestrator_advance_wave,
         ]

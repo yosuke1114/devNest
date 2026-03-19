@@ -6,7 +6,7 @@ use super::settings::SwarmSettings;
 use super::subtask::SubTask;
 use super::wave::{compute_waves, GateOverall, Wave, WaveGateResult, WaveStatus};
 use super::worker::{
-    ExecutionState, RunStatus, SpawnRequest, WorkerAssignment, WorkerConfig, WorkerStatus,
+    ExecutionState, OrchestratorTaskConfig, RunStatus, SpawnRequest, WorkerAssignment, WorkerStatus,
 };
 
 pub type SharedOrchestrator = Arc<Mutex<Orchestrator>>;
@@ -30,20 +30,22 @@ pub struct OrchestratorRun {
     pub project_path: String,
     pub base_branch: String,
     pub total: u32,
+    /// フロントエンドの doneCount と対応（camelCase で "doneCount" に変換）
+    #[serde(rename = "doneCount")]
     pub completed: u32,
     pub failed: u32,
     pub status: RunStatus,
 
-    /// Wave 構造（Wave モード時のみ Some）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Wave 構造（Wave モード時のみ Some、None は [] としてシリアライズ）
+    #[serde(default)]
     pub waves: Option<Vec<Wave>>,
 
     /// 現在実行中の Wave 番号（1-indexed、Wave モード時のみ Some）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub current_wave: Option<u32>,
 
     /// 各 Wave の Gate 結果（Wave モード時のみ Some）
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub gate_results: Option<Vec<WaveGateResult>>,
 }
 
@@ -51,6 +53,13 @@ impl Orchestrator {
     pub fn new() -> Self {
         Self { current_run: None }
     }
+}
+
+pub fn create_orchestrator() -> SharedOrchestrator {
+    std::sync::Arc::new(std::sync::Mutex::new(Orchestrator::new()))
+}
+
+impl Orchestrator {
 
     /// タスク群を受け取り、依存解決済みのタスクを Ready にして実行を開始する。
     /// 戻り値の SpawnRequest を使ってワーカーを起動する。
@@ -546,11 +555,15 @@ fn collect_spawn_requests(run: &mut OrchestratorRun) -> Vec<SpawnRequest> {
         };
 
         spawns.push(SpawnRequest {
-            worker_config: WorkerConfig {
+            worker_config: OrchestratorTaskConfig {
                 task: assign.task.clone(),
                 branch_name: assign.branch_name.clone(),
                 project_path: run.project_path.clone(),
                 run_id: run.run_id.clone(),
+                default_shell: run.settings.default_shell.clone(),
+                claude_skip_permissions: run.settings.claude_skip_permissions,
+                claude_no_stream: run.settings.claude_no_stream,
+                claude_interactive: run.settings.claude_interactive,
             },
             task_id: assign.task.id,
             is_retry,

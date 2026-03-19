@@ -36,7 +36,7 @@ export function PRDetailTabs({ activeTab, onChange, codeFileCount = 0 }: PRDetai
             title={!isEnabled ? "Phase 4 から利用可能" : undefined}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs border-b-2 transition-colors ${
               isActive
-                ? "border-blue-500 text-white"
+                ? "border-purple-500 text-white"
                 : isEnabled
                 ? "border-transparent text-gray-400 hover:text-gray-200"
                 : "border-transparent text-gray-600 cursor-not-allowed opacity-50"

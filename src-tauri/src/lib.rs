@@ -1,10 +1,23 @@
+pub mod agile;
+pub mod ai;
+pub mod analytics;
+pub mod collaboration;
 pub mod commands;
+pub mod core;
 pub mod db;
+pub mod doc_mapping;
 pub mod error;
+pub mod maintenance;
+pub mod mcp;
 pub mod models;
+pub mod policy;
+pub mod review;
 pub mod services;
 pub mod state;
 pub mod swarm;
+pub mod notification;
+pub mod browser;
+pub mod api;
 
 use tauri::Manager;
 
@@ -31,6 +44,15 @@ pub fn run() {
 
                 let state = state::AppState::new(pool.clone());
                 app_handle.manage(state);
+                app_handle.manage(swarm::create_manager());
+                app_handle.manage(swarm::create_orchestrator());
+                app_handle.manage(swarm::create_hook_registry());
+                app_handle.manage(browser::create_browser());
+                // Socket API サーバー起動
+                let api_handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    api::socket_server::DevNestApiServer::start(api_handle).await.ok();
+                });
 
                 let pool_cleanup = pool.clone();
                 tauri::async_runtime::spawn(async move {

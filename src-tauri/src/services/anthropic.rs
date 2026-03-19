@@ -106,4 +106,53 @@ impl AnthropicClient {
 
         Ok(full_text)
     }
+
+    /// Anthropic Messages API を非ストリーミングで呼び出し、完全なテキストを返す。
+    /// レビュー・コード生成など、一度に全文が必要な場合に使用する。
+    pub async fn complete(&self, system_prompt: &str, user_message: &str) -> Result<String> {
+        let body = serde_json::json!({
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 8192,
+            "system": system_prompt,
+            "messages": [
+                { "role": "user", "content": user_message }
+            ]
+        });
+
+        let resp = self
+            .http
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::Anthropic(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_else(|_| "unknown".to_string());
+            return Err(AppError::Anthropic(format!(
+                "Anthropic API returned {}: {}",
+                status, text
+            )));
+        }
+
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| AppError::Anthropic(format!("Parse error: {}", e)))?;
+
+        let text = json
+            .get("content")
+            .and_then(|c| c.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|item| item.get("text"))
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        Ok(text)
+    }
 }

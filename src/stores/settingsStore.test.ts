@@ -188,4 +188,110 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().clientSecret).toBe("");
     expect(useSettingsStore.getState().anthropicApiKey).toBe("");
   });
+
+  it("listenAuthDone() 失敗ペイロードで error がセットされ onError が呼ばれる", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    const onError = vi.fn();
+    await useSettingsStore.getState().listenAuthDone(1, onError);
+
+    capturedCb?.({ payload: { success: false, error: "token expired" } });
+
+    expect(useSettingsStore.getState().error?.message).toBe("token expired");
+    expect(onError).toHaveBeenCalledWith("token expired");
+  });
+
+  it("listenAuthDone() error フィールドなしの失敗でデフォルトメッセージ", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    await useSettingsStore.getState().listenAuthDone(1);
+    capturedCb?.({ payload: { success: false } });
+
+    expect(useSettingsStore.getState().error?.message).toBe("認証に失敗しました");
+  });
+
+  it("reset() で全状態が初期値に戻る", () => {
+    useSettingsStore.setState({
+      theme: "dark",
+      authStatus: { connected: true, user_login: "alice", avatar_url: null },
+      authStatus2: "success",
+      clientId: "cid",
+      clientSecret: "cs",
+      anthropicApiKey: "key",
+      error: { code: "GitHub", message: "err" } as never,
+    });
+
+    useSettingsStore.getState().reset();
+    const s = useSettingsStore.getState();
+    expect(s.theme).toBe("system");
+    expect(s.authStatus).toBeNull();
+    expect(s.authStatus2).toBe("idle");
+    expect(s.clientId).toBe("");
+    expect(s.clientSecret).toBe("");
+    expect(s.anthropicApiKey).toBe("");
+    expect(s.error).toBeNull();
+  });
+
+  it("setTheme('light') で dark クラスが除去される", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.settingsSet.mockResolvedValueOnce(undefined);
+    document.documentElement.classList.add("dark");
+
+    await useSettingsStore.getState().setTheme("light");
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("setTheme('system') で matchMedia に基づいてクラスが設定される", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.settingsSet.mockResolvedValueOnce(undefined);
+    // JSDOM には matchMedia がないため stub する
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockReturnValue({ matches: false }),
+    });
+    await useSettingsStore.getState().setTheme("system");
+    expect(useSettingsStore.getState().theme).toBe("system");
+  });
+
+  it("startAuth() 失敗時に error がセットされリスローされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.githubAuthStart.mockRejectedValueOnce({ code: "GitHub", message: "timeout" });
+    await expect(useSettingsStore.getState().startAuth(1)).rejects.toBeTruthy();
+    expect(useSettingsStore.getState().error).toBeTruthy();
+  });
+
+  it("revokeAuth() 失敗時に error がセットされリスローされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.githubAuthRevoke.mockRejectedValueOnce({ code: "GitHub", message: "forbidden" });
+    await expect(useSettingsStore.getState().revokeAuth(1)).rejects.toBeTruthy();
+    expect(useSettingsStore.getState().error).toBeTruthy();
+  });
+
+  it("listenAuthDone() success ペイロードで fetchAuthStatus が呼ばれる", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.githubAuthStatus.mockResolvedValueOnce({ connected: true, user_login: "alice", avatar_url: null });
+
+    await useSettingsStore.getState().listenAuthDone(1);
+    capturedCb?.({ payload: { success: true } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(ipcM.githubAuthStatus).toHaveBeenCalledWith(1);
+  });
 });

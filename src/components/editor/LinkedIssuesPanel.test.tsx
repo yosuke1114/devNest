@@ -94,4 +94,16 @@ describe("LinkedIssuesPanel", () => {
     render(<LinkedIssuesPanel issues={[]} loading={false} />);
     expect(screen.getByText(/linked issues/i)).toBeInTheDocument();
   });
+
+  it("ヘッダーボタンクリックで open が toggle する (line 22)", () => {
+    const issue = makeIssue();
+    render(<LinkedIssuesPanel issues={[issue]} loading={false} />);
+    // issues > 0 なので initially open → クリックで閉じる
+    expect(screen.getByText("Fix the bug")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.queryByText("Fix the bug")).not.toBeInTheDocument();
+    // もう一度クリックで開く
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("Fix the bug")).toBeInTheDocument();
+  });
 });

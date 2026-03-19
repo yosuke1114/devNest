@@ -3,6 +3,9 @@ import { usePrStore } from "./prStore";
 import * as ipc from "../lib/ipc";
 import type { PrDetail, PrFile, PullRequest } from "../types";
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+}));
 vi.mock("../lib/ipc");
 // cross-store 依存をスタブ化
 vi.mock("./uiStore", () => ({
@@ -413,5 +416,178 @@ describe("prStore", () => {
     await usePrStore.getState().requestChanges(1, 5, "fix it");
 
     expect(usePrStore.getState().requestChangesStatus).toBe("error");
+  });
+
+  // ─── loadDocDiff ─────────────────────────────────────────────────────────
+
+  it("loadDocDiff() が prDocDiffGet を呼んで docDiffs をセットする", async () => {
+    const mockIpc = (await import("../lib/ipc")).default as ReturnType<typeof vi.mocked>;
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prDocDiffGet.mockResolvedValueOnce("diff --git a/docs/x.md b/docs/x.md\n--- a/docs/x.md\n+++ b/docs/x.md\n@@ -1 +1 @@\n-old\n+new");
+
+    await usePrStore.getState().loadDocDiff(1, 5);
+
+    expect(ipcM.prDocDiffGet).toHaveBeenCalledWith(1, 5);
+    expect(usePrStore.getState().docDiffStatus).toBe("success");
+  });
+
+  it("loadDocDiff() 失敗時に docDiffStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prDocDiffGet.mockRejectedValueOnce(new Error("not found"));
+    await usePrStore.getState().loadDocDiff(1, 5);
+    expect(usePrStore.getState().docDiffStatus).toBe("error");
+  });
+
+  // ─── mergePr (conflict 分岐) ──────────────────────────────────────────────
+
+  it("mergePr() マージ後 gitPull が conflict を返すと navigate('conflict') が呼ばれる", async () => {
+    const { useUiStore } = await import("./uiStore");
+    const navigateMock = vi.fn();
+    vi.mocked(useUiStore.getState).mockReturnValue({ navigate: navigateMock } as ReturnType<typeof useUiStore.getState>);
+
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    const pr = { id: 5, github_number: 44, title: "test", state: "open" as const, head_branch: "feat/x", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 9, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    usePrStore.setState({ prs: [pr] });
+    ipcM.prMerge.mockResolvedValueOnce(undefined);
+    ipcM.gitPull.mockResolvedValueOnce("conflict" as never);
+
+    await usePrStore.getState().mergePr(1, 5, "merge");
+
+    expect(navigateMock).toHaveBeenCalledWith("conflict");
+  });
+
+  // ─── listenSyncDone ───────────────────────────────────────────────────────
+
+  it("listenSyncDone() が pr_sync_done をリッスンし cleanup 関数を返す", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const cleanup = usePrStore.getState().listenSyncDone();
+    expect(listen).toHaveBeenCalledWith("pr_sync_done", expect.any(Function));
+    expect(typeof cleanup).toBe("function");
+  });
+
+  it("listenSyncDone() イベント発火で fetchPrs が呼ばれる", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prList.mockResolvedValueOnce([]);
+
+    usePrStore.getState().listenSyncDone();
+    await new Promise((r) => setTimeout(r, 0));
+    capturedCb?.({ payload: { project_id: 1, synced_count: 2 } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(ipcM.prList).toHaveBeenCalled();
+  });
+
+  // ─── openPrByGithubNumber ─────────────────────────────────────────────────
+
+  it("openPrByGithubNumber() が prs から一致する PR を見つけて selectPr を呼ぶ", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    const pr = { id: 7, github_number: 99, title: "test", state: "open" as const, head_branch: "feat/x", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 9, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    usePrStore.setState({ prs: [pr] });
+    ipcM.prGetDetail.mockResolvedValueOnce({ pr, reviews: [], comments: [] });
+
+    await usePrStore.getState().openPrByGithubNumber(1, 99);
+
+    expect(usePrStore.getState().selectedPrId).toBe(7);
+  });
+
+  it("openPrByGithubNumber() prs が空のとき fetchPrs してから探す", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    const pr = { id: 8, github_number: 55, title: "test", state: "open" as const, head_branch: "feat/y", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 10, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    usePrStore.setState({ prs: [] });
+    ipcM.prList.mockResolvedValueOnce([pr]);
+    ipcM.prGetDetail.mockResolvedValueOnce({ pr, reviews: [], comments: [] });
+
+    await usePrStore.getState().openPrByGithubNumber(1, 55);
+
+    expect(ipcM.prList).toHaveBeenCalled();
+    expect(usePrStore.getState().selectedPrId).toBe(8);
+  });
+
+  it("openPrByGithubNumber() 一致する PR がない場合は何もしない", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    usePrStore.setState({ prs: [] });
+    ipcM.prList.mockResolvedValueOnce([]);
+
+    await usePrStore.getState().openPrByGithubNumber(1, 999);
+
+    expect(usePrStore.getState().selectedPrId).toBeNull();
+  });
+
+  // ─── commentsForLine ──────────────────────────────────────────────────────
+
+  it("commentsForLine() が path と line で comments をフィルタする", async () => {
+    const pr = { id: 1, github_number: 1, title: "t", state: "open" as const, head_branch: "b", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 1, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    const comment = { id: 1, pr_id: 1, author_login: "u", body: "LGTM", path: "src/foo.ts", line: 10, created_at: "" };
+    const other = { id: 2, pr_id: 1, author_login: "u", body: "other", path: "src/bar.ts", line: 20, created_at: "" };
+    usePrStore.setState({ detail: { pr, reviews: [], comments: [comment, other] } });
+
+    const result = usePrStore.getState().commentsForLine("src/foo.ts", 10);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].body).toBe("LGTM");
+  });
+
+  it("commentsForLine() detail が null のとき空配列を返す", () => {
+    usePrStore.setState({ detail: null });
+    expect(usePrStore.getState().commentsForLine("src/foo.ts", 1)).toEqual([]);
+  });
+
+  // ─── reset ────────────────────────────────────────────────────────────────
+
+  it("reset() で全状態が初期値に戻る", () => {
+    usePrStore.setState({
+      prs: [{ id: 1 } as never],
+      selectedPrId: 1,
+      detail: { pr: { id: 1 } as never, reviews: [], comments: [] },
+      fetchStatus: "success",
+      mergeStatus: "success",
+      error: "some error",
+    });
+
+    usePrStore.getState().reset();
+    const s = usePrStore.getState();
+    expect(s.prs).toEqual([]);
+    expect(s.selectedPrId).toBeNull();
+    expect(s.detail).toBeNull();
+    expect(s.fetchStatus).toBe("idle");
+    expect(s.mergeStatus).toBe("idle");
+    expect(s.error).toBeNull();
+  });
+
+  it("selectPr() detail 取得失敗で detailStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prGetDetail.mockRejectedValueOnce(new Error("not found"));
+    await usePrStore.getState().selectPr(99, 1);
+    expect(usePrStore.getState().detailStatus).toBe("error");
+  });
+
+  it("fetchFiles() 失敗で filesStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prGetFiles.mockRejectedValueOnce(new Error("forbidden"));
+    await usePrStore.getState().fetchFiles(1, 5);
+    expect(usePrStore.getState().filesStatus).toBe("error");
+  });
+
+  it("fetchDiff() 失敗で diffStatus=error がセットされる", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prGetDiff.mockRejectedValueOnce(new Error("too large"));
+    await usePrStore.getState().fetchDiff(1, 5);
+    expect(usePrStore.getState().diffStatus).toBe("error");
+  });
+
+  it("mergePr() gitPull が失敗しても mergeStatus は success のまま", async () => {
+    const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
+    ipcM.prMerge.mockResolvedValueOnce(undefined);
+    ipcM.gitPull.mockRejectedValueOnce(new Error("pull failed"));
+
+    await usePrStore.getState().mergePr(1, 99, "merge");
+
+    expect(usePrStore.getState().mergeStatus).toBe("success");
   });
 });

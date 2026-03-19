@@ -2,16 +2,80 @@
 @import "tailwindcss/theme";
 @plugin "@tailwindcss/typography";
 
+@layer base {
+  :root {
+    --background: 240 29% 14%;
+    --foreground: 0 0% 88%;
+    --card: 240 24% 11%;
+    --card-foreground: 0 0% 88%;
+    --popover: 240 33% 8%;
+    --popover-foreground: 0 0% 88%;
+    --primary: 247 82% 68%;
+    --primary-foreground: 240 33% 8%;
+    --secondary: 240 16% 18%;
+    --secondary-foreground: 0 0% 75%;
+    --muted: 240 16% 13%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 247 82% 68%;
+    --accent-foreground: 240 33% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 16% 20%;
+    --input: 240 16% 18%;
+    --ring: 247 82% 68%;
+    --radius: 0.375rem;
+  }
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", "JetBrains Mono", "Fira Code", monospace;
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+/* button のブラウザデフォルトスタイルをリセット */
+button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  padding: 0;
+  line-height: inherit;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  font-family: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
   height: 100vh;
   overflow: hidden;
 }
@@ -26,6 +90,19 @@ body {
 .cm-editor {
   height: 100%;
   font-size: 14px;
+}
+
+/* xterm.js レスポンシブ修正 */
+/* FitAddon が正しく機能するようコンテナ全体を使用させる */
+.xterm {
+  height: 100%;
+  padding: 4px;
+}
+.xterm-viewport {
+  overflow-y: scroll !important;
+}
+.xterm-screen {
+  width: 100% !important;
 }
 
 /* Markdown プレビュー */
@@ -56,7 +133,7 @@ body {
   word-break: break-all;
 }
 .markdown-body pre {
-  background: #1e1e30;
+  background: hsl(var(--card));
   padding: 12px;
   border-radius: 6px;
   /* コードブロックは横スクロール（整形を維持） */
@@ -78,7 +155,7 @@ body {
   padding-left: 24px;
 }
 .markdown-body a {
-  color: #7c6cf2;
+  color: hsl(var(--primary));
   word-break: break-all;
 }
 
@@ -88,7 +165,7 @@ body {
 }
 
 button:focus-visible {
-  outline: 2px solid #7c6cf2;
+  outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
 
@@ -96,7 +173,7 @@ select, input, textarea {
   outline: none;
 }
 select:focus, input:focus, textarea:focus {
-  border-color: #7c6cf2 !important;
+  border-color: hsl(var(--ring)) !important;
 }
 
 /* ─── ボタン共通スタイル ──────────────────────────────────────────────────────── */
@@ -107,10 +184,10 @@ select:focus, input:focus, textarea:focus {
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: linear-gradient(135deg, #7c6cf2 0%, #6355d4 100%);
-  color: #fff;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -138,10 +215,10 @@ select:focus, input:focus, textarea:focus {
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  background: rgba(255,255,255,0.05);
-  color: #c0c0d0;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 6px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -149,12 +226,12 @@ select:focus, input:focus, textarea:focus {
   white-space: nowrap;
 }
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.22);
-  color: #e0e0e0;
+  background: hsl(var(--secondary) / 0.8);
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
 }
 .btn-secondary:active:not(:disabled) {
-  background: rgba(255,255,255,0.07);
+  background: hsl(var(--secondary) / 0.6);
 }
 .btn-secondary:disabled {
   opacity: 0.4;
@@ -170,17 +247,17 @@ select:focus, input:focus, textarea:focus {
   height: 30px;
   padding: 0;
   background: transparent;
-  color: #888;
+  color: hsl(var(--muted-foreground));
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   flex-shrink: 0;
 }
 .btn-icon:hover:not(:disabled) {
-  background: rgba(255,255,255,0.08);
-  color: #c0c0d0;
-  border-color: rgba(255,255,255,0.1);
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border-color: hsl(var(--border));
 }
 .btn-icon:disabled {
   opacity: 0.35;
@@ -194,15 +271,31 @@ select:focus, input:focus, textarea:focus {
   gap: 6px;
   padding: 5px 12px;
   background: transparent;
-  color: #e74c3c;
-  border: 1px solid rgba(231,76,60,0.4);
-  border-radius: 6px;
+  color: hsl(var(--destructive));
+  border: 1px solid hsl(var(--destructive) / 0.4);
+  border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 .btn-danger:hover:not(:disabled) {
-  background: rgba(231,76,60,0.12);
-  border-color: rgba(231,76,60,0.7);
+  background: hsl(var(--destructive) / 0.12);
+  border-color: hsl(var(--destructive) / 0.7);
+}
+
+/* ── 通知リング パルスアニメーション ── */
+@keyframes ring-pulse-info {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 3px rgba(56, 139, 253, 0.4); }
+}
+
+@keyframes ring-pulse-warning {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4); }
+}
+
+@keyframes ring-pulse-critical {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 3px rgba(226, 75, 74, 0.5); }
 }

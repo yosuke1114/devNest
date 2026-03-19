@@ -14,6 +14,12 @@ test.describe("S-07 コンフリクト解消", () => {
   });
 
   async function navigateToConflict(page: Parameters<typeof test.beforeEach>[0]["page"]) {
+    // GitHub アコーディオンを展開してからコンフリクトをクリック
+    const githubBtn = page.locator("aside").getByRole("button", { name: "GitHub" }).first();
+    if (await githubBtn.isVisible({ timeout: 3000 })) {
+      await githubBtn.click();
+      await page.waitForTimeout(150);
+    }
     const conflictNav = page.locator("aside").getByText("コンフリクト").first();
     if (await conflictNav.isVisible()) {
       await conflictNav.click();

@@ -18,6 +18,7 @@ interface NotificationsState {
   navigateTo: (projectId: number, notificationId: number) => Promise<void>;
   requestPermission: () => Promise<void>;
   listenEvents: () => () => void;
+  listenRingEvents: () => () => void;
   onNotificationNew: (payload: { notificationId: number; title: string; eventType?: string }) => void;
   reset: () => void;
 }
@@ -92,7 +93,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     const stub: Notification = {
       id: payload.notificationId,
       project_id: 0,
-      event_type: (payload.eventType as Notification["event_type"]) ?? "ai_edit",
+      event_type: (payload.eventType ?? "ci_pass") as Notification["event_type"],
       title: payload.title,
       body: null,
       dest_screen: null,
@@ -124,6 +125,15 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     }).then((fn) => unlisteners.push(fn));
 
     return () => unlisteners.forEach((f) => f());
+  },
+
+  listenRingEvents: () => {
+    const unlistenPromise = listen<{ urgency: string }>("ring-event", () => {
+      set((state) => ({
+        unreadCount: (state.unreadCount ?? 0) + 1,
+      }));
+    });
+    return () => { unlistenPromise.then((fn) => fn()); };
   },
 
   reset: () =>

@@ -2,6 +2,13 @@ import { IconRefresh } from "@tabler/icons-react";
 
 export type FilterValue = "open" | "closed" | "merged" | "all";
 
+const LABELS: Record<FilterValue, string> = {
+  open: "Open",
+  closed: "Closed",
+  merged: "Merged",
+  all: "All",
+};
+
 interface PRFilterBarProps {
   filter: FilterValue;
   onChange: (f: FilterValue) => void;
@@ -12,28 +19,65 @@ interface PRFilterBarProps {
 export function PRFilterBar({ filter, onChange, onSync, syncing }: PRFilterBarProps) {
   const filters: FilterValue[] = ["open", "closed", "merged", "all"];
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10" data-testid="pr-filter-bar">
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 2,
+      padding: "8px 8px",
+      borderBottom: "1px solid #2a2a3a",
+      background: "#1a1a2e",
+      flexShrink: 0,
+    }}>
       {filters.map((f) => (
         <button
           key={f}
           onClick={() => onChange(f)}
           aria-pressed={filter === f}
-          className={`px-3 py-1 rounded text-xs capitalize transition-colors ${
-            filter === f
-              ? "bg-blue-600 text-white"
-              : "text-gray-400 hover:bg-white/10"
-          }`}
+          style={{
+            padding: "4px 8px",
+            borderRadius: 6,
+            fontSize: 12,
+            fontWeight: filter === f ? 600 : 400,
+            border: "none",
+            outline: "none",
+            cursor: "pointer",
+            background: filter === f ? "#7c6cf2" : "transparent",
+            color: filter === f ? "#fff" : "#888",
+            transition: "background 0.15s, color 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            if (filter !== f) e.currentTarget.style.background = "#2a2a3a";
+          }}
+          onMouseLeave={(e) => {
+            if (filter !== f) e.currentTarget.style.background = "transparent";
+          }}
         >
-          {f}
+          {LABELS[f]}
         </button>
       ))}
-      <div className="ml-auto">
+      <div style={{ marginLeft: "auto" }}>
         <button
           onClick={onSync}
           disabled={syncing}
-          className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-white/10 hover:bg-white/20 disabled:opacity-50 transition-colors"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "4px 8px",
+            borderRadius: 6,
+            fontSize: 12,
+            border: "1px solid #3a3a52",
+            outline: "none",
+            cursor: syncing ? "default" : "pointer",
+            background: "transparent",
+            color: "#888",
+            opacity: syncing ? 0.5 : 1,
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => { if (!syncing) e.currentTarget.style.background = "#2a2a3a"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
         >
-          <IconRefresh size={12} className={syncing ? "animate-spin" : ""} />
+          <IconRefresh size={12} style={{ animation: syncing ? "spin 1s linear infinite" : "none" }} />
           Sync
         </button>
       </div>

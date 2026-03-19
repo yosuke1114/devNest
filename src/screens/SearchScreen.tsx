@@ -49,7 +49,7 @@ export function SearchScreen() {
 
   if (!currentProject) {
     return (
-      <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
         プロジェクトを選択してください
       </div>
     );
@@ -72,7 +72,7 @@ export function SearchScreen() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* 結果リスト */}
-        <div className="w-72 shrink-0 flex flex-col border-r border-white/10 overflow-y-auto">
+        <div className="w-72 shrink-0 flex flex-col border-r border-border overflow-y-auto">
           <SearchResultList
             results={results}
             status={searchStatus}

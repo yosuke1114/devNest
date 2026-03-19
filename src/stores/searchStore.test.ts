@@ -178,4 +178,30 @@ describe("searchStore", () => {
     expect(openDocFn).toHaveBeenCalledWith(42);
     expect(navigateFn).toHaveBeenCalledWith("editor");
   });
+
+  it("searchType='both' のとき keyword と semantic を並列で呼んで重複排除する", async () => {
+    const r1 = makeSearchResult({ chunk_id: 1, score: 0.9 });
+    const r2 = makeSearchResult({ chunk_id: 2, score: 0.8 });
+    const r3 = makeSearchResult({ chunk_id: 1, score: 0.85 }); // chunk_id=1 の重複
+    mockIpc.documentSearchKeyword.mockResolvedValueOnce([r1, r2]);
+    mockIpc.documentSearchSemantic.mockResolvedValueOnce([r3, makeSearchResult({ chunk_id: 3, score: 0.7 })]);
+
+    useSearchStore.setState({ query: "auth impl", searchType: "both" });
+    await useSearchStore.getState().search(1);
+
+    const results = useSearchStore.getState().results;
+    expect(mockIpc.documentSearchKeyword).toHaveBeenCalled();
+    expect(mockIpc.documentSearchSemantic).toHaveBeenCalled();
+    // chunk_id=1 の重複が排除されて 3 件
+    expect(results).toHaveLength(3);
+    // スコア降順で並んでいる
+    expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);
+  });
+
+  it("loadHistory() 失敗時に historyStatus が idle に戻る", async () => {
+    mockIpc.searchHistoryList.mockRejectedValueOnce(new Error("fail"));
+    useSearchStore.setState({ historyStatus: "loading" });
+    await useSearchStore.getState().loadHistory(1);
+    expect(useSearchStore.getState().historyStatus).toBe("idle");
+  });
 });

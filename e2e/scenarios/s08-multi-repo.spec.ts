@@ -17,8 +17,10 @@ test.describe("S-08 複数リポジトリの切り替え", () => {
   });
 
   test("サイドバーにプロジェクト名が表示される", async ({ page }) => {
-    // select の現在の選択肢として DevNest が表示される
-    await expect(page.locator("aside").getByText("DevNest").first()).toBeVisible({ timeout: 5000 });
+    // aside select に DevNest が選択されていることを確認
+    const selector = page.locator("aside select").first();
+    await expect(selector).toBeVisible({ timeout: 5000 });
+    await expect(selector).toHaveValue("1"); // MOCK_PROJECT.id = 1
   });
 
   test("プロジェクト選択 select に複数プロジェクトが存在する", async ({ page }) => {

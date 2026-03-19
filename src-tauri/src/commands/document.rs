@@ -388,6 +388,95 @@ pub async fn document_linked_issues(
     Ok(rows)
 }
 
+/// 新規 Markdown ファイルを作成して DB に登録する。
+/// `rel_path` は `docs/foo.md` 形式のプロジェクトルートからの相対パス。
+#[tauri::command]
+pub async fn document_create(
+    project_id: i64,
+    rel_path: String,
+    state: State<'_, AppState>,
+) -> std::result::Result<Document, AppError> {
+    let project = db::project::find(&state.db, project_id).await?;
+
+    // パスのバリデーション
+    if !rel_path.ends_with(".md") {
+        return Err(AppError::Validation("ファイル名は .md で終わる必要があります".to_string()));
+    }
+    if rel_path.contains("..") {
+        return Err(AppError::Validation("不正なパスです".to_string()));
+    }
+
+    let local_path = project.local_path.clone();
+    let rel = rel_path.clone();
+
+    // ファイル作成（既存の場合はエラー）
+    tokio::task::spawn_blocking(move || {
+        let abs = std::path::Path::new(&local_path).join(&rel);
+        if abs.exists() {
+            return Err(AppError::Validation(format!("ファイルが既に存在します: {}", rel)));
+        }
+        if let Some(parent) = abs.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| AppError::Io(format!("ディレクトリ作成失敗: {}", e)))?;
+        }
+        std::fs::write(&abs, format!("# {}\n", abs.file_stem().unwrap_or_default().to_string_lossy()))
+            .map_err(|e| AppError::Io(format!("ファイル作成失敗: {}", e)))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    // DB に登録
+    db::document::insert_one(&state.db, project_id, &rel_path).await
+}
+
+/// ドキュメントをリネーム（ファイル移動 + DB 更新）する。
+#[tauri::command]
+pub async fn document_rename(
+    project_id: i64,
+    document_id: i64,
+    new_rel_path: String,
+    state: State<'_, AppState>,
+) -> std::result::Result<Document, AppError> {
+    let doc = db::document::find(&state.db, document_id).await?;
+    if doc.project_id != project_id {
+        return Err(AppError::NotFound(format!("document id={}", document_id)));
+    }
+    let project = db::project::find(&state.db, project_id).await?;
+
+    if !new_rel_path.ends_with(".md") {
+        return Err(AppError::Validation("ファイル名は .md で終わる必要があります".to_string()));
+    }
+    if new_rel_path.contains("..") {
+        return Err(AppError::Validation("不正なパスです".to_string()));
+    }
+
+    let local_path = project.local_path.clone();
+    let old_path = doc.path.clone();
+    let new_path = new_rel_path.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let abs_old = std::path::Path::new(&local_path).join(&old_path);
+        let abs_new = std::path::Path::new(&local_path).join(&new_path);
+        if !abs_old.exists() {
+            return Err(AppError::Io(format!("元ファイルが存在しません: {}", old_path)));
+        }
+        if abs_new.exists() {
+            return Err(AppError::Validation(format!("移動先に同名ファイルが存在します: {}", new_path)));
+        }
+        if let Some(parent) = abs_new.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| AppError::Io(format!("ディレクトリ作成失敗: {}", e)))?;
+        }
+        std::fs::rename(&abs_old, &abs_new)
+            .map_err(|e| AppError::Io(format!("リネーム失敗: {}", e)))
+    })
+    .await
+    .map_err(|e| AppError::Internal(e.to_string()))??;
+
+    db::document::rename(&state.db, document_id, &new_rel_path).await?;
+    db::document::find(&state.db, document_id).await
+}
+
 /// 同期版 push with retry（spawn_blocking 内で使用、std::thread::sleep）
 fn push_with_retry_sync(
     svc: &GitService,

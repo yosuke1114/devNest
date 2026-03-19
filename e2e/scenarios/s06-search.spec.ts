@@ -14,9 +14,15 @@ test.describe("S-06 設計書キーワード検索", () => {
   });
 
   async function navigateToSearch(page: Parameters<typeof test.beforeEach>[0]["page"]) {
-    const searchNav = page.locator("aside").getByText("検索").first();
-    if (await searchNav.isVisible()) {
-      await searchNav.click();
+    // CommandPalette (⌘K) から検索画面に遷移
+    const searchBtn = page.locator('[data-testid="search-pill"]').first();
+    if (await searchBtn.isVisible({ timeout: 3000 })) {
+      await searchBtn.click();
+      await page.waitForTimeout(150);
+      // 「検索」と入力してEnter
+      await page.keyboard.type("検索");
+      await page.waitForTimeout(100);
+      await page.keyboard.press("Enter");
       await page.waitForTimeout(200);
     }
   }

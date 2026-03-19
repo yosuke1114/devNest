@@ -4,6 +4,10 @@ import * as ipc from "../lib/ipc";
 import type { Issue, IssueDraft, IssueDocLink } from "../types";
 
 vi.mock("../lib/ipc");
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(vi.fn()),
+}));
 const mockIpc = vi.mocked(ipc);
 
 function makeIssue(overrides: Partial<Issue> = {}): Issue {
@@ -367,5 +371,202 @@ describe("issueStore", () => {
 
     expect(useIssueStore.getState().labels).toHaveLength(1);
     expect(useIssueStore.getState().labels[0].name).toBe("bug");
+  });
+
+  // ─── createIssue ──────────────────────────────────────────────────────────
+
+  it("createIssue() が issueCreate を呼び issue を返す", async () => {
+    const draft = makeDraft({ id: 5 });
+    const issue = makeIssue({ id: 10, github_id: 9999 });
+    useIssueStore.setState({ drafts: [draft], currentDraft: draft });
+    mockIpc.issueCreate.mockResolvedValueOnce(issue);
+
+    const result = await useIssueStore.getState().createIssue(5);
+
+    expect(mockIpc.issueCreate).toHaveBeenCalledWith(5);
+    expect(result).toEqual(issue);
+  });
+
+  it("createIssue() 後に drafts の status が submitted になる", async () => {
+    const draft = makeDraft({ id: 5 });
+    const issue = makeIssue({ id: 10, github_id: 9999 });
+    useIssueStore.setState({ drafts: [draft], currentDraft: draft, issues: [] });
+    mockIpc.issueCreate.mockResolvedValueOnce(issue);
+
+    await useIssueStore.getState().createIssue(5);
+
+    const s = useIssueStore.getState();
+    expect(s.drafts[0].status).toBe("submitted");
+    expect(s.issues[0]).toEqual(issue);
+  });
+
+  it("createIssue() 後に currentDraft.status も submitted になる", async () => {
+    const draft = makeDraft({ id: 5 });
+    const issue = makeIssue({ id: 10, github_id: 9999 });
+    useIssueStore.setState({ drafts: [draft], currentDraft: draft });
+    mockIpc.issueCreate.mockResolvedValueOnce(issue);
+
+    await useIssueStore.getState().createIssue(5);
+
+    expect(useIssueStore.getState().currentDraft?.status).toBe("submitted");
+  });
+
+  // ─── updateDraft failure ──────────────────────────────────────────────────
+
+  it("updateDraft() 失敗時に error がセットされリスローされる", async () => {
+    const draft = makeDraft({ id: 1 });
+    useIssueStore.setState({ drafts: [draft], currentDraft: draft });
+    mockIpc.issueDraftUpdate.mockRejectedValueOnce({ code: "DB", message: "update failed" });
+
+    await expect(
+      useIssueStore.getState().updateDraft({ id: 1, title: "New" })
+    ).rejects.toBeTruthy();
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  // ─── generateDraft failure ────────────────────────────────────────────────
+
+  it("generateDraft() 失敗時に generateStatus=error になる", async () => {
+    mockIpc.issueDraftGenerate.mockRejectedValueOnce({ code: "AI", message: "fail" });
+    await useIssueStore.getState().generateDraft(1);
+    expect(useIssueStore.getState().generateStatus).toBe("error");
+  });
+
+  // ─── addIssueLink / removeIssueLink failures ──────────────────────────────
+
+  it("addIssueLink() 失敗時に error がセットされリスローされる", async () => {
+    mockIpc.issueDocLinkAdd.mockRejectedValueOnce({ code: "DB", message: "dup key" });
+    await expect(
+      useIssueStore.getState().addIssueLink(1, 10)
+    ).rejects.toBeTruthy();
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  it("removeIssueLink() 失敗時に error がセットされリスローされる", async () => {
+    mockIpc.issueDocLinkRemove.mockRejectedValueOnce({ code: "DB", message: "not found" });
+    await expect(
+      useIssueStore.getState().removeIssueLink(1, 10)
+    ).rejects.toBeTruthy();
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  // ─── listen 系 ────────────────────────────────────────────────────────────
+
+  it("listenSyncDone() が issue_sync_done イベントをリッスンし cleanup を返す", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const cleanup = await useIssueStore.getState().listenSyncDone(1);
+    expect(listen).toHaveBeenCalledWith("issue_sync_done", expect.any(Function));
+    expect(typeof cleanup).toBe("function");
+  });
+
+  it("listenSyncDone() イベント発火で fetchIssues が呼ばれる", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+    mockIpc.issueList.mockResolvedValue([]);
+
+    await useIssueStore.getState().listenSyncDone(1);
+    capturedCb?.({ payload: { project_id: 1, synced_count: 3 } });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockIpc.issueList).toHaveBeenCalledWith(1, undefined);
+  });
+
+  it("listenSyncDone() project_id が一致しない場合は fetchIssues を呼ばない", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    await useIssueStore.getState().listenSyncDone(1);
+    capturedCb?.({ payload: { project_id: 99, synced_count: 3 } });
+
+    expect(mockIpc.issueList).not.toHaveBeenCalled();
+  });
+
+  it("listenDraftChunk() が issue_draft_chunk をリッスンし delta を蓄積する", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    await useIssueStore.getState().listenDraftChunk();
+    capturedCb?.({ payload: { draft_id: 1, delta: "Hello " } });
+    capturedCb?.({ payload: { draft_id: 1, delta: "World" } });
+
+    expect(useIssueStore.getState().draftStreamBuffer).toBe("Hello World");
+  });
+
+  it("listenDraftDone() が issue_draft_generate_done をリッスンし drafts を更新する", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    let capturedCb: ((ev: unknown) => void) | undefined;
+    vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
+      capturedCb = cb as (ev: unknown) => void;
+      return vi.fn();
+    });
+
+    const draft = makeDraft({ id: 3, draft_body: null });
+    useIssueStore.setState({ drafts: [draft], currentDraft: draft });
+
+    await useIssueStore.getState().listenDraftDone();
+    capturedCb?.({ payload: { draft_id: 3, draft_body: "Generated body" } });
+
+    const s = useIssueStore.getState();
+    expect(s.drafts[0].draft_body).toBe("Generated body");
+    expect(s.currentDraft?.draft_body).toBe("Generated body");
+    expect(s.generateStatus).toBe("success");
+  });
+
+  // ─── fetchIssueLinks / fetchLabels error (lines 103, 198) ───────────────
+
+  it("fetchIssueLinks() 失敗時に error がセットされる (line 103)", async () => {
+    mockIpc.issueDocLinkList.mockRejectedValueOnce({ code: "DB", message: "link error" });
+    await useIssueStore.getState().fetchIssueLinks(1);
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  it("fetchLabels() 失敗時に error がセットされる (line 198)", async () => {
+    mockIpc.githubLabelsList.mockRejectedValueOnce({ code: "GitHub", message: "no labels" });
+    await useIssueStore.getState().fetchLabels(1);
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  // ─── reset ────────────────────────────────────────────────────────────────
+
+  it("reset() で全状態が初期値に戻る", () => {
+    useIssueStore.setState({
+      issues: [makeIssue()],
+      currentIssue: makeIssue(),
+      issueLinks: [makeDocLink()],
+      drafts: [makeDraft()],
+      currentDraft: makeDraft(),
+      draftStreamBuffer: "some text",
+      labels: [{ id: 1, name: "bug", color: "ff0000", description: null }],
+      listStatus: "success",
+      syncStatus: "success",
+      generateStatus: "success",
+      error: { code: "DB", message: "err" } as never,
+    });
+
+    useIssueStore.getState().reset();
+    const s = useIssueStore.getState();
+    expect(s.issues).toEqual([]);
+    expect(s.currentIssue).toBeNull();
+    expect(s.issueLinks).toEqual([]);
+    expect(s.drafts).toEqual([]);
+    expect(s.currentDraft).toBeNull();
+    expect(s.draftStreamBuffer).toBe("");
+    expect(s.labels).toEqual([]);
+    expect(s.listStatus).toBe("idle");
+    expect(s.syncStatus).toBe("idle");
+    expect(s.generateStatus).toBe("idle");
+    expect(s.error).toBeNull();
   });
 });

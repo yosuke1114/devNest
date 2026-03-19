@@ -1,87 +1,271 @@
+import React, { memo, useCallback, useState } from "react";
 import {
   IconAlertTriangle,
-  IconBell,
-  IconBooks,
   IconBrandGithub,
+  IconChartBar,
+  IconChevronRight,
+  IconCircleDot,
   IconFileText,
   IconGitPullRequest,
-  IconSearch,
+  IconLayoutGrid,
+  IconLayoutKanban,
+  IconRefresh,
+  IconRobot,
   IconSettings,
-  IconTerminal2,
 } from "@tabler/icons-react";
 import { useProjectStore } from "../../stores/projectStore";
 import { useUiStore } from "../../stores/uiStore";
-import { useNotificationsStore } from "../../stores/notificationsStore";
+import { usePrStore } from "../../stores/prStore";
+import { useRingNotification } from "../../hooks/useRingNotification";
+import { RingIndicator } from "../shared/RingIndicator";
 import type { ScreenName } from "../../types";
 
-interface NavItem {
+// ─── SidebarSubItem ──────────────────────────────────────────────────────────
+
+interface SubItemProps {
   screen: ScreenName;
   label: string;
   icon: React.ReactNode;
+  active: boolean;
+  onClick: (screen: ScreenName) => void;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { screen: "editor", label: "設計書", icon: <IconFileText size={20} /> },
-  { screen: "issues", label: "Issues", icon: <IconBrandGithub size={20} /> },
-  { screen: "pr", label: "Pull Requests", icon: <IconGitPullRequest size={20} /> },
-  { screen: "search", label: "検索", icon: <IconSearch size={20} /> },
-  { screen: "terminal", label: "Terminal", icon: <IconTerminal2 size={20} /> },
-  { screen: "conflict", label: "コンフリクト", icon: <IconAlertTriangle size={20} /> },
-  { screen: "notifications", label: "通知", icon: <IconBell size={20} /> },
-  { screen: "settings", label: "設定", icon: <IconSettings size={20} /> },
-];
+const SidebarSubItem = memo(function SidebarSubItem({
+  screen,
+  label,
+  icon,
+  active,
+  onClick,
+}: SubItemProps) {
+  const handleClick = useCallback(() => onClick(screen), [onClick, screen]);
+
+  return (
+    <button
+      data-testid={`nav-${screen}`}
+      onClick={handleClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        width: "100%",
+        padding: "6px 12px 6px 36px",
+        background: active ? "#1e1e32" : "transparent",
+        border: "none",
+        borderLeft: active ? "2px solid #7c6af7" : "2px solid transparent",
+        color: active ? "#7c6af7" : "#888",
+        cursor: "pointer",
+        fontSize: 13,
+        textAlign: "left",
+        transition: "all 0.1s",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) (e.currentTarget as HTMLButtonElement).style.background = "#1e1e2a";
+      }}
+      onMouseLeave={(e) => {
+        if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+      }}
+    >
+      <span style={{ color: active ? "#7c6af7" : "#666" }}>{icon}</span>
+      {label}
+    </button>
+  );
+});
+
+// ─── SidebarItem ─────────────────────────────────────────────────────────────
+
+interface SidebarItemProps {
+  screen?: ScreenName;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  badge?: number;
+  expandable?: boolean;
+  expanded?: boolean;
+  onClick: () => void;
+}
+
+const SidebarItem = memo(function SidebarItem({
+  label,
+  icon,
+  active,
+  badge,
+  expandable,
+  expanded,
+  onClick,
+}: SidebarItemProps) {
+  return (
+    <button
+      data-testid={screen ? `nav-${screen}` : undefined}
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        padding: "8px 12px",
+        background: active ? "#1e1e32" : "transparent",
+        border: "none",
+        borderLeft: active ? "2px solid #7c6af7" : "2px solid transparent",
+        color: active ? "#e0e0e0" : "#aaa",
+        cursor: "pointer",
+        fontSize: 14,
+        textAlign: "left",
+        transition: "all 0.1s",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) (e.currentTarget as HTMLButtonElement).style.background = "#1e1e2a";
+      }}
+      onMouseLeave={(e) => {
+        if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+      }}
+    >
+      <span style={{ color: active ? "#7c6af7" : "#777", flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, fontWeight: active ? 600 : 400 }}>{label}</span>
+      {badge != null && badge > 0 ? (
+        <span
+          style={{
+            minWidth: 18,
+            height: 18,
+            borderRadius: 9,
+            background: "#7c6af7",
+            color: "#fff",
+            fontSize: 10,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 4px",
+          }}
+        >
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : null}
+      {expandable ? (
+        <IconChevronRight
+          size={14}
+          style={{
+            color: "#555",
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.15s",
+            flexShrink: 0,
+          }}
+        />
+      ) : null}
+    </button>
+  );
+});
+
+// ─── SectionHeader ───────────────────────────────────────────────────────────
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        color: "#555",
+        textTransform: "uppercase",
+        letterSpacing: 0.8,
+        padding: "12px 12px 4px",
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+// ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 export function Sidebar() {
-  const { currentScreen, navigate, sidebarCollapsed } = useUiStore();
+  const { currentScreen, navigate } = useUiStore();
   const { projects, currentProject, selectProject } = useProjectStore();
-  const unreadCount = useNotificationsStore((s) => s.unreadCount);
+  const openPRsCount = usePrStore((s) =>
+    s.prs.filter((pr) => pr.state === "open").length
+  );
+
+  const { rings } = useRingNotification();
+  const agentRingUrgency = rings.find(r => r.event.type === "agentAttention")?.event.urgency ?? null;
+  const githubRingUrgency = rings.find(r => r.event.type === "gitHubEvent")?.event.urgency ?? null;
+
+  const [githubOpen, setGithubOpen] = useState(
+    () => ["issues", "pr", "conflict"].includes(currentScreen)
+  );
+  const [docsOpen, setDocsOpen] = useState(
+    () => ["editor", "docs-freshness"].includes(currentScreen)
+  );
+
+  const handleNavigate = useCallback(
+    (screen: ScreenName) => {
+      navigate(screen);
+    },
+    [navigate]
+  );
+
+  const handleToggleGithub = useCallback(() => {
+    setGithubOpen((prev) => !prev);
+  }, []);
+
+  const handleToggleDocs = useCallback(() => {
+    setDocsOpen((prev) => !prev);
+  }, []);
+
+  // Determine parent-active states
+  const githubChildActive = ["issues", "pr", "conflict"].includes(currentScreen);
+  const docsChildActive = ["editor", "docs-freshness"].includes(currentScreen);
 
   return (
     <aside
       style={{
-        width: sidebarCollapsed ? 48 : 220,
-        minHeight: "100vh",
-        background: "#1a1a2e",
-        color: "#e0e0e0",
+        width: 200,
+        flexShrink: 0,
+        background: "#13131f",
+        borderRight: "1px solid #2a2a3f",
         display: "flex",
         flexDirection: "column",
-        transition: "width 0.2s",
         overflow: "hidden",
+        minHeight: 0,
       }}
     >
-      {/* ロゴ */}
-      <div
-        style={{
-          padding: "16px 12px",
-          fontWeight: 700,
-          fontSize: 18,
-          color: "#7c6cf2",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {sidebarCollapsed ? "DN" : "DevNest"}
+      {/* Project label */}
+      <div style={{ padding: "8px 12px 4px", fontSize: 10, fontWeight: 600, color: "#555", textTransform: "uppercase", letterSpacing: 0.8 }}>
+        PROJECT
       </div>
 
-      {/* プロジェクト選択 */}
-      {!sidebarCollapsed && projects.length > 0 && (
-        <div style={{ padding: "0 12px 8px" }}>
-          <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>
-            PROJECT
-          </div>
+      {/* Product switcher */}
+      <div style={{ padding: "0 10px 8px", borderBottom: "1px solid #2a2a3f" }}>
+        {projects.length === 0 ? (
+          <button
+            onClick={() => navigate("setup")}
+            style={{
+              width: "100%",
+              padding: "6px 10px",
+              background: "#7c6af7",
+              border: "none",
+              borderRadius: 6,
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            + プロジェクト追加
+          </button>
+        ) : (
           <select
             value={currentProject?.id ?? ""}
             onChange={(e) => {
-              const p = projects.find((p) => p.id === Number(e.target.value));
+              const p = projects.find((proj) => proj.id === Number(e.target.value));
               if (p) selectProject(p);
             }}
             style={{
               width: "100%",
-              background: "#2a2a42",
+              background: "#1e1e32",
+              border: "1px solid #2a2a3f",
+              borderRadius: 6,
               color: "#e0e0e0",
-              border: "1px solid #3a3a52",
-              borderRadius: 4,
-              padding: "4px 8px",
-              fontSize: 13,
+              padding: "5px 8px",
+              fontSize: 12,
+              cursor: "pointer",
             }}
           >
             {projects.map((p) => (
@@ -90,116 +274,129 @@ export function Sidebar() {
               </option>
             ))}
           </select>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+        {/* プロジェクト */}
+        <div style={{ padding: "8px 0 4px" }}>
+          <SidebarItem
+            screen="project"
+            label="プロジェクト"
+            icon={<IconLayoutKanban size={18} />}
+            active={currentScreen === "project"}
+            onClick={() => handleNavigate("project")}
+          />
         </div>
-      )}
 
-      {/* プロジェクトなし → Setup へ */}
-      {!sidebarCollapsed && projects.length === 0 && (
-        <button
-          onClick={() => navigate("setup")}
-          style={{
-            margin: "0 12px 8px",
-            padding: "6px 8px",
-            background: "#7c6cf2",
-            color: "#fff",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontSize: 13,
-          }}
-        >
-          + プロジェクト追加
-        </button>
-      )}
+        {/* ── 開発 ── */}
+        <SectionHeader label="開発" />
 
-      {/* ナビゲーション */}
-      <nav style={{ flex: 1 }}>
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.screen}
-            data-testid={`nav-${item.screen}`}
-            onClick={() => navigate(item.screen)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              width: "100%",
-              padding: "10px 16px",
-              background:
-                currentScreen === item.screen ? "#2a2a42" : "transparent",
-              color: currentScreen === item.screen ? "#7c6cf2" : "#c0c0d0",
-              border: "none",
-              cursor: "pointer",
-              textAlign: "left",
-              fontSize: 14,
-              whiteSpace: "nowrap",
-              borderLeft:
-                currentScreen === item.screen
-                  ? "3px solid #7c6cf2"
-                  : "3px solid transparent",
-            }}
-          >
-            <span style={{ position: "relative" }}>
-              {item.icon}
-              {item.screen === "notifications" && unreadCount > 0 && (
-                <span
-                  data-testid="nav-notifications-badge-dot"
-                  style={{
-                    position: "absolute",
-                    top: -4,
-                    right: -4,
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: "#7c6cf2",
-                    display: "block",
-                  }}
-                />
-              )}
-            </span>
-            {!sidebarCollapsed && item.label}
-            {!sidebarCollapsed && item.screen === "notifications" && unreadCount > 0 && (
-              <span
-                data-testid="nav-notifications-badge"
-                style={{
-                  marginLeft: "auto",
-                  padding: "1px 5px",
-                  borderRadius: 8,
-                  background: "#7c6cf2",
-                  color: "#fff",
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}
-              >
-                {unreadCount}
-              </span>
-            )}
-          </button>
-        ))}
+        {/* GitHub (expandable) */}
+        <RingIndicator urgency={githubRingUrgency}>
+          <SidebarItem
+            label="GitHub"
+            icon={<IconBrandGithub size={18} />}
+            active={githubChildActive && !githubOpen}
+            badge={openPRsCount > 0 ? openPRsCount : undefined}
+            expandable
+            expanded={githubOpen}
+            onClick={handleToggleGithub}
+          />
+        </RingIndicator>
+        {githubOpen ? (
+          <>
+            <SidebarSubItem
+              screen="issues"
+              label="Issues"
+              icon={<IconCircleDot size={14} />}
+              active={currentScreen === "issues"}
+              onClick={handleNavigate}
+            />
+            <SidebarSubItem
+              screen="pr"
+              label="Pull Requests"
+              icon={<IconGitPullRequest size={14} />}
+              active={currentScreen === "pr"}
+              onClick={handleNavigate}
+            />
+            <SidebarSubItem
+              screen="conflict"
+              label="コンフリクト"
+              icon={<IconAlertTriangle size={14} />}
+              active={currentScreen === "conflict"}
+              onClick={handleNavigate}
+            />
+          </>
+        ) : null}
+
+        {/* 設計書 (expandable) */}
+        <SidebarItem
+          label="設計書"
+          icon={<IconFileText size={18} />}
+          active={docsChildActive && !docsOpen}
+          expandable
+          expanded={docsOpen}
+          onClick={handleToggleDocs}
+        />
+        {docsOpen ? (
+          <>
+            <SidebarSubItem
+              screen="editor"
+              label="一覧"
+              icon={<IconFileText size={14} />}
+              active={currentScreen === "editor"}
+              onClick={handleNavigate}
+            />
+            <SidebarSubItem
+              screen="docs-freshness"
+              label="鮮度マップ"
+              icon={<IconRefresh size={14} />}
+              active={currentScreen === "docs-freshness"}
+              onClick={handleNavigate}
+            />
+          </>
+        ) : null}
+
+        {/* ── 管理 ── */}
+        <SectionHeader label="管理" />
+
+        <RingIndicator urgency={agentRingUrgency}>
+          <SidebarItem
+            screen="swarm"
+            label="Swarm"
+            icon={<IconLayoutGrid size={18} />}
+            active={currentScreen === "swarm"}
+            onClick={() => handleNavigate("swarm")}
+          />
+        </RingIndicator>
+        <SidebarItem
+          screen="agent"
+          label="エージェント"
+          icon={<IconRobot size={18} />}
+          active={currentScreen === "agent"}
+          onClick={() => handleNavigate("agent")}
+        />
+        <SidebarItem
+          screen="sprint"
+          label="スプリント"
+          icon={<IconChartBar size={18} />}
+          active={currentScreen === "sprint"}
+          onClick={() => handleNavigate("sprint")}
+        />
       </nav>
 
-      {/* プロジェクト追加（下部） */}
-      {!sidebarCollapsed && projects.length > 0 && (
-        <button
-          onClick={() => navigate("setup")}
-          style={{
-            margin: "8px 12px",
-            padding: "6px 8px",
-            background: "transparent",
-            color: "#888",
-            border: "1px solid #3a3a52",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontSize: 12,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <IconBooks size={14} />
-          プロジェクト管理
-        </button>
-      )}
+      {/* Bottom: Settings */}
+      <div style={{ borderTop: "1px solid #2a2a3f", flexShrink: 0 }}>
+        <SidebarItem
+          screen="settings"
+          label="設定"
+          icon={<IconSettings size={18} />}
+          active={currentScreen === "settings"}
+          onClick={() => handleNavigate("settings")}
+        />
+      </div>
     </aside>
   );
 }

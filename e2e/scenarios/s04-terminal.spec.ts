@@ -39,11 +39,17 @@ test.describe("S-04 Terminal / Claude Code セッション", () => {
     if (await settingsNav.isVisible()) {
       await settingsNav.click();
     }
-    await expect(page.getByRole("heading", { name: "設定", exact: true })).toBeVisible({ timeout: 5000 });
+    // SettingsScreen は data-testid="settings-screen" を持つ
+    await expect(page.locator('[data-testid="settings-screen"]')).toBeVisible({ timeout: 5000 });
 
-    // Anthropic API Key 入力フィールド
+    // 環境設定タブに切り替えて Anthropic API Key 入力フィールドを確認
+    const envTab = page.getByRole("button", { name: "環境設定" }).first();
+    if (await envTab.isVisible({ timeout: 2000 })) {
+      await envTab.click();
+      await page.waitForTimeout(200);
+    }
     const apiKeyInput = page.getByPlaceholder(/sk-ant/i).first();
-    if (await apiKeyInput.isVisible()) {
+    if (await apiKeyInput.isVisible({ timeout: 2000 })) {
       await apiKeyInput.fill("sk-ant-test-key");
       await expect(apiKeyInput).toHaveValue("sk-ant-test-key");
     }

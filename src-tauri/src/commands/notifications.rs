@@ -82,6 +82,7 @@ pub async fn notification_push(
     let _ = app.emit("notification_new", serde_json::json!({
         "notificationId": id,
         "title": title.clone(),
+        "eventType": n.event_type,
     }));
     // OS 通知を発火（F-P02）
     let _ = app

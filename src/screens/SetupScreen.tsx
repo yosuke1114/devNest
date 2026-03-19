@@ -15,6 +15,8 @@ import { useNotificationsStore } from "../stores/notificationsStore";
 import { useUiStore } from "../stores/uiStore";
 import { SetupStepDots } from "../components/shared/SetupStepDots";
 import { FilePicker } from "../components/shared/FilePicker";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import * as ipc from "../lib/ipc";
 import type { Project } from "../types";
 
@@ -55,50 +57,47 @@ function Step0Project({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm text-gray-400 mb-1">プロジェクト名</label>
-        <input
+        <label className="block text-sm text-muted-foreground mb-1">プロジェクト名</label>
+        <Input
           data-testid="setup-project-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="MyApp"
-          className="w-full bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-purple-500"
         />
       </div>
       <div>
-        <label className="block text-sm text-gray-400 mb-1">
+        <label className="block text-sm text-muted-foreground mb-1">
           ローカルパス（git リポジトリルート）
         </label>
         <div className="flex gap-2">
-          <input
+          <Input
             data-testid="setup-local-dir"
             value={localPath}
             onChange={(e) => setLocalPath(e.target.value)}
             placeholder="/Users/you/projects/myapp"
-            className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-purple-500"
+            className="flex-1"
           />
           <FilePicker
             directory
             onPick={setLocalPath}
             label="選択"
-            className="px-3 py-2 rounded text-xs bg-white/10 border border-white/10 text-gray-300 hover:bg-white/20 transition-colors"
           />
         </div>
       </div>
       {error && (
-        <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
+        <p className="text-xs text-destructive bg-destructive/10 border border-destructive/40 rounded-md px-3 py-2">
           {error}
         </p>
       )}
       <div className="flex justify-end pt-2">
-        <button
+        <Button
           data-testid="setup-next"
           onClick={handleNext}
           disabled={loading || !name.trim() || !localPath.trim()}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium disabled:opacity-50 transition-colors"
         >
           {loading ? "作成中…" : "NEXT"}
           <IconChevronRight size={15} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -116,6 +115,8 @@ function Step1GitHub({
   onBack: () => void;
 }) {
   const { authStatus, authStatus2, startAuth, fetchAuthStatus } = useSettingsStore();
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     fetchAuthStatus(projectId);
@@ -123,32 +124,52 @@ function Step1GitHub({
 
   const connected = authStatus?.connected;
 
+  const handleConnect = async () => {
+    setAuthError(null);
+    setConnecting(true);
+    try {
+      await startAuth(projectId);
+    } catch (e) {
+      const err = e as { message?: string };
+      setAuthError(err.message ?? "GitHub 認証の開始に失敗しました");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-400">
+      <p className="text-sm text-muted-foreground">
         GitHub と接続して PR・Issue 同期を有効にします。スキップして後から Settings で設定できます。
       </p>
 
       {authStatus2 === "loading" ? (
-        <div className="text-xs text-gray-500">確認中…</div>
+        <div className="text-xs text-muted-foreground">確認中…</div>
       ) : connected ? (
         <div data-testid="setup-github-status" className="flex items-center gap-2 p-3 rounded-lg border border-green-700/50 bg-green-900/20">
           <IconCheck size={16} className="text-green-400" />
           <div>
             <div className="text-sm font-medium text-green-300">接続済み</div>
             {authStatus?.user_login && (
-              <div className="text-xs text-gray-400">@{authStatus.user_login}</div>
+              <div className="text-xs text-muted-foreground">@{authStatus.user_login}</div>
             )}
           </div>
         </div>
       ) : (
-        <button
+        <Button
           data-testid="setup-connect-github"
-          onClick={() => startAuth(projectId)}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm text-gray-200 border border-white/10 transition-colors"
+          variant="outline"
+          onClick={handleConnect}
+          disabled={connecting}
         >
-          CONNECT WITH GITHUB
-        </button>
+          {connecting ? "開始中…" : "CONNECT WITH GITHUB"}
+        </Button>
+      )}
+
+      {authError && (
+        <p className="text-xs text-destructive bg-destructive/10 border border-destructive/40 rounded-md px-3 py-2">
+          {authError}
+        </p>
       )}
 
       <NavButtons onBack={onBack} onNext={onNext} nextLabel={connected ? "NEXT" : "SKIP"} />
@@ -171,17 +192,17 @@ function Step2Sync({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm text-gray-400 mb-2">保存時の同期モード</label>
+        <label className="block text-sm text-muted-foreground mb-2">保存時の同期モード</label>
         <div className="flex gap-2">
           {(["auto", "manual"] as const).map((m) => (
             <button
               key={m}
               data-testid={`setup-sync-${m}`}
               onClick={() => setSyncMode(m)}
-              className={`px-4 py-2 rounded text-sm border transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm border transition-colors ${
                 syncMode === m
-                  ? "border-purple-500 bg-purple-900/30 text-purple-200"
-                  : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/10"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-secondary"
               }`}
             >
               {m === "auto" ? "Auto（保存時自動コミット）" : "Manual"}
@@ -191,16 +212,16 @@ function Step2Sync({
       </div>
 
       <div>
-        <label className="block text-sm text-gray-400 mb-2">AI 編集ポリシー</label>
+        <label className="block text-sm text-muted-foreground mb-2">AI 編集ポリシー</label>
         <div className="flex gap-2">
           {(["separate", "direct"] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPolicy(p)}
-              className={`px-4 py-2 rounded text-sm border transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm border transition-colors ${
                 policy === p
-                  ? "border-purple-500 bg-purple-900/30 text-purple-200"
-                  : "border-white/10 bg-white/5 text-gray-400 hover:bg-white/10"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-transparent text-muted-foreground hover:bg-secondary"
               }`}
             >
               {p === "separate" ? "別ブランチ + PR レビュー" : "直接コミット"}
@@ -231,7 +252,6 @@ function Step3Index({
   const unlistenRef = useRef<(() => void)[]>([]);
 
   useEffect(() => {
-    // イベントリスナーを登録
     const setupListeners = async () => {
       const unlisten1 = await listen<{ done: number; total: number; current_path?: string }>(
         "index_progress",
@@ -263,37 +283,36 @@ function Step3Index({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-400">
+      <p className="text-sm text-muted-foreground">
         設計書をインデックス化すると AI Issue 作成時にコンテキスト検索が利用できます。
         後から Settings でも実行できます。
       </p>
 
       {status === "idle" && (
-        <button
+        <Button
           data-testid="setup-build-index"
           onClick={handleBuild}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
         >
           <IconDatabase size={15} />
           BUILD INDEX
-        </button>
+        </Button>
       )}
 
       {status === "running" && (
         <div data-testid="setup-index-status" className="space-y-2">
-          <div className="flex items-center gap-2 text-sm text-purple-300">
+          <div className="flex items-center gap-2 text-sm text-primary">
             <IconDatabase size={15} className="animate-pulse" />
             インデックス構築中…
           </div>
           {progress && (
             <>
-              <div className="w-full bg-white/10 rounded-full h-1.5">
+              <div className="w-full bg-secondary rounded-full h-1.5">
                 <div
-                  className="bg-purple-500 h-1.5 rounded-full transition-all"
+                  className="bg-primary h-1.5 rounded-full transition-all"
                   style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {progress.done}/{progress.total}{progress.currentPath ? ` — ${progress.currentPath}` : ""}
               </p>
             </>
@@ -309,7 +328,7 @@ function Step3Index({
       )}
 
       {status === "error" && (
-        <p className="text-xs text-red-400">インデックス構築に失敗しました。後から Settings で再試行できます。</p>
+        <p className="text-xs text-destructive">インデックス構築に失敗しました。後から Settings で再試行できます。</p>
       )}
 
       <NavButtons
@@ -335,7 +354,7 @@ function Step4Notify({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-400">
+      <p className="text-sm text-muted-foreground">
         CI 結果・PR コメント・コンフリクト検知を OS 通知で受け取れます。
       </p>
 
@@ -345,12 +364,9 @@ function Step4Notify({
           <span className="text-sm text-green-300">通知が許可されています</span>
         </div>
       ) : (
-        <button
-          onClick={requestPermission}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-white/10 hover:bg-white/20 text-sm text-gray-200 border border-white/10 transition-colors"
-        >
+        <Button variant="outline" onClick={requestPermission}>
           🔔 ALLOW NOTIFICATIONS
-        </button>
+        </Button>
       )}
 
       <NavButtons onBack={onBack} onNext={onNext} nextLabel={granted ? "NEXT" : "SKIP"} />
@@ -371,16 +387,17 @@ function Step5Done({
     <div className="space-y-6 text-center">
       <div className="text-4xl">🎉</div>
       <div>
-        <h3 className="text-lg font-semibold text-white mb-1">{projectName} を登録しました</h3>
-        <p className="text-sm text-gray-400">DevNest でプロジェクト管理を始めましょう。</p>
+        <h3 className="text-lg font-semibold text-foreground mb-1">{projectName} を登録しました</h3>
+        <p className="text-sm text-muted-foreground">DevNest でプロジェクト管理を始めましょう。</p>
       </div>
-      <button
+      <Button
         data-testid="setup-open-editor"
         onClick={onFinish}
-        className="flex items-center gap-2 mx-auto px-6 py-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white font-medium transition-colors"
+        size="lg"
+        className="mx-auto"
       >
         OPEN EDITOR <IconChevronRight size={16} />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -399,22 +416,20 @@ function NavButtons({
   return (
     <div className="flex items-center justify-between pt-2">
       {onBack ? (
-        <button
+        <Button
           data-testid="setup-back"
+          variant="ghost"
+          size="sm"
           onClick={onBack}
-          className="flex items-center gap-1 px-3 py-2 rounded text-sm text-gray-400 hover:text-gray-200 transition-colors"
         >
           <IconChevronLeft size={15} /> BACK
-        </button>
+        </Button>
       ) : (
         <div />
       )}
-      <button
-        onClick={onNext}
-        className="flex items-center gap-2 px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
-      >
+      <Button onClick={onNext} size="sm">
         {nextLabel} <IconChevronRight size={15} />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -442,10 +457,14 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
 
   const handleStep2 = async (syncMode: string, _policy: string) => {
     if (currentProject) {
-      await updateProject({
-        id: currentProject.id,
-        sync_mode: syncMode as "auto" | "manual",
-      });
+      try {
+        await updateProject({
+          id: currentProject.id,
+          sync_mode: syncMode as "auto" | "manual",
+        });
+      } catch (e) {
+        console.error("sync mode update failed:", e);
+      }
     }
     advance(2);
   };
@@ -457,8 +476,8 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
       <div className="w-full max-w-lg">
         {/* ヘッダー */}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-white mb-1">新規プロジェクト</h1>
-          <p className="text-sm text-gray-500">{STEP_LABELS[step]}</p>
+          <h1 className="text-2xl font-bold text-foreground mb-1">新規プロジェクト</h1>
+          <p className="text-sm text-muted-foreground">{STEP_LABELS[step]}</p>
         </div>
 
         {/* ステップドット */}
@@ -470,7 +489,7 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
         />
 
         {/* ステップコンテンツ */}
-        <div className="bg-white/5 border border-white/10 rounded-xl p-6 mt-4">
+        <div className="bg-card border border-border rounded-xl p-6 mt-4">
           {step === 0 && <Step0Project onNext={handleStep0} />}
           {step === 1 && (
             <Step1GitHub
@@ -504,7 +523,7 @@ function SetupWizard({ onCancel }: { onCancel?: () => void }) {
           <div className="text-center mt-4">
             <button
               onClick={onCancel}
-              className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               キャンセル
             </button>
@@ -547,8 +566,8 @@ export function SetupScreen() {
   return (
     <div data-testid="setup-screen" className="flex-1 flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-lg">
-        <h1 className="text-2xl font-bold text-white mb-2">プロジェクト管理</h1>
-        <p className="text-sm text-gray-500 mb-8">
+        <h1 className="text-2xl font-bold text-foreground mb-2">プロジェクト管理</h1>
+        <p className="text-sm text-muted-foreground mb-8">
           ローカルの git リポジトリを DevNest に登録します。
         </p>
 
@@ -560,18 +579,18 @@ export function SetupScreen() {
               onClick={() => handleSelect(p)}
               className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-colors ${
                 currentProject?.id === p.id
-                  ? "border-purple-500 bg-purple-900/20"
-                  : "border-white/10 bg-white/5 hover:bg-white/10"
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-card hover:bg-secondary"
               }`}
             >
-              <IconFolder size={20} className="text-purple-400 shrink-0" />
+              <IconFolder size={20} className="text-primary shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-white truncate">{p.name}</div>
-                <div className="text-xs text-gray-500 truncate">{p.local_path}</div>
+                <div className="font-semibold text-sm text-foreground truncate">{p.name}</div>
+                <div className="text-xs text-muted-foreground truncate">{p.local_path}</div>
               </div>
               <button
                 onClick={(e) => handleDelete(p, e)}
-                className="p-1.5 rounded text-gray-600 hover:text-red-400 transition-colors"
+                className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
               >
                 <IconTrash size={15} />
               </button>
@@ -582,7 +601,7 @@ export function SetupScreen() {
         {/* 新規追加ボタン */}
         <button
           onClick={() => setMode("wizard")}
-          className="flex items-center gap-2 w-full p-4 rounded-xl border border-dashed border-white/20 text-sm text-gray-500 hover:text-gray-300 hover:border-white/40 transition-colors"
+          className="flex items-center gap-2 w-full p-4 rounded-xl border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
         >
           <IconPlus size={16} />
           新規プロジェクトを追加

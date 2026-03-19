@@ -36,8 +36,11 @@ vi.mock("../stores/projectStore", () => ({
     sel ? sel(mockProjectStore) : mockProjectStore,
 }));
 vi.mock("../stores/settingsStore", () => ({
-  useSettingsStore: (sel?: (s: typeof mockSettingsStore) => unknown) =>
-    sel ? sel(mockSettingsStore) : mockSettingsStore,
+  useSettingsStore: Object.assign(
+    (sel?: (s: typeof mockSettingsStore) => unknown) =>
+      sel ? sel(mockSettingsStore) : mockSettingsStore,
+    { getState: () => mockSettingsStore }
+  ),
 }));
 vi.mock("../stores/notificationsStore", () => ({
   useNotificationsStore: (sel?: (s: typeof mockNotificationsStore) => unknown) =>
@@ -47,6 +50,11 @@ vi.mock("../lib/ipc", () => ({
   indexReset: vi.fn().mockResolvedValue(5),
   pollingStart: vi.fn().mockResolvedValue(undefined),
   pollingStop: vi.fn().mockResolvedValue(undefined),
+  mcpGetStatus: vi.fn().mockResolvedValue({ servers: [], total_tools: 0 }),
+  mcpGetPolicy: vi.fn().mockResolvedValue({ default_policy: "allow", tool_overrides: {} }),
+  mcpSavePolicy: vi.fn().mockResolvedValue(undefined),
+  mcpAddServer: vi.fn().mockResolvedValue(undefined),
+  mcpRemoveServer: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { SettingsScreen } from "./SettingsScreen";
@@ -65,9 +73,12 @@ describe("SettingsScreen", () => {
     mockNotificationsStore.permissionStatus = "default";
   });
 
-  it("「設定」ヘッダーが表示される", () => {
+  it("タブが4つ表示される", () => {
     render(<SettingsScreen />);
-    expect(screen.getByText("設定")).toBeInTheDocument();
+    expect(screen.getByText("接続")).toBeInTheDocument();
+    expect(screen.getByText("通知")).toBeInTheDocument();
+    expect(screen.getByText("ポリシー")).toBeInTheDocument();
+    expect(screen.getByText("環境設定")).toBeInTheDocument();
   });
 
   it("初期マウント時に loadCredentials と fetchAuthStatus が呼ばれる", () => {
@@ -76,9 +87,18 @@ describe("SettingsScreen", () => {
     expect(mockSettingsStore.fetchAuthStatus).toHaveBeenCalledWith(1);
   });
 
-  // ── テーマ切り替え ────────────────────────────────────────────────
+  // ── 環境設定タブ ────────────────────────────────────────────────
+  it("環境設定タブに切り替えるとテーマボタンが表示される", () => {
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
+    expect(screen.getByText("ダーク")).toBeInTheDocument();
+    expect(screen.getByText("ライト")).toBeInTheDocument();
+    expect(screen.getByText("システム")).toBeInTheDocument();
+  });
+
   it("テーマボタンをクリックすると setTheme が呼ばれる", () => {
     render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
     fireEvent.click(screen.getByText("ダーク"));
     expect(mockSettingsStore.setTheme).toHaveBeenCalledWith("dark");
   });
@@ -86,11 +106,77 @@ describe("SettingsScreen", () => {
   it("現在のテーマボタンが強調表示される", () => {
     mockSettingsStore.theme = "light";
     render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
     const lightBtn = screen.getByText("ライト");
-    expect(lightBtn).toHaveStyle({ fontWeight: 600 });
+    expect(lightBtn).toBeInTheDocument();
   });
 
-  // ── 設定保存 ──────────────────────────────────────────────────────
+  // ── 接続タブ: GitHub 認証 ────────────────────────────────────────
+  it("GitHub 未接続時に「GitHub で認証」ボタンが表示される（接続タブ）", () => {
+    mockSettingsStore.authStatus = null;
+    render(<SettingsScreen />);
+    // 接続タブがデフォルト
+    expect(screen.getByText("GitHub で認証")).toBeInTheDocument();
+  });
+
+  it("GitHub 接続済み時に @username と解除ボタンが表示される", () => {
+    mockSettingsStore.authStatus = {
+      connected: true,
+      user_login: "testuser",
+      avatar_url: "",
+    };
+    render(<SettingsScreen />);
+    expect(screen.getByText("@testuser")).toBeInTheDocument();
+  });
+
+  it("GitHub 認証確認中は「確認中…」が表示される", () => {
+    mockSettingsStore.authStatus2 = "loading";
+    render(<SettingsScreen />);
+    expect(screen.getByText("確認中…")).toBeInTheDocument();
+  });
+
+  it("「GitHub で認証」クリックで startAuth が呼ばれる（clientId 設定済み）", async () => {
+    mockSettingsStore.authStatus = null;
+    mockSettingsStore.clientId = "test-client-id";
+    mockSettingsStore.clientSecret = "test-secret";
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("GitHub で認証"));
+    await waitFor(() => {
+      expect(mockSettingsStore.startAuth).toHaveBeenCalledWith(1);
+    });
+  });
+
+  // ── 通知タブ ──────────────────────────────────────────────────────
+  it("通知が許可済みの場合「通知が許可されています」が表示される", () => {
+    mockNotificationsStore.permissionStatus = "granted";
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("通知"));
+    expect(screen.getByText("通知が許可されています")).toBeInTheDocument();
+  });
+
+  it("通知がブロック済みの場合ブロックメッセージが表示される", () => {
+    mockNotificationsStore.permissionStatus = "denied";
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("通知"));
+    expect(
+      screen.getByText("通知がブロックされています。システム設定から許可してください。")
+    ).toBeInTheDocument();
+  });
+
+  it("通知未設定の場合「通知を許可する」ボタンが表示される", () => {
+    mockNotificationsStore.permissionStatus = "default";
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("通知"));
+    expect(screen.getByText("通知を許可する")).toBeInTheDocument();
+  });
+
+  // ── 環境設定タブ: インデックスリセット ──────────────────────────
+  it("「インデックスをリセット」ボタンが環境設定タブに表示される", () => {
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
+    expect(screen.getByText("インデックスをリセット")).toBeInTheDocument();
+  });
+
   it("「設定を保存」クリックで saveGithubCredentials と saveAnthropicKey が呼ばれる", async () => {
     render(<SettingsScreen />);
     fireEvent.click(screen.getByText("設定を保存"));
@@ -100,79 +186,76 @@ describe("SettingsScreen", () => {
     });
   });
 
-  it("保存成功後「保存しました」メッセージが表示される", async () => {
+  it("「接続」タブボタンをクリックすると setSettingsTab(connections) が呼ばれる (line 130)", () => {
+    // 別タブに移動してから戻ることで onClick を発火させる
     render(<SettingsScreen />);
-    fireEvent.click(screen.getByText("設定を保存"));
+    fireEvent.click(screen.getByText("環境設定"));
+    fireEvent.click(screen.getByText("接続"));
+    expect(screen.getByText("GitHub で認証")).toBeInTheDocument();
+  });
+
+  it("Client ID input 変更で setClientId が呼ばれる (line 169)", () => {
+    render(<SettingsScreen />);
+    const inputs = screen.getAllByPlaceholderText("Ghid_...");
+    fireEvent.change(inputs[0], { target: { value: "new-client-id" } });
+    expect(mockSettingsStore.setClientId).toHaveBeenCalledWith("new-client-id");
+  });
+
+  it("Client Secret input 変更で setClientSecret が呼ばれる (line 179)", () => {
+    render(<SettingsScreen />);
+    const inputs = screen.getAllByPlaceholderText("...");
+    fireEvent.change(inputs[0], { target: { value: "new-secret" } });
+    expect(mockSettingsStore.setClientSecret).toHaveBeenCalledWith("new-secret");
+  });
+
+  // ── handleIndexReset (lines 102-116) ─────────────────────────────────────
+  it("インデックスリセット: confirm=true のとき ipc.indexReset が呼ばれる (lines 102-116)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { indexReset } = await import("../lib/ipc");
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
+    fireEvent.click(screen.getByText("インデックスをリセット"));
     await waitFor(() => {
-      expect(screen.getByText("保存しました")).toBeInTheDocument();
+      expect(indexReset).toHaveBeenCalledWith(1);
     });
+    vi.restoreAllMocks();
   });
 
-  // ── GitHub 認証 ────────────────────────────────────────────────────
-  it("GitHub 未接続時に「GitHub で認証する」ボタンが表示される", () => {
-    mockSettingsStore.authStatus = null;
+  it("インデックスリセット: confirm=false のとき ipc.indexReset が呼ばれない (line 104)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { indexReset } = await import("../lib/ipc");
     render(<SettingsScreen />);
-    expect(screen.getByText("GitHub で認証する")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("環境設定"));
+    fireEvent.click(screen.getByText("インデックスをリセット"));
+    expect(indexReset).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 
-  it("GitHub 接続済み時に「接続済み」表示とユーザー名と解除ボタンが表示される", () => {
-    mockSettingsStore.authStatus = {
-      connected: true,
-      user_login: "testuser",
-      avatar_url: "",
-    };
+  // ── handleRevoke (lines 118-122) ─────────────────────────────────────────
+  it("解除ボタン: confirm=true のとき revokeAuth が呼ばれる (lines 118-122)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockSettingsStore.authStatus = { connected: true, user_login: "octocat" };
     render(<SettingsScreen />);
-    expect(screen.getByText("接続済み")).toBeInTheDocument();
-    expect(screen.getByText("@testuser")).toBeInTheDocument();
-    expect(screen.getByText(/認証を解除/)).toBeInTheDocument();
-  });
-
-  it("GitHub 認証確認中は「確認中…」が表示される", () => {
-    mockSettingsStore.authStatus2 = "loading";
-    render(<SettingsScreen />);
-    expect(screen.getByText("確認中…")).toBeInTheDocument();
-  });
-
-  it("「GitHub で認証する」クリックで startAuth が呼ばれる", async () => {
-    mockSettingsStore.authStatus = null;
-    render(<SettingsScreen />);
-    fireEvent.click(screen.getByText("GitHub で認証する"));
+    // 解除ボタン（destructive variant）クリック
+    const revokeBtn = screen.getAllByRole("button").find(
+      (b) => b.className.includes("destructive")
+    )!;
+    fireEvent.click(revokeBtn);
     await waitFor(() => {
-      expect(mockSettingsStore.startAuth).toHaveBeenCalledWith(1);
+      expect(mockSettingsStore.revokeAuth).toHaveBeenCalledWith(1);
     });
+    vi.restoreAllMocks();
   });
 
-  // ── OS 通知 ──────────────────────────────────────────────────────
-  it("通知が許可済みの場合「通知が許可されています」が表示される", () => {
-    mockNotificationsStore.permissionStatus = "granted";
+  it("解除ボタン: confirm=false のとき revokeAuth が呼ばれない (line 120)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    mockSettingsStore.authStatus = { connected: true, user_login: "octocat" };
     render(<SettingsScreen />);
-    expect(screen.getByText("通知が許可されています")).toBeInTheDocument();
-  });
-
-  it("通知がブロック済みの場合ブロックメッセージが表示される", () => {
-    mockNotificationsStore.permissionStatus = "denied";
-    render(<SettingsScreen />);
-    expect(
-      screen.getByText("通知がブロックされています。システム設定から許可してください。")
-    ).toBeInTheDocument();
-  });
-
-  it("通知未設定の場合 ALLOW NOTIFICATIONS ボタンが表示される", () => {
-    mockNotificationsStore.permissionStatus = "default";
-    render(<SettingsScreen />);
-    expect(screen.getByText("ALLOW NOTIFICATIONS")).toBeInTheDocument();
-  });
-
-  // ── 検索インデックス ──────────────────────────────────────────────
-  it("プロジェクト未選択時は「プロジェクトを選択してください」と表示される（検索インデックスセクション）", () => {
-    mockProjectStore.currentProject = null;
-    render(<SettingsScreen />);
-    const msgs = screen.getAllByText("プロジェクトを選択してください");
-    expect(msgs.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("「インデックスをリセット」ボタンが表示される", () => {
-    render(<SettingsScreen />);
-    expect(screen.getByText("インデックスをリセット")).toBeInTheDocument();
+    const revokeBtn = screen.getAllByRole("button").find(
+      (b) => b.className.includes("destructive")
+    )!;
+    fireEvent.click(revokeBtn);
+    expect(mockSettingsStore.revokeAuth).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 });

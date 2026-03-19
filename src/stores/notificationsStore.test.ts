@@ -5,6 +5,20 @@ import * as ipc from "../lib/ipc";
 import type { Notification } from "../types";
 
 vi.mock("../lib/ipc");
+
+// @tauri-apps/api/event の listen をモック
+const { mockListen } = vi.hoisted(() => ({
+  mockListen: vi.fn(() => Promise.resolve(() => {})),
+}));
+vi.mock("@tauri-apps/api/event", () => ({ listen: mockListen }));
+
+// @tauri-apps/plugin-notification をモック
+const { mockSendNotification } = vi.hoisted(() => ({
+  mockSendNotification: vi.fn(),
+}));
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  sendNotification: mockSendNotification,
+}));
 // prStore は複雑なので navigateTo テストでは mock する
 vi.mock("./prStore", () => ({
   usePrStore: {
@@ -313,5 +327,56 @@ describe("notificationsStore", () => {
 
     expect(mockOpenPr).toHaveBeenCalledWith(1, 44);
     expect(useUiStore.getState().currentScreen).toBe("pr");
+  });
+
+  // ─── onNotificationNew (OS通知ブランチ) ──────────────────────────────────
+
+  it("onNotificationNew() permissionStatus=granted のとき sendNotification が呼ばれる (lines 109-110)", async () => {
+    useNotificationsStore.setState({ permissionStatus: "granted" });
+    useNotificationsStore.getState().onNotificationNew({ notificationId: 1, title: "テスト通知" });
+    // 動的インポートの完了を待つ
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockSendNotification).toHaveBeenCalledWith({ title: "テスト通知" });
+  });
+
+  // ─── listenEvents ──────────────────────────────────────────────────────────
+
+  it("listenEvents() が cleanup 関数を返す (lines 121-128)", () => {
+    mockListen.mockResolvedValue(vi.fn());
+    const cleanup = useNotificationsStore.getState().listenEvents();
+    expect(typeof cleanup).toBe("function");
+    expect(mockListen).toHaveBeenCalledWith("notification_new", expect.any(Function));
+  });
+
+  it("listenEvents() cleanup 呼び出しで unlisten が実行される", async () => {
+    const mockUnlisten = vi.fn();
+    mockListen.mockResolvedValueOnce(mockUnlisten);
+    const cleanup = useNotificationsStore.getState().listenEvents();
+    // Promise を解決させる
+    await new Promise((r) => setTimeout(r, 0));
+    cleanup();
+    expect(mockUnlisten).toHaveBeenCalled();
+  });
+
+  // ─── listenRingEvents ─────────────────────────────────────────────────────
+
+  it("listenRingEvents() が cleanup 関数を返す (lines 130-136)", () => {
+    mockListen.mockResolvedValue(vi.fn());
+    const cleanup = useNotificationsStore.getState().listenRingEvents();
+    expect(typeof cleanup).toBe("function");
+    expect(mockListen).toHaveBeenCalledWith("ring-event", expect.any(Function));
+  });
+
+  it("ring-event リスナーコールバックで unreadCount が増える", async () => {
+    let ringCb: (() => void) | undefined;
+    mockListen.mockImplementation(async (event: string, cb: () => void) => {
+      if (event === "ring-event") ringCb = cb;
+      return vi.fn();
+    });
+    useNotificationsStore.setState({ unreadCount: 2 });
+    useNotificationsStore.getState().listenRingEvents();
+    await new Promise((r) => setTimeout(r, 0));
+    ringCb?.();
+    expect(useNotificationsStore.getState().unreadCount).toBe(3);
   });
 });

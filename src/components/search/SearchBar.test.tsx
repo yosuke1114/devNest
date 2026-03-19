@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { SearchBar } from "./SearchBar";
 
@@ -71,5 +71,46 @@ describe("SearchBar", () => {
     render(<SearchBar {...defaultProps} onSearchTypeChange={onSearchTypeChange} />);
     fireEvent.click(screen.getByRole("button", { name: /semantic/i }));
     expect(onSearchTypeChange).toHaveBeenCalledWith("semantic");
+  });
+
+  it("入力にフォーカスすると履歴が表示される (line 40)", () => {
+    render(<SearchBar
+      {...defaultProps}
+      query=""
+      history={[{ query: "past search" }]}
+    />);
+    const input = screen.getByRole("textbox");
+    fireEvent.focus(input);
+    expect(screen.getByText("past search")).toBeInTheDocument();
+  });
+
+  it("履歴アイテムクリックで onSelectHistory が呼ばれる (lines 88-90)", () => {
+    const onSelectHistory = vi.fn();
+    render(<SearchBar
+      {...defaultProps}
+      query=""
+      history={[{ query: "past search" }]}
+      onSelectHistory={onSelectHistory}
+    />);
+    fireEvent.focus(screen.getByRole("textbox"));
+    fireEvent.click(screen.getByText("past search"));
+    expect(onSelectHistory).toHaveBeenCalledWith("past search");
+  });
+
+  it("入力がブラーすると履歴が非表示になる (line 41)", async () => {
+    vi.useFakeTimers();
+    render(<SearchBar
+      {...defaultProps}
+      query=""
+      history={[{ query: "past search" }]}
+    />);
+    const input = screen.getByRole("textbox");
+    fireEvent.focus(input);
+    expect(screen.getByText("past search")).toBeInTheDocument();
+    fireEvent.blur(input);
+    // setTimeout 150ms 後に非表示
+    await act(async () => { vi.advanceTimersByTime(200); });
+    expect(screen.queryByText("past search")).not.toBeInTheDocument();
+    vi.useRealTimers();
   });
 });
