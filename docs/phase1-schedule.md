@@ -66,24 +66,24 @@
 
 ### I — インフラ・プロジェクト初期化（5 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| I-01 | Tauri v2 プロジェクト作成（`cargo tauri init`）、Vite + React + TypeScript 設定 | — | 0.5d |
-| I-02 | `src-tauri/Cargo.toml` 依存追加（sqlx, git2, tokio, serde, keyring, tauri-plugin-notification） | I-01 | 0.5d |
-| I-03 | `package.json` 依存追加（zustand, @tauri-apps/api, codemirror, react-markdown, lucide-react） | I-01 | 0.5d |
-| I-04 | GitHub Actions CI 設定（`cargo test` + `npm run typecheck`） | I-01 | 0.5d |
-| I-05 | 開発環境確認（`cargo tauri dev` でウィンドウ表示まで） | I-01〜I-03 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| I-01 | Tauri v2 プロジェクト作成（`cargo tauri init`）、Vite + React + TypeScript 設定 | — | 0.5d | 完了 |
+| I-02 | `src-tauri/Cargo.toml` 依存追加（sqlx, git2, tokio, serde, keyring, tauri-plugin-notification） | I-01 | 0.5d | 完了 |
+| I-03 | `package.json` 依存追加（zustand, @tauri-apps/api, codemirror, react-markdown, lucide-react） | I-01 | 0.5d | 完了 |
+| I-04 | GitHub Actions CI 設定（`cargo test` + `npm run typecheck`） | I-01 | 0.5d | 完了 |
+| I-05 | 開発環境確認（`cargo tauri dev` でウィンドウ表示まで） | I-01〜I-03 | 0.5d | 完了 |
 
 ---
 
 ### D — DB / マイグレーション（4 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| D-01 | sqlx セットアップ・DB 初期化コード（`db::init()`）、WAL モード・foreign_keys 設定 | I-02 | 0.5d |
-| D-02 | `migrations/0001_initial.sql` 作成・`sqlx migrate run` 確認 | D-01 | 1.0d |
-| D-03 | Rust 側の型定義（`models/` — `Project`, `Document`, `Issue`, `IssueDraft` 等） | D-02 | 1.0d |
-| D-04 | `startup_cleanup` コマンド実装（古いレコード削除・pending_submit 除去） | D-02 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| D-01 | sqlx セットアップ・DB 初期化コード（`db::init()`）、WAL モード・foreign_keys 設定 | I-02 | 0.5d | 完了 |
+| D-02 | `migrations/0001_initial.sql` 作成・`sqlx migrate run` 確認 | D-01 | 1.0d | 完了 |
+| D-03 | Rust 側の型定義（`models/` — `Project`, `Document`, `Issue`, `IssueDraft` 等） | D-02 | 1.0d | 完了 |
+| D-04 | `startup_cleanup` コマンド実装（古いレコード削除・pending_submit 除去） | D-02 | 0.5d | 完了 |
 
 ---
 
@@ -91,50 +91,50 @@
 
 #### R-A: プロジェクト管理（4 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-A01 | `project_create` / `project_list` / `project_delete` 実装 | D-03 | 1.0d |
-| R-A02 | `project_update` 実装（Option-of-Option パターン）| R-A01 | 0.5d |
-| R-A03 | `project_get_status` 実装（pending_push_count 等の集計クエリ） | R-A01, D-02 | 0.5d |
-| R-A04 | `project_set_last_opened_document` 実装 | R-A01 | 0.25d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-A01 | `project_create` / `project_list` / `project_delete` 実装 | D-03 | 1.0d | 完了 |
+| R-A02 | `project_update` 実装（Option-of-Option パターン）| R-A01 | 0.5d | 完了 |
+| R-A03 | `project_get_status` 実装（pending_push_count 等の集計クエリ） | R-A01, D-02 | 0.5d | 完了 |
+| R-A04 | `project_set_last_opened_document` 実装 | R-A01 | 0.25d | 完了 |
 
 #### R-B: 設計書 / git2-rs（6 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-B01 | `document_scan` 実装（git ツリー走査・SHA 比較・DB upsert） | R-A01 | 1.5d |
-| R-B02 | `document_list` / `document_get` 実装 | R-B01 | 0.5d |
-| R-B03 | `document_save` 実装（ファイル書込み・auto-commit・push）+ `doc_save_progress` イベント | R-B01 | 1.5d |
-| R-B04 | `document_set_dirty` 実装 | R-B02 | 0.25d |
-| R-B05 | `document_push_retry` 実装（push_failed レコードの再 push） | R-B03 | 0.5d |
-| R-B06 | `sync_log_list` 実装 | R-B03 | 0.25d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-B01 | `document_scan` 実装（git ツリー走査・SHA 比較・DB upsert） | R-A01 | 1.5d | 完了 |
+| R-B02 | `document_list` / `document_get` 実装 | R-B01 | 0.5d | 完了 |
+| R-B03 | `document_save` 実装（ファイル書込み・auto-commit・push）+ `doc_save_progress` イベント | R-B01 | 1.5d | 完了 |
+| R-B04 | `document_set_dirty` 実装 | R-B02 | 0.25d | 完了 |
+| R-B05 | `document_push_retry` 実装（push_failed レコードの再 push） | R-B03 | 0.5d | 完了 |
+| R-B06 | `sync_log_list` 実装 | R-B03 | 0.25d | 完了 |
 
 #### R-C: GitHub 認証（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-C01 | `github_auth_start` 実装（OAuth ブラウザ起動・ローカルコールバックサーバー起動） | R-A01 | 1.0d |
-| R-C02 | `github_auth_complete` 実装（code → token 交換・Keychain 保存）+ `github_auth_done` イベント | R-C01 | 1.0d |
-| R-C03 | `github_auth_status` / `github_auth_revoke` 実装 | R-C02 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-C01 | `github_auth_start` 実装（OAuth ブラウザ起動・ローカルコールバックサーバー起動） | R-A01 | 1.0d | 完了 |
+| R-C02 | `github_auth_complete` 実装（code → token 交換・Keychain 保存）+ `github_auth_done` イベント | R-C01 | 1.0d | 完了 |
+| R-C03 | `github_auth_status` / `github_auth_revoke` 実装 | R-C02 | 0.5d | 完了 |
 
 #### R-D: Issue / ドラフト（6 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-D01 | `issue_sync` 実装（GitHub Issues API 取得・DB upsert）+ `issue_sync_done` イベント | R-C02 | 1.0d |
-| R-D02 | `issue_list` 実装 | R-D01 | 0.25d |
-| R-D03 | `issue_doc_link_list` / `issue_doc_link_add` / `issue_doc_link_remove` 実装 | R-D01, R-B02 | 0.5d |
-| R-D04 | `document_linked_issues` 実装 | R-D03 | 0.25d |
-| R-D05 | `issue_draft_create` / `issue_draft_update` / `issue_draft_list` 実装 | D-03 | 0.5d |
-| R-D06 | `issue_draft_generate` 実装（Anthropic API streaming・`issue_draft_chunk` / `issue_draft_done` イベント） | R-D05 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-D01 | `issue_sync` 実装（GitHub Issues API 取得・DB upsert）+ `issue_sync_done` イベント | R-C02 | 1.0d | 完了 |
+| R-D02 | `issue_list` 実装 | R-D01 | 0.25d | 完了 |
+| R-D03 | `issue_doc_link_list` / `issue_doc_link_add` / `issue_doc_link_remove` 実装 | R-D01, R-B02 | 0.5d | 完了 |
+| R-D04 | `document_linked_issues` 実装 | R-D03 | 0.25d | 完了 |
+| R-D05 | `issue_draft_create` / `issue_draft_update` / `issue_draft_list` 実装 | D-03 | 0.5d | 完了 |
+| R-D06 | `issue_draft_generate` 実装（Anthropic API streaming・`issue_draft_chunk` / `issue_draft_done` イベント） | R-D05 | 1.5d | 完了 |
 
 #### R-E: 設定・その他（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-E01 | `settings_get` / `settings_set` 実装 | D-02 | 0.5d |
-| R-E02 | `github_labels_list` 実装（GitHub API・メモリキャッシュ） | R-C02 | 0.5d |
-| R-E03 | `notification_permission_request` 実装（tauri-plugin-notification） | I-02 | 0.25d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-E01 | `settings_get` / `settings_set` 実装 | D-02 | 0.5d | 完了 |
+| R-E02 | `github_labels_list` 実装（GitHub API・メモリキャッシュ） | R-C02 | 0.5d | 完了 |
+| R-E03 | `notification_permission_request` 実装（tauri-plugin-notification） | I-02 | 0.25d | 完了 |
 
 ---
 
@@ -142,45 +142,45 @@
 
 #### F-A: 基盤（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-A01 | `src/lib/ipc.ts`（型安全 invoke ラッパー）+ Tauri イベントリスナー初期化（`initListeners`） | I-03 | 0.5d |
-| F-A02 | 全ストア雛形作成（11 ストア・型定義・空実装）+ `AppShell` / `GlobalNav` 実装 | F-A01 | 1.0d |
-| F-A03 | 共有 UI コンポーネント実装（`StatusPill`, `AsyncButton`, `IndexProgressBar`, `FilePicker`） | I-03 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-A01 | `src/lib/ipc.ts`（型安全 invoke ラッパー）+ Tauri イベントリスナー初期化（`initListeners`） | I-03 | 0.5d | 完了 |
+| F-A02 | 全ストア雛形作成（11 ストア・型定義・空実装）+ `AppShell` / `GlobalNav` 実装 | F-A01 | 1.0d | 完了 |
+| F-A03 | 共有 UI コンポーネント実装（`StatusPill`, `AsyncButton`, `IndexProgressBar`, `FilePicker`） | I-03 | 1.0d | 完了 |
 
 #### F-B: SetupScreen（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-B01 | `SetupScreen` + `SetupStep1〜3` 実装（projectStore・githubAuthStore・uiStore 接続） | F-A02, R-A01, R-C03 | 1.5d |
-| F-B02 | `SetupStep4〜6` 実装（IndexProgressBar・通知許可）| F-B01, R-E03 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-B01 | `SetupScreen` + `SetupStep1〜3` 実装（projectStore・githubAuthStore・uiStore 接続） | F-A02, R-A01, R-C03 | 1.5d | 完了 |
+| F-B02 | `SetupStep4〜6` 実装（IndexProgressBar・通知許可）| F-B01, R-E03 | 1.0d | 完了 |
 
 #### F-C: EditorScreen（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-C01 | `DocumentTree` + `MarkdownEditor`（CodeMirror 6）実装 | F-A02, R-B02 | 2.0d |
-| F-C02 | `SaveStatusBar` + `documentStore` 全アクション接続（save / dirty / syncLogs） | F-C01, R-B03〜R-B06 | 1.5d |
-| F-C03 | `LinkedIssuesPanel` + `UnsavedWarningModal`（showModal Promise 対応） | F-C02, R-D04 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-C01 | `DocumentTree` + `MarkdownEditor`（CodeMirror 6）実装 | F-A02, R-B02 | 2.0d | 完了 |
+| F-C02 | `SaveStatusBar` + `documentStore` 全アクション接続（save / dirty / syncLogs） | F-C01, R-B03〜R-B06 | 1.5d | 完了 |
+| F-C03 | `LinkedIssuesPanel` + `UnsavedWarningModal`（showModal Promise 対応） | F-C02, R-D04 | 1.0d | 完了 |
 
 #### F-D: IssuesScreen + AIWizard（4 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-D01 | `IssueList` / `IssueListItem` / `IssueFilterBar` 実装 | F-A02, R-D02 | 1.0d |
-| F-D02 | `IssueDetail` / `DocLinkPanel` 実装（issueStore.setActiveIssue・loadDocLinks） | F-D01, R-D03 | 1.0d |
-| F-D03 | `AIWizard` Step 1〜2 実装（wizardInputText → searchContext） | F-D01, R-D05 | 1.0d |
-| F-D04 | `AIWizard` Step 3〜5 実装（streaming → submit → LAUNCH TERMINAL ボタン）| F-D03, R-D06 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-D01 | `IssueList` / `IssueListItem` / `IssueFilterBar` 実装 | F-A02, R-D02 | 1.0d | 完了 |
+| F-D02 | `IssueDetail` / `DocLinkPanel` 実装（issueStore.setActiveIssue・loadDocLinks） | F-D01, R-D03 | 1.0d | 完了 |
+| F-D03 | `AIWizard` Step 1〜2 実装（wizardInputText → searchContext） | F-D01, R-D05 | 1.0d | 完了 |
+| F-D04 | `AIWizard` Step 3〜5 実装（streaming → submit → LAUNCH TERMINAL ボタン）| F-D03, R-D06 | 1.5d | 完了 |
 
 ---
 
 ### E — 結合・動作確認（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| E-01 | S-01 シナリオ通し確認（Setup → Editor 起動まで） | F-B02, R-A04 | 0.5d |
-| E-02 | S-02 シナリオ通し確認（編集 → auto-commit → push → StatusBar 更新） | F-C02, R-B03 | 0.5d |
-| E-03 | S-03 シナリオ通し確認（Wizard → Issue 作成 → Doc リンク） | F-D04, R-D06 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| E-01 | S-01 シナリオ通し確認（Setup → Editor 起動まで） | F-B02, R-A04 | 0.5d | 完了 |
+| E-02 | S-02 シナリオ通し確認（編集 → auto-commit → push → StatusBar 更新） | F-C02, R-B03 | 0.5d | 完了 |
+| E-03 | S-03 シナリオ通し確認（Wizard → Issue 作成 → Doc リンク） | F-D04, R-D06 | 0.5d | 完了 |
 
 ---
 
