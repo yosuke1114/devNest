@@ -52,9 +52,9 @@
 
 ### D — DB / マイグレーション（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| D-07 | `migrations/0004_ai_terminal_conflict.sql` 作成（`terminal_sessions` + `conflict_files` テーブル + インデックス）| Phase 3 完了 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| D-07 | `migrations/0004_ai_terminal_conflict.sql` 作成（`terminal_sessions` + `conflict_files` テーブル + インデックス）| Phase 3 完了 | 0.5d | 完了 |
 
 **マイグレーション内容（抜粋）**
 
@@ -89,23 +89,23 @@ CREATE TABLE conflict_files (
 
 #### R-I: Terminal PTY（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-I01 | `services/pty.rs` 作成（`portable-pty` クレートを使った PTY 管理・spawn・stdin/stdout ブリッジ・SIGINT 送信） | D-07 | 2.0d |
-| R-I02 | `terminal_session_start` 実装（`issue_doc_link_list` で関連設計書取得 → `--context` 引数展開 → PTY spawn → `terminal_output` イベント発火ループ）/ `terminal_input_send` 実装（stdin 書き込み）/ `terminal_session_stop` 実装（SIGINT 送信・status='aborted'）| R-I01 | 1.5d |
-| R-I03 | PTY 終了検知（`terminal_done` イベント発火）: `exit_code` 取得・`has_doc_changes`（changed_files の .md 判定）・`branch_name` 取得・DB 更新 | R-I02 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-I01 | `services/pty.rs` 作成（`portable-pty` クレートを使った PTY 管理・spawn・stdin/stdout ブリッジ・SIGINT 送信） | D-07 | 2.0d | 完了 |
+| R-I02 | `terminal_session_start` 実装（`issue_doc_link_list` で関連設計書取得 → `--context` 引数展開 → PTY spawn → `terminal_output` イベント発火ループ）/ `terminal_input_send` 実装（stdin 書き込み）/ `terminal_session_stop` 実装（SIGINT 送信・status='aborted'）| R-I01 | 1.5d | 完了 |
+| R-I03 | PTY 終了検知（`terminal_done` イベント発火）: `exit_code` 取得・`has_doc_changes`（changed_files の .md 判定）・`branch_name` 取得・DB 更新 | R-I02 | 1.0d | 完了 |
 
 #### R-J: Conflict 解消（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-J01 | `conflict_list` 実装（`conflict_files` テーブルから取得・コンフリクトマーカーパース → `ConflictBlock` 生成）/ `conflict_resolve` 実装（解消選択を DB に記録）/ `conflict_resolve_all` 実装（全ファイル `git add` + `git commit --no-edit` + `conflict_files` レコードの `resolved_at` 更新） | D-07, Phase 2 R-G01（git2-rs 基盤） | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-J01 | `conflict_list` 実装（`conflict_files` テーブルから取得・コンフリクトマーカーパース → `ConflictBlock` 生成）/ `conflict_resolve` 実装（解消選択を DB に記録）/ `conflict_resolve_all` 実装（全ファイル `git add` + `git commit --no-edit` + `conflict_files` レコードの `resolved_at` 更新） | D-07, Phase 2 R-G01（git2-rs 基盤） | 1.5d | 完了 |
 
 #### R-K: PR Design Docs（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-K01 | `pr_doc_diff_get` 実装（GitHub API GET /pulls/{n}/files → .md のみフィルタ → unified diff パース → `DocFileDiff` 返却） | Phase 2 R-F03（GitHub API 基盤） | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-K01 | `pr_doc_diff_get` 実装（GitHub API GET /pulls/{n}/files → .md のみフィルタ → unified diff パース → `DocFileDiff` 返却） | Phase 2 R-F03（GitHub API 基盤） | 0.5d | 完了 |
 
 ---
 
@@ -113,47 +113,47 @@ CREATE TABLE conflict_files (
 
 #### F-K: terminalStore（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-K01 | `terminal.store.ts` 実装（`TerminalState` 型・`startSession` / `sendInput` / `stopSession` / `onTerminalOutput` / `onTerminalDone`・`terminal_output` / `terminal_done` イベントリスナー追加） | R-I02, R-I03 | 1.5d |
-| F-K02 | `terminalStore.startSession` 内で `issueStore.getContextDocIds()` を呼ぶ実装（Phase 1 の issueStore に `getContextDocIds` を追加）| F-K01, Phase 1 F-D02 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-K01 | `terminal.store.ts` 実装（`TerminalState` 型・`startSession` / `sendInput` / `stopSession` / `onTerminalOutput` / `onTerminalDone`・`terminal_output` / `terminal_done` イベントリスナー追加） | R-I02, R-I03 | 1.5d | 完了 |
+| F-K02 | `terminalStore.startSession` 内で `issueStore.getContextDocIds()` を呼ぶ実装（Phase 1 の issueStore に `getContextDocIds` を追加）| F-K01, Phase 1 F-D02 | 0.5d | 完了 |
 
 #### F-L: TerminalScreen（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-L01 | `TerminalScreen.tsx` 基盤実装（xterm.js パネル・`startSession` 呼び出し・`onData` → `sendInput` ブリッジ・`terminal_output` → xterm.js 書き込み） | F-K01 | 2.0d |
-| F-L02 | `TerminalHeader.tsx` 実装（`● running` / `● completed` / `● aborted` ステータス・`■ STOP` ボタン → `stopSession`）| F-L01 | 0.5d |
-| F-L03 | `PRReadyBanner.tsx` 実装（`showPrReadyBanner=true` 時に表示・`CREATE PR →` → `prStore.createPrFromBranch` → `prStore.setActiveTab('design-docs' \| 'code-diff')` → `navigate('pr')`）/ `PRCreateModal.tsx`（PR タイトル・merge method 入力） | F-L01, Phase 2 F-E01 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-L01 | `TerminalScreen.tsx` 基盤実装（xterm.js パネル・`startSession` 呼び出し・`onData` → `sendInput` ブリッジ・`terminal_output` → xterm.js 書き込み） | F-K01 | 2.0d | 完了 |
+| F-L02 | `TerminalHeader.tsx` 実装（`● running` / `● completed` / `● aborted` ステータス・`■ STOP` ボタン → `stopSession`）| F-L01 | 0.5d | 完了 |
+| F-L03 | `PRReadyBanner.tsx` 実装（`showPrReadyBanner=true` 時に表示・`CREATE PR →` → `prStore.createPrFromBranch` → `prStore.setActiveTab('design-docs' \| 'code-diff')` → `navigate('pr')`）/ `PRCreateModal.tsx`（PR タイトル・merge method 入力） | F-L01, Phase 2 F-E01 | 1.0d | 完了 |
 
 #### F-M: conflictStore（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-M01 | `conflict.store.ts` 実装（`ConflictState` 型・`loadConflicts` / `setActiveFile` / `setBlockResolution` / `resolveAllBlocks` / `saveResolutions` / `resolveAll`・`git_pull_done` イベントでコンフリクト検知時に自動 `loadConflicts`） | R-J01 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-M01 | `conflict.store.ts` 実装（`ConflictState` 型・`loadConflicts` / `setActiveFile` / `setBlockResolution` / `resolveAllBlocks` / `saveResolutions` / `resolveAll`・`git_pull_done` イベントでコンフリクト検知時に自動 `loadConflicts`） | R-J01 | 1.5d | 完了 |
 
 #### F-N: ConflictScreen（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-N01 | `ConflictScreen.tsx` / `ConflictFileList.tsx` / `ConflictFileItem.tsx` 実装（ファイル一覧・`setActiveFile`・進捗バー `{resolved}/{total}`） | F-M01 | 1.0d |
-| F-N02 | `ConflictEditor.tsx` 実装（ブロック単位の `USE MINE` / `USE THEIRS` ボタン・`USE ALL` ボタン・`SAVE & MERGE →` ボタン → `resolveAll`） | F-N01 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-N01 | `ConflictScreen.tsx` / `ConflictFileList.tsx` / `ConflictFileItem.tsx` 実装（ファイル一覧・`setActiveFile`・進捗バー `{resolved}/{total}`） | F-M01 | 1.0d | 完了 |
+| F-N02 | `ConflictEditor.tsx` 実装（ブロック単位の `USE MINE` / `USE THEIRS` ボタン・`USE ALL` ボタン・`SAVE & MERGE →` ボタン → `resolveAll`） | F-N01 | 1.5d | 完了 |
 
 #### F-O: PRScreen Design Docs タブ（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-O01 | `TabDesignDocs.tsx` / `DocDiffViewer.tsx` / `DocDiffHeader.tsx` / `DocFileDiff.tsx` / `RequestChangesPanel.tsx` 実装（`pr_doc_diff_get` 呼び出し・`prStore.loadDocDiff` / `requestChanges` アクション追加・Design Docs タブを enabled に変更） | R-K01, Phase 2 F-E01 | 2.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-O01 | `TabDesignDocs.tsx` / `DocDiffViewer.tsx` / `DocDiffHeader.tsx` / `DocFileDiff.tsx` / `RequestChangesPanel.tsx` 実装（`pr_doc_diff_get` 呼び出し・`prStore.loadDocDiff` / `requestChanges` アクション追加・Design Docs タブを enabled に変更） | R-K01, Phase 2 F-E01 | 2.0d | 完了 |
 
 ---
 
 ### E — 結合・動作確認（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| E-08 | S-04 シナリオ通し確認（LAUNCH TERMINAL → PTY 起動 → 入力 → PR READY バナー → CREATE PR） | F-L03 | 0.5d |
-| E-09 | S-05 シナリオ通し確認（Design Docs タブ → diff 確認 → APPROVE → MERGE）| F-O01 | 0.5d |
-| E-10 | S-07 シナリオ通し確認（git pull → コンフリクト → ConflictScreen → USE THEIRS/MINE → SAVE & MERGE）| F-N02 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| E-08 | S-04 シナリオ通し確認（LAUNCH TERMINAL → PTY 起動 → 入力 → PR READY バナー → CREATE PR） | F-L03 | 0.5d | 完了 |
+| E-09 | S-05 シナリオ通し確認（Design Docs タブ → diff 確認 → APPROVE → MERGE）| F-O01 | 0.5d | 完了 |
+| E-10 | S-07 シナリオ通し確認（git pull → コンフリクト → ConflictScreen → USE THEIRS/MINE → SAVE & MERGE）| F-N02 | 0.5d | 完了 |
 
 ---
 
