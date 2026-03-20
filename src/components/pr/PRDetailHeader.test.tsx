@@ -91,7 +91,7 @@ describe("PRDetailHeader", () => {
   });
 
   it("checks_status=null のとき unknown を表示する (line 39-41)", () => {
-    render(<PRDetailHeader pr={makePr({ checks_status: null })} />);
+    render(<PRDetailHeader pr={makePr({ checks_status: undefined })} />);
     expect(screen.getByText("unknown")).toBeInTheDocument();
   });
 });

@@ -233,7 +233,7 @@ describe("EditorScreen — ツールバー", () => {
     documentState.retryPush = vi.fn(() => Promise.resolve());
     documentState.setDirty = vi.fn();
     documentState.fetchLinkedIssues = vi.fn();
-    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99 }));
+    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99, path: "docs/new.md" }));
     documentState.renameDocument = vi.fn(() => Promise.resolve());
     documentState.fetchFileTree = vi.fn();
     documentState.openCodeFile = vi.fn();
@@ -342,7 +342,7 @@ describe("EditorScreen — コンテンツエリア", () => {
     documentState.retryPush = vi.fn(() => Promise.resolve());
     documentState.setDirty = vi.fn();
     documentState.fetchLinkedIssues = vi.fn();
-    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99 }));
+    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99, path: "docs/new.md" }));
     documentState.renameDocument = vi.fn(() => Promise.resolve());
     documentState.fetchFileTree = vi.fn();
     documentState.openCodeFile = vi.fn();
@@ -522,7 +522,7 @@ describe("EditorScreen — UnsavedWarningModal", () => {
     documentState.retryPush = vi.fn(() => Promise.resolve());
     documentState.setDirty = vi.fn();
     documentState.fetchLinkedIssues = vi.fn();
-    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99 }));
+    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99, path: "docs/new.md" }));
     documentState.renameDocument = vi.fn(() => Promise.resolve());
     documentState.fetchFileTree = vi.fn();
     documentState.openCodeFile = vi.fn();

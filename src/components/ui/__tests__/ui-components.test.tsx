@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../tabs";
 import { ScrollArea, ScrollBar } from "../scroll-area";
 import { Switch } from "../switch";
 import { Separator } from "../separator";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../tooltip";
+import { Tooltip, TooltipTrigger, TooltipProvider } from "../tooltip";
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 

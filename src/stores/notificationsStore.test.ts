@@ -369,7 +369,7 @@ describe("notificationsStore", () => {
 
   it("ring-event リスナーコールバックで unreadCount が増える", async () => {
     let ringCb: (() => void) | undefined;
-    mockListen.mockImplementation(async (event: string, cb: () => void) => {
+    (mockListen as ReturnType<typeof vi.fn>).mockImplementation(async (event: string, cb: () => void) => {
       if (event === "ring-event") ringCb = cb;
       return vi.fn();
     });

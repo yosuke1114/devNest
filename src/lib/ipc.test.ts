@@ -270,7 +270,7 @@ describe("ipc — PR", () => {
   });
 
   it("prReviewSubmit", async () => {
-    const payload = { prId: 5 } as Parameters<typeof ipc.prReviewSubmit>[1];
+    const payload = { prId: 5 } as unknown as Parameters<typeof ipc.prReviewSubmit>[1];
     await ipc.prReviewSubmit(1, payload);
     expect(mockInvoke).toHaveBeenCalledWith("pr_review_submit", { projectId: 1, payload });
   });
@@ -527,13 +527,13 @@ describe("ipc — AI", () => {
   });
 
   it("aiReviewChanges", async () => {
-    const request = { scope: "full" } as Parameters<typeof ipc.aiReviewChanges>[1];
+    const request = { scope: "full" } as unknown as Parameters<typeof ipc.aiReviewChanges>[1];
     await ipc.aiReviewChanges("/proj", request);
     expect(mockInvoke).toHaveBeenCalledWith("ai_review_changes", { projectPath: "/proj", request });
   });
 
   it("aiGenerateCode", async () => {
-    const request = { prompt: "add tests" } as Parameters<typeof ipc.aiGenerateCode>[1];
+    const request = { prompt: "add tests" } as unknown as Parameters<typeof ipc.aiGenerateCode>[1];
     await ipc.aiGenerateCode("/proj", request);
     expect(mockInvoke).toHaveBeenCalledWith("ai_generate_code", { projectPath: "/proj", request });
   });
@@ -555,7 +555,7 @@ describe("ipc — Analytics", () => {
   });
 
   it("getSprintAnalysis", async () => {
-    const sprint = { id: "s1" } as Parameters<typeof ipc.getSprintAnalysis>[1];
+    const sprint = { id: "s1" } as unknown as Parameters<typeof ipc.getSprintAnalysis>[1];
     await ipc.getSprintAnalysis("/proj", sprint);
     expect(mockInvoke).toHaveBeenCalledWith("get_sprint_analysis", { projectPath: "/proj", sprint });
   });
@@ -591,13 +591,13 @@ describe("ipc — Kanban & Sprint", () => {
   });
 
   it("sprintSuggestPlan", async () => {
-    const sprint = { id: "s1" } as Parameters<typeof ipc.sprintSuggestPlan>[1];
+    const sprint = { id: "s1" } as unknown as Parameters<typeof ipc.sprintSuggestPlan>[1];
     await ipc.sprintSuggestPlan("/proj", sprint);
     expect(mockInvoke).toHaveBeenCalledWith("sprint_suggest_plan", { projectPath: "/proj", sprintInfo: sprint });
   });
 
   it("sprintGenerateRetro", async () => {
-    const sprint = { id: "s1" } as Parameters<typeof ipc.sprintGenerateRetro>[1];
+    const sprint = { id: "s1" } as unknown as Parameters<typeof ipc.sprintGenerateRetro>[1];
     await ipc.sprintGenerateRetro("/proj", sprint);
     expect(mockInvoke).toHaveBeenCalledWith("sprint_generate_retro", { projectPath: "/proj", sprintInfo: sprint });
   });

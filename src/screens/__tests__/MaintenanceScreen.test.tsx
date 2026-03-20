@@ -177,7 +177,8 @@ describe("MaintenanceScreen", () => {
     maintenanceState.depStatus = "success";
     maintenanceState.depReport = {
       ...mockDepReport,
-      node_deps: [{ ...mockDepReport.node_deps[0], has_vulnerability: false, vulnerability_severity: null }],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      node_deps: [{ ...mockDepReport.node_deps[0], has_vulnerability: false, vulnerability_severity: null }] as any,
       total_vulnerable: 0,
     };
     render(<MaintenanceScreen />);
