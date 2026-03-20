@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(unix)]
+use libc;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -37,12 +39,13 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
-/// Claude Code 起動コマンド引数を構築する純粋関数。
-/// - `instruction` 内の `'` はシェルインジェクション防止のためエスケープする
-/// - `metadata` に応じてオプションフラグを付与する
 /// センチネル文字列（PTY出力でタスク完了を検出するために使用）
 pub(crate) const SWARM_DONE_SENTINEL: &str = "__SWARM_TASK_DONE__";
 
+/// Claude Code 起動コマンド引数を構築する純粋関数。
+///
+/// - `instruction` 内の `'` はシェルインジェクション防止のためエスケープする
+/// - `metadata` に応じてオプションフラグを付与する
 pub(crate) fn build_claude_arg(instruction: &str, metadata: &HashMap<String, String>) -> String {
     let safe_instr = instruction.replace('\'', "'\\''");
     let mut flags = String::new();
@@ -319,7 +322,7 @@ impl WorkerManager {
         // exit code に基づいて done/error を emit する（PTY パターン検出の補完）。
         let statuses_monitor = Arc::clone(&self.statuses);
         let app_monitor = app.clone();
-        let worker_id_monitor = id.clone();
+        let _worker_id_monitor = id.clone();
 
         let worker_id_for_monitor = id.clone();
         std::thread::spawn(move || {
@@ -364,8 +367,10 @@ impl WorkerManager {
 
                 // ③ プロセス自体が終了したか確認（kill(pid,0) で生存確認）
                 let still_running = if let Some(pid) = child.process_id() {
-                    let ret = unsafe { libc::kill(pid as libc::pid_t, 0) };
-                    ret == 0
+                    #[cfg(unix)]
+                    { let ret = unsafe { libc::kill(pid as libc::pid_t, 0) }; ret == 0 }
+                    #[cfg(not(unix))]
+                    { let _ = pid; true }
                 } else {
                     false
                 };

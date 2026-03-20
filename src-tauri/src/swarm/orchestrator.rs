@@ -49,6 +49,12 @@ pub struct OrchestratorRun {
     pub gate_results: Option<Vec<WaveGateResult>>,
 }
 
+impl Default for Orchestrator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Orchestrator {
     pub fn new() -> Self {
         Self { current_run: None }
@@ -583,6 +589,7 @@ mod tests {
         SubTask {
             id,
             title: format!("Task {}", id),
+            role: crate::swarm::subtask::TaskRole::Builder,
             files: vec![],
             instruction: format!("do {}", id),
             depends_on: deps,
@@ -595,6 +602,13 @@ mod tests {
             branch_prefix: "swarm/task-".into(),
             base_branch: "main".into(),
             max_retries: 1,
+            timeout_minutes: 30,
+            default_shell: "zsh".into(),
+            prompt_patterns: "$|%|>".into(),
+            claude_skip_permissions: false,
+            claude_no_stream: false,
+            auto_approve_high_confidence: false,
+            claude_interactive: false,
         }
     }
 

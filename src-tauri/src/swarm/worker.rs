@@ -223,7 +223,7 @@ impl From<OrchestratorTaskConfig> for WorkerConfig {
             role: worker_role,
             label: cfg.task.title.clone(),
             working_dir: std::path::PathBuf::from(&cfg.project_path),
-            assigned_files: cfg.task.files.iter().map(|f| std::path::PathBuf::from(f)).collect(),
+            assigned_files: cfg.task.files.iter().map(std::path::PathBuf::from).collect(),
             depends_on: vec![],
             metadata,
         }

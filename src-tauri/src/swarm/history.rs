@@ -116,6 +116,7 @@ pub async fn save(pool: &SqlitePool, run: &OrchestratorRun) -> Result<i64> {
 
 /// 履歴一覧を新しい順に取得する（最大 limit 件）
 pub async fn list(pool: &SqlitePool, limit: i64) -> Result<Vec<SwarmRunRecord>> {
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(i64, String, String, i64, i64, i64, String, String, String, String)> =
         sqlx::query_as(
             r#"

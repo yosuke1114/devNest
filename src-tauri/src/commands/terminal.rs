@@ -9,14 +9,15 @@ use crate::state::{AppState, PtyMaster, PtySessionHandle};
 
 /// Claude Code CLI を PTY で起動してセッションを開始する。
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn terminal_session_start(
     project_id: i64,
     prompt_summary: Option<String>,
-    issue_number: Option<i64>,
-    issue_id: Option<i64>,
-    context_doc_ids: Option<Vec<i64>>,
+    _issue_number: Option<i64>,
+    _issue_id: Option<i64>,
+    _context_doc_ids: Option<Vec<i64>>,
     branch_name: Option<String>,
-    request_changes_comment: Option<String>,
+    _request_changes_comment: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
     app: AppHandle,

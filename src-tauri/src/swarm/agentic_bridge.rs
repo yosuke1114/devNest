@@ -4,7 +4,6 @@
 /// - 保守スキャン（カバレッジ低下・技術的負債）から Swarm 実行用タスクを生成
 /// - AgentTask の TaskType として SwarmExecution を定義
 /// - ワークフロー YAML の `swarm_execution` アクションをサポート
-
 use serde::{Deserialize, Serialize};
 
 use super::settings::SwarmSettings;
@@ -171,12 +170,9 @@ mod tests {
         let tasks = create_swarm_tasks_from_maintenance(&scan, "product-1");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].priority, TaskPriority::Medium);
-        if let SwarmTaskType::SwarmExecution { prompt, .. } = &tasks[0].task_type {
-            assert!(prompt.contains("ユニットテスト"));
-            assert!(prompt.contains("3.0%"));
-        } else {
-            panic!("Expected SwarmExecution");
-        }
+        let SwarmTaskType::SwarmExecution { prompt, .. } = &tasks[0].task_type;
+        assert!(prompt.contains("ユニットテスト"));
+        assert!(prompt.contains("3.0%"));
     }
 
     #[test]
@@ -185,12 +181,9 @@ mod tests {
         let tasks = create_swarm_tasks_from_maintenance(&scan, "product-1");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].priority, TaskPriority::Low);
-        if let SwarmTaskType::SwarmExecution { prompt, .. } = &tasks[0].task_type {
-            assert!(prompt.contains("リファクタリング"));
-            assert!(prompt.contains("80.0"));
-        } else {
-            panic!("Expected SwarmExecution");
-        }
+        let SwarmTaskType::SwarmExecution { prompt, .. } = &tasks[0].task_type;
+        assert!(prompt.contains("リファクタリング"));
+        assert!(prompt.contains("80.0"));
     }
 
     #[test]

@@ -969,6 +969,6 @@ mod tests {
         let client = GitHubClient::new(&token, &owner, &repo);
         let issues = client.list_issues(Some("open")).await.unwrap();
         // Just ensure it doesn't error; the repo may have 0 issues
-        assert!(issues.len() >= 0);
+        assert!(issues.is_empty() || !issues.is_empty()); // always succeeds; just verify no error
     }
 }

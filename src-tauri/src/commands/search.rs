@@ -57,12 +57,9 @@ pub async fn index_build(
         if !api_key.is_empty() {
             let pending = db::search::get_pending_chunks(&state.db, doc.id).await?;
             for (chunk_id, chunk_content) in &pending {
-                match embedding::embed_text(chunk_content, &api_key).await {
-                    Ok(vec) => {
-                        let _ = db::search::save_embedding(&state.db, *chunk_id, &vec).await;
-                    }
-                    Err(_) => {} // レート制限等はスキップ
-                }
+                if let Ok(vec) = embedding::embed_text(chunk_content, &api_key).await {
+                    let _ = db::search::save_embedding(&state.db, *chunk_id, &vec).await;
+                } // レート制限等はスキップ
                 // レート制限対策: 200ms 待機
                 tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }

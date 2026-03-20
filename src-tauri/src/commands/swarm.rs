@@ -15,7 +15,7 @@ use crate::swarm::{
     wave::{Wave, WaveGateResult},
     wave_gate::WaveGate,
     wave_orchestrator::{SharedWaveOrchestrator, WaveOrchestratorSnapshot, WaveOrchestratorStatus},
-    worker::{ExecutionState, WorkerConfig, WorkerInfo, WorkerStatus},
+    worker::{WorkerConfig, WorkerInfo, WorkerStatus},
     SharedOrchestrator,
     SharedWorkerManager,
 };
@@ -121,7 +121,7 @@ pub async fn orchestrator_start(
     app: tauri::AppHandle,
 ) -> Result<OrchestratorRun, String> {
     use tauri::Emitter;
-    let (run, spawn_requests) = {
+    let (_run, spawn_requests) = {
         let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
         // 前回の Run が終了済みなら自動クリアして再実行可能にする
         if let Some(prev) = &orch.current_run {
@@ -182,10 +182,11 @@ pub async fn orchestrator_notify_worker_done(
     };
 
     for req in spawn_requests {
-        let new_id = match {
+        let spawn_result = {
             let mut mgr = manager.lock().map_err(|e| e.to_string())?;
             mgr.spawn_worker(req.worker_config.into(), app.clone())
-        } {
+        };
+        let new_id = match spawn_result {
             Ok(id) => id,
             Err(e) => {
                 eprintln!("[Orchestrator] spawn_worker failed for task {}: {}", req.task_id, e);

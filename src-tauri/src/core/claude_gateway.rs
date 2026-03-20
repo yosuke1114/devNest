@@ -2,7 +2,6 @@
 ///
 /// 現在は PTY 経由（`commands/terminal.rs`）の Claude Code 起動をラップする薄い層。
 /// Phase 7 以降で MCP トランスポートへの差し替えが可能な構造にする。
-
 pub enum Transport {
     /// 現在の実装：PTY 経由で claude CLI を起動
     Pty,
