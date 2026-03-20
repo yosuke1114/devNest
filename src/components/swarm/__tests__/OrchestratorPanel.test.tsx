@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OrchestratorPanel } from "../OrchestratorPanel";
+import type { SubTask } from "../types";
 
 const { mockInvoke, mockStartRun, mockListenEvents } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
@@ -63,8 +64,8 @@ describe("OrchestratorPanel", () => {
       .mockResolvedValueOnce({ cpuPct: 20, memFreeGb: 8, spawnSuppressed: false }) // get_system_resources
       .mockResolvedValueOnce({
         tasks: [
-          { id: 1, title: "Task A", files: [], instruction: "do A", dependsOn: [] },
-          { id: 2, title: "Task B", files: [], instruction: "do B", dependsOn: [1] },
+          { id: 1, title: "Task A", role: "builder" as const, files: [], instruction: "do A", dependsOn: [] },
+          { id: 2, title: "Task B", role: "builder" as const, files: [], instruction: "do B", dependsOn: [1] },
         ],
         conflictWarnings: [],
         cycleError: null,
@@ -84,7 +85,7 @@ describe("OrchestratorPanel", () => {
     mockInvoke
       .mockResolvedValueOnce({ cpuPct: 20, memFreeGb: 8, spawnSuppressed: false })
       .mockResolvedValueOnce({
-        tasks: [{ id: 1, title: "Task A", files: [], instruction: "do A", dependsOn: [1] }],
+        tasks: [{ id: 1, title: "Task A", role: "builder" as const, files: [], instruction: "do A", dependsOn: [1] }],
         conflictWarnings: [],
         cycleError: "循環依存: 1 → 1",
       });
@@ -127,8 +128,8 @@ describe("OrchestratorPanel", () => {
 
   // ─── SubTaskCard ───────────────────────────────────────────────
 
-  async function renderWithTasks(tasks = [
-    { id: 1, title: "Task A", files: [], instruction: "do A", dependsOn: [] },
+  async function renderWithTasks(tasks: SubTask[] = [
+    { id: 1, title: "Task A", role: "builder", files: [], instruction: "do A", dependsOn: [] },
   ]) {
     mockInvoke
       .mockResolvedValueOnce({ cpuPct: 20, memFreeGb: 8, spawnSuppressed: false })
@@ -165,14 +166,14 @@ describe("OrchestratorPanel", () => {
 
   it("SubTaskCard files あり: ファイル数を表示する (line 361-365)", async () => {
     await renderWithTasks([
-      { id: 1, title: "Task A", files: ["src/main.rs", "lib.rs"], instruction: "do A", dependsOn: [] },
+      { id: 1, title: "Task A", role: "builder" as const, files: ["src/main.rs", "lib.rs"], instruction: "do A", dependsOn: [] },
     ]);
     expect(screen.getByText("2 ファイル")).toBeInTheDocument();
   });
 
   it("SubTaskCard 展開後 files あり: ファイルタグを表示する (line 378-382)", async () => {
     await renderWithTasks([
-      { id: 1, title: "Task A", files: ["src/main.rs"], instruction: "do A", dependsOn: [] },
+      { id: 1, title: "Task A", role: "builder" as const, files: ["src/main.rs"], instruction: "do A", dependsOn: [] },
     ]);
     fireEvent.click(screen.getByText("Task A").closest("div")!);
     expect(screen.getByText("src/main.rs")).toBeInTheDocument();
@@ -180,8 +181,8 @@ describe("OrchestratorPanel", () => {
 
   it("SubTaskCard dependsOn あり: 待機ラベルを表示する (line 356-359)", async () => {
     await renderWithTasks([
-      { id: 1, title: "Task A", files: [], instruction: "do A", dependsOn: [] },
-      { id: 2, title: "Task B", files: [], instruction: "do B", dependsOn: [1] },
+      { id: 1, title: "Task A", role: "builder" as const, files: [], instruction: "do A", dependsOn: [] },
+      { id: 2, title: "Task B", role: "builder" as const, files: [], instruction: "do B", dependsOn: [1] },
     ]);
     expect(screen.getByText(/Task 1 待/)).toBeInTheDocument();
   });

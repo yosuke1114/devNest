@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ResultSummaryPanel } from "../ResultSummaryPanel";
-import type { OrchestratorRun, AggregatedResult, MergeOutcome } from "../../../stores/swarmStore";
+import type { OrchestratorRun, AggregatedResult } from "../../../stores/swarmStore";
 
 const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
 
@@ -18,11 +18,14 @@ function makeRun(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
     projectPath: "/tmp/proj",
     total: 2,
     doneCount: 2,
+    failed: 0,
+    waves: null,
+    currentWave: null,
+    gateResults: null,
     assignments: [
       { workerId: "w1", task: { id: 1, title: "Task A", role: "builder" as const, files: [], instruction: "", dependsOn: [] }, branchName: "swarm/worker-1", status: "done", executionState: "done" as const, retryCount: 0 },
       { workerId: "w2", task: { id: 2, title: "Task B", role: "builder" as const, files: [], instruction: "", dependsOn: [] }, branchName: "swarm/worker-2", status: "done", executionState: "done" as const, retryCount: 0 },
     ],
-    mergeResults: [],
     ...overrides,
   };
 }
@@ -107,25 +110,17 @@ describe("ResultSummaryPanel", () => {
     expect(screen.getByText("Task B")).toBeTruthy();
   });
 
-  it("コンフリクトファイルボタンをクリックするとonOpenConflictが呼ばれる", () => {
-    const onOpenConflict = vi.fn();
-    const conflictOutcome: MergeOutcome = {
-      branch: "swarm/worker-1",
-      success: false,
-      conflictFiles: ["src/foo.ts"],
-      error: null,
-    };
+  it("partialDoneステータスではconflict-file-buttonは表示されない（mergeResults廃止済み）", () => {
     render(
       <ResultSummaryPanel
-        run={makeRun({ mergeResults: [conflictOutcome] })}
+        run={makeRun({ status: "partialDone" })}
         result={null}
         onReset={vi.fn()}
-        onOpenConflict={onOpenConflict}
+        onOpenConflict={vi.fn()}
       />
     );
-    const btn = screen.getByTestId("conflict-file-button");
-    fireEvent.click(btn);
-    expect(onOpenConflict).toHaveBeenCalledWith(conflictOutcome);
+    // コンポーネントは conflictedOutcomes を常に空にするためボタンは表示されない
+    expect(screen.queryByTestId("conflict-file-button")).toBeNull();
   });
 
   it("PR作成ボタンクリックでnavigate('pr')が呼ばれる", () => {

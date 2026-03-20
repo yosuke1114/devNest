@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { useSwarmStore } from "./swarmStore";
-import type { SubTask, SwarmSettings, WorkerStatus } from "../components/swarm/types";
+import type { SubTask, SwarmSettings } from "../components/swarm/types";
 import type { WorkerAssignment, OrchestratorRun, MergeOutcome, AggregatedResult } from "./swarmStore";
 
 const { mockInvoke } = vi.hoisted(() => ({ mockInvoke: vi.fn() }));
@@ -20,6 +20,7 @@ const defaultSettings: SwarmSettings = {
   claudeSkipPermissions: false,
   claudeNoStream: false,
   autoApproveHighConfidence: false,
+  claudeInteractive: false,
 };
 
 function makeTask(id: number, dependsOn: number[] = []): SubTask {
@@ -45,9 +46,12 @@ function makeRun(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
     assignments: [makeAssignment()],
     baseBranch: "main",
     projectPath: "/tmp/proj",
-    mergeResults: [],
     total: 1,
     doneCount: 0,
+    failed: 0,
+    waves: null,
+    currentWave: null,
+    gateResults: null,
     ...overrides,
   };
 }
@@ -241,7 +245,8 @@ describe("swarmStore", () => {
     it("orchestrator-status-changed で currentRun が更新される", async () => {
       const { listen } = await import("@tauri-apps/api/event");
       const listeners: Record<string, (event: unknown) => void> = {};
-      vi.mocked(listen).mockImplementation(async (event: string, cb: (event: unknown) => void) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (listen as any).mockImplementation(async (event: any, cb: any) => {
         listeners[event] = cb;
         return vi.fn();
       });
@@ -258,7 +263,8 @@ describe("swarmStore", () => {
     it("orchestrator-merge-ready で mergeReady が true になる", async () => {
       const { listen } = await import("@tauri-apps/api/event");
       const listeners: Record<string, (event: unknown) => void> = {};
-      vi.mocked(listen).mockImplementation(async (event: string, cb: (event: unknown) => void) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (listen as any).mockImplementation(async (event: any, cb: any) => {
         listeners[event] = cb;
         return vi.fn();
       });
@@ -266,16 +272,17 @@ describe("swarmStore", () => {
       useSwarmStore.getState().listenOrchestratorEvents();
       await new Promise((r) => setTimeout(r, 0));
 
-      const run = makeRun({ status: "merge_ready" });
+      const run = makeRun({ status: "merging" });
       listeners["orchestrator-merge-ready"]?.({ payload: run });
       expect(useSwarmStore.getState().mergeReady).toBe(true);
-      expect(useSwarmStore.getState().currentRun?.status).toBe("merge_ready");
+      expect(useSwarmStore.getState().currentRun?.status).toBe("merging");
     });
 
     it("orchestrator-merge-done で isMerging が false になり aggregatedResult を取得する", async () => {
       const { listen } = await import("@tauri-apps/api/event");
       const listeners: Record<string, (event: unknown) => void> = {};
-      vi.mocked(listen).mockImplementation(async (event: string, cb: (event: unknown) => void) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (listen as any).mockImplementation(async (event: any, cb: any) => {
         listeners[event] = cb;
         return vi.fn();
       });

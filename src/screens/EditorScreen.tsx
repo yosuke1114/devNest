@@ -41,7 +41,6 @@ export function EditorScreen() {
     linkedIssues,
     saveStatus,
     saveProgress,
-    fetchDocuments,
     scanDocuments,
     openDocument,
     saveDocument,
