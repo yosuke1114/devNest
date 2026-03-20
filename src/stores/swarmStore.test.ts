@@ -23,7 +23,7 @@ const defaultSettings: SwarmSettings = {
 };
 
 function makeTask(id: number, dependsOn: number[] = []): SubTask {
-  return { id, title: `Task ${id}`, files: [], instruction: `do ${id}`, dependsOn };
+  return { id, title: `Task ${id}`, role: "builder", files: [], instruction: `do ${id}`, dependsOn };
 }
 
 function makeAssignment(overrides: Partial<WorkerAssignment> = {}): WorkerAssignment {

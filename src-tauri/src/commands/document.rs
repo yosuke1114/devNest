@@ -109,8 +109,21 @@ pub async fn document_scan(
         }
     }
 
+    // ディスクに存在しないファイルをDBから削除
+    let scanned_paths: std::collections::HashSet<&str> = scanned.iter().map(|f| f.path.as_str()).collect();
+    let mut deleted = 0u32;
+    for doc in &existing {
+        if !scanned_paths.contains(doc.path.as_str()) {
+            sqlx::query("DELETE FROM documents WHERE id = ?")
+                .bind(doc.id)
+                .execute(&state.db)
+                .await?;
+            deleted += 1;
+        }
+    }
+
     let total = added + updated;
-    Ok(ScanResult { added, updated, deleted: 0, total })
+    Ok(ScanResult { added, updated, deleted, total })
 }
 
 #[tauri::command]

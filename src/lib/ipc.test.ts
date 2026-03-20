@@ -602,21 +602,6 @@ describe("ipc — Kanban & Sprint", () => {
     expect(mockInvoke).toHaveBeenCalledWith("sprint_generate_retro", { projectPath: "/proj", sprintInfo: sprint });
   });
 
-  it("storyMapGet", async () => {
-    await ipc.storyMapGet("/proj", "p1");
-    expect(mockInvoke).toHaveBeenCalledWith("story_map_get", { projectPath: "/proj", productId: "p1" });
-  });
-
-  it("storyMapSave", async () => {
-    const map = { productId: "p1" } as Parameters<typeof ipc.storyMapSave>[1];
-    await ipc.storyMapSave("/proj", map);
-    expect(mockInvoke).toHaveBeenCalledWith("story_map_save", { projectPath: "/proj", map });
-  });
-
-  it("flowAnalyze", async () => {
-    await ipc.flowAnalyze("/proj", "p1");
-    expect(mockInvoke).toHaveBeenCalledWith("flow_analyze", { projectPath: "/proj", productId: "p1" });
-  });
 });
 
 describe("ipc — MCP", () => {

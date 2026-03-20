@@ -9,6 +9,7 @@ import {
   IconGitPullRequest,
   IconLayoutGrid,
   IconLayoutKanban,
+  IconPlug,
   IconRefresh,
   IconRobot,
   IconSettings,
@@ -251,29 +252,53 @@ export function Sidebar() {
             + プロジェクト追加
           </button>
         ) : (
-          <select
-            value={currentProject?.id ?? ""}
-            onChange={(e) => {
-              const p = projects.find((proj) => proj.id === Number(e.target.value));
-              if (p) selectProject(p);
-            }}
-            style={{
-              width: "100%",
-              background: "#1e1e32",
-              border: "1px solid #2a2a3f",
-              borderRadius: 6,
-              color: "#e0e0e0",
-              padding: "5px 8px",
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: "flex", gap: 4 }}>
+            <select
+              value={currentProject?.id ?? ""}
+              onChange={(e) => {
+                const p = projects.find((proj) => proj.id === Number(e.target.value));
+                if (p) selectProject(p);
+              }}
+              style={{
+                flex: 1,
+                background: "#1e1e32",
+                border: "1px solid #2a2a3f",
+                borderRadius: 6,
+                color: "#e0e0e0",
+                padding: "5px 8px",
+                fontSize: 12,
+                cursor: "pointer",
+                minWidth: 0,
+              }}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => navigate("setup")}
+              title="新規プロジェクト追加"
+              style={{
+                flexShrink: 0,
+                width: 28,
+                height: 28,
+                background: "#2a2a3f",
+                border: "1px solid #3a3a5f",
+                borderRadius: 6,
+                color: "#a0a0c0",
+                cursor: "pointer",
+                fontSize: 16,
+                lineHeight: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              +
+            </button>
+          </div>
         )}
       </div>
 
@@ -384,6 +409,13 @@ export function Sidebar() {
           icon={<IconChartBar size={18} />}
           active={currentScreen === "sprint"}
           onClick={() => handleNavigate("sprint")}
+        />
+        <SidebarItem
+          screen="mcp"
+          label="MCP"
+          icon={<IconPlug size={18} />}
+          active={currentScreen === "mcp"}
+          onClick={() => handleNavigate("mcp")}
         />
       </nav>
 

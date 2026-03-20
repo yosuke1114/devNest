@@ -52,6 +52,7 @@ export function SettingsScreen() {
   const [indexResetting, setIndexResetting] = useState(false);
   const [indexResetMsg, setIndexResetMsg] = useState<string | null>(null);
 
+
   useEffect(() => {
     loadCredentials();
     if (!currentProject) return;

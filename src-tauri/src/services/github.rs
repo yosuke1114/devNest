@@ -347,7 +347,7 @@ impl GitHubClient {
 
     /// GET /repos/{owner}/{repo}/pulls
     pub async fn list_pull_requests(&self, state: Option<&str>) -> Result<Vec<GitHubPullRequest>> {
-        let state = state.unwrap_or("open");
+        let state = state.unwrap_or("all");
         let url = format!(
             "{}/repos/{}/{}/pulls?state={}&per_page=100",
             self.base_url, self.owner, self.repo, state

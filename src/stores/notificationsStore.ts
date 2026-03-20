@@ -128,10 +128,10 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   },
 
   listenRingEvents: () => {
+    // ring-event は内部ステータス通知（DB記録なし）なので unreadCount には加算しない。
+    // 通知パネルに表示される通知は notification_push 経由の DB 記録のみ。
     const unlistenPromise = listen<{ urgency: string }>("ring-event", () => {
-      set((state) => ({
-        unreadCount: (state.unreadCount ?? 0) + 1,
-      }));
+      // no-op: badge カウントは notification_new イベントのみで管理
     });
     return () => { unlistenPromise.then((fn) => fn()); };
   },

@@ -19,8 +19,8 @@ function makeRun(overrides: Partial<OrchestratorRun> = {}): OrchestratorRun {
     total: 2,
     doneCount: 2,
     assignments: [
-      { workerId: "w1", task: { id: 1, title: "Task A", files: [], instruction: "", dependsOn: [] }, branchName: "swarm/worker-1", status: "done", executionState: "done" as const, retryCount: 0 },
-      { workerId: "w2", task: { id: 2, title: "Task B", files: [], instruction: "", dependsOn: [] }, branchName: "swarm/worker-2", status: "done", executionState: "done" as const, retryCount: 0 },
+      { workerId: "w1", task: { id: 1, title: "Task A", role: "builder" as const, files: [], instruction: "", dependsOn: [] }, branchName: "swarm/worker-1", status: "done", executionState: "done" as const, retryCount: 0 },
+      { workerId: "w2", task: { id: 2, title: "Task B", role: "builder" as const, files: [], instruction: "", dependsOn: [] }, branchName: "swarm/worker-2", status: "done", executionState: "done" as const, retryCount: 0 },
     ],
     mergeResults: [],
     ...overrides,

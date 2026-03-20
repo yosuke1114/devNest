@@ -123,6 +123,18 @@ pub async fn orchestrator_start(
     use tauri::Emitter;
     let (run, spawn_requests) = {
         let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        // 前回の Run が終了済みなら自動クリアして再実行可能にする
+        if let Some(prev) = &orch.current_run {
+            use crate::swarm::worker::RunStatus;
+            match prev.status {
+                RunStatus::Done | RunStatus::PartialDone | RunStatus::Cancelled => {
+                    orch.clear_run();
+                }
+                RunStatus::Running => {
+                    return Err("既に実行中の Swarm があります。完了またはキャンセル後に再実行してください。".into());
+                }
+            }
+        }
         orch.start_run(tasks, settings, project_path)?
     };
 
@@ -137,8 +149,13 @@ pub async fn orchestrator_start(
         orch.assign_worker_id(req.task_id, new_id);
     }
 
-    let _ = app.emit("orchestrator-status-changed", &run);
-    Ok(run)
+    // assign_worker_id 後の最新ステートを取得して返す
+    let updated_run = {
+        let orch = orchestrator.lock().map_err(|e| e.to_string())?;
+        orch.current_run.clone().ok_or_else(|| "No active run".to_string())?
+    };
+    let _ = app.emit("orchestrator-status-changed", &updated_run);
+    Ok(updated_run)
 }
 
 /// Orchestrator の現在のステータスを返す
@@ -180,6 +197,7 @@ pub async fn orchestrator_notify_worker_done(
         orch.assign_worker_id(req.task_id, new_id);
     }
 
+    // assign_worker_id 後の最新ステートを emit する
     let orch = orchestrator.lock().map_err(|e| e.to_string())?;
     if let Some(run) = &orch.current_run {
         let _ = app.emit("orchestrator-status-changed", run);
@@ -633,4 +651,38 @@ pub async fn orchestrator_advance_wave(
     }
 
     Ok(snapshot)
+}
+
+// ─── Swarm 履歴コマンド ──────────────────────────────────────
+
+use crate::swarm::history::{SwarmRunRecord, save as history_save, list as history_list, delete as history_delete};
+
+#[tauri::command]
+pub async fn swarm_history_save(
+    run: OrchestratorRun,
+    state: State<'_, AppState>,
+) -> Result<i64, String> {
+    history_save(&state.db, &run)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn swarm_history_list(
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SwarmRunRecord>, String> {
+    history_list(&state.db, limit.unwrap_or(50))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn swarm_history_delete(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    history_delete(&state.db, &run_id)
+        .await
+        .map_err(|e| e.to_string())
 }

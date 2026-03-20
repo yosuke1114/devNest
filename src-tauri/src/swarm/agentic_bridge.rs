@@ -131,6 +131,7 @@ pub fn swarm_task_to_subtasks(task_type: &SwarmTaskType) -> Vec<SubTask> {
             vec![SubTask {
                 id: 1,
                 title: "Swarm 自動実行".to_string(),
+                role: crate::swarm::subtask::TaskRole::Builder,
                 files: vec![],
                 instruction: prompt.clone(),
                 depends_on: vec![],

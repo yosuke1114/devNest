@@ -1,19 +1,25 @@
-/// Claude Code フックをプロジェクトの .claude/settings.json に書き込むモジュール。
+/// Claude Code フックによる Swarm Worker 完了検知モジュール。
 ///
-/// PostTask / TaskError フックとして `devnest worker done --worker-id <id>` を登録することで、
-/// Claude Code がタスクを完了・エラー終了した直後に Socket API 経由で完了通知を受け取れる。
-use std::path::Path;
+/// # 設計方針
+/// 複数 Worker が同一プロジェクトの `.claude/settings.json` を上書き合う競合を避けるため、
+/// グローバル設定 `~/.claude/settings.json` に Stop フックを1回だけ書き込む。
+/// 各 Worker は起動時に `SWARM_WORKER_ID` 環境変数を持ち、
+/// Stop フックは `/tmp/devnest-done-<worker-id>` ファイルを作成する。
+/// Monitor Thread がこのファイルをポーリングして完了を検出する。
+use std::path::PathBuf;
 
-/// 指定プロジェクトの .claude/settings.json に Swarm 完了フックを設定する。
-///
-/// 既存の settings.json がある場合は `hooks` キーだけ上書きし、他のフィールドは保持する。
-pub fn setup_claude_hooks(project_path: &Path, worker_id: &str) -> Result<(), String> {
-    let claude_dir = project_path.join(".claude");
-    std::fs::create_dir_all(&claude_dir).map_err(|e| format!("create .claude dir: {e}"))?;
+// ─── グローバルフック設定 ──────────────────────────────────────
 
-    let settings_path = claude_dir.join("settings.json");
+/// グローバル `~/.claude/settings.json` に Swarm Stop フックを設定する。
+/// Stop フック: claude が処理を完了したとき `SWARM_WORKER_ID` ファイルを /tmp に作成する。
+/// 既存の設定は保持し、hooks.Stop のみを上書きする。
+pub fn install_global_stop_hook() -> Result<(), String> {
+    let settings_path = global_settings_path()?;
 
-    // 既存の settings.json を読み込む（または空オブジェクトで開始）
+    if let Some(parent) = settings_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create ~/.claude dir: {e}"))?;
+    }
+
     let mut settings: serde_json::Value = if settings_path.exists() {
         let content = std::fs::read_to_string(&settings_path)
             .map_err(|e| format!("read settings.json: {e}"))?;
@@ -22,97 +28,102 @@ pub fn setup_claude_hooks(project_path: &Path, worker_id: &str) -> Result<(), St
         serde_json::json!({})
     };
 
-    // hooks セクションを書き込む
-    // Claude Code hooks フォーマット:
-    //   { "hooks": { "PostTask": [{ "hooks": [{"type":"command","command":"..."}] }] } }
-    let hook_cmd = format!("devnest worker done --worker-id {}", worker_id);
-    let hook_entry = serde_json::json!([{
-        "hooks": [{ "type": "command", "command": hook_cmd }]
-    }]);
+    // Stop フック: SWARM_WORKER_ID がセットされている場合のみ実行
+    // (通常の claude 利用時は SWARM_WORKER_ID が未設定なので何もしない)
+    let hook_cmd = r#"[ -n "$SWARM_WORKER_ID" ] && touch /tmp/devnest-done-"$SWARM_WORKER_ID" || true"#;
 
     settings["hooks"] = serde_json::json!({
-        "PostTask": hook_entry,
-        "TaskError": hook_entry,
+        "Stop": [{
+            "hooks": [{
+                "type": "command",
+                "command": hook_cmd
+            }]
+        }]
     });
 
-    let json_str =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {e}"))?;
+    let json_str = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("serialize: {e}"))?;
     std::fs::write(&settings_path, json_str)
         .map_err(|e| format!("write settings.json: {e}"))?;
 
+    eprintln!("[Hooks] グローバル Stop フックを設定しました: {:?}", settings_path);
     Ok(())
 }
 
-/// Swarm フックを削除する（hooks キーを取り除く）。
-/// ワーカー終了後に呼び出してプロジェクトをクリーンな状態に戻す。
-pub fn teardown_claude_hooks(project_path: &Path) {
-    let settings_path = project_path.join(".claude").join("settings.json");
-    if let Ok(content) = std::fs::read_to_string(&settings_path) {
-        if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(obj) = settings.as_object_mut() {
-                obj.remove("hooks");
-            }
-            if let Ok(json_str) = serde_json::to_string_pretty(&settings) {
-                let _ = std::fs::write(&settings_path, json_str);
+/// グローバルフックを削除する（アプリ終了時などに呼ぶ）
+pub fn uninstall_global_stop_hook() {
+    if let Ok(settings_path) = global_settings_path() {
+        if let Ok(content) = std::fs::read_to_string(&settings_path) {
+            if let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(obj) = settings.as_object_mut() {
+                    obj.remove("hooks");
+                }
+                if let Ok(json_str) = serde_json::to_string_pretty(&settings) {
+                    let _ = std::fs::write(&settings_path, json_str);
+                }
             }
         }
     }
 }
 
+// ─── Worker 完了ファイル管理 ───────────────────────────────────
+
+/// Worker 完了を示す /tmp ファイルパスを返す
+pub fn done_file_path(worker_id: &str) -> PathBuf {
+    PathBuf::from(format!("/tmp/devnest-done-{}", worker_id))
+}
+
+/// Worker 完了ファイルが存在するか確認する（Monitor Thread がポーリングに使う）
+pub fn is_done_file_present(worker_id: &str) -> bool {
+    done_file_path(worker_id).exists()
+}
+
+/// Worker 完了ファイルを削除する（次回実行に備えてクリーンアップ）
+pub fn cleanup_done_file(worker_id: &str) {
+    let _ = std::fs::remove_file(done_file_path(worker_id));
+}
+
+// ─── ヘルパー ─────────────────────────────────────────────────
+
+fn global_settings_path() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .ok_or_else(|| "ホームディレクトリが取得できません".to_string())
+        .map(|h| h.join(".claude").join("settings.json"))
+}
+
+// ─── 旧 API 互換（setup_claude_hooks / teardown_claude_hooks）────
+// 旧来の per-project フック設定（現在は使用しないが他モジュールからの参照用に残す）
+
+/// @deprecated グローバルフック方式に移行済み。使用しないこと。
+#[allow(dead_code)]
+pub fn setup_claude_hooks(_project_path: &std::path::Path, _worker_id: &str) -> Result<(), String> {
+    Ok(()) // no-op
+}
+
+/// @deprecated グローバルフック方式に移行済み。使用しないこと。
+#[allow(dead_code)]
+pub fn teardown_claude_hooks(_project_path: &std::path::Path) {
+    // no-op
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
     #[test]
-    fn setup_creates_claude_dir_and_settings() {
-        let dir = TempDir::new().unwrap();
-        let result = setup_claude_hooks(dir.path(), "worker-abc");
-        assert!(result.is_ok(), "{:?}", result);
-
-        let settings_path = dir.path().join(".claude").join("settings.json");
-        assert!(settings_path.exists());
-
-        let content = fs::read_to_string(&settings_path).unwrap();
-        assert!(content.contains("worker-abc"));
-        assert!(content.contains("PostTask"));
-        assert!(content.contains("TaskError"));
-        assert!(content.contains("devnest worker done"));
+    fn done_file_path_contains_worker_id() {
+        let path = done_file_path("test-worker-123");
+        assert!(path.to_string_lossy().contains("test-worker-123"));
+        assert!(path.to_string_lossy().contains("devnest-done"));
     }
 
     #[test]
-    fn setup_preserves_existing_fields() {
-        let dir = TempDir::new().unwrap();
-        let claude_dir = dir.path().join(".claude");
-        fs::create_dir_all(&claude_dir).unwrap();
-        let settings_path = claude_dir.join("settings.json");
-        fs::write(&settings_path, r#"{"model": "claude-opus-4-5"}"#).unwrap();
-
-        setup_claude_hooks(dir.path(), "w1").unwrap();
-
-        let content = fs::read_to_string(&settings_path).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert_eq!(v["model"].as_str(), Some("claude-opus-4-5"));
-        assert!(v["hooks"].is_object());
+    fn is_done_file_absent_when_not_created() {
+        assert!(!is_done_file_present("nonexistent-worker-xyz"));
     }
 
     #[test]
-    fn teardown_removes_hooks_key() {
-        let dir = TempDir::new().unwrap();
-        setup_claude_hooks(dir.path(), "w2").unwrap();
-        teardown_claude_hooks(dir.path());
-
-        let content =
-            fs::read_to_string(dir.path().join(".claude").join("settings.json")).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&content).unwrap();
-        assert!(v.get("hooks").is_none());
-    }
-
-    #[test]
-    fn teardown_is_noop_when_no_settings() {
-        let dir = TempDir::new().unwrap();
-        // ファイルが存在しなくてもパニックしない
-        teardown_claude_hooks(dir.path());
+    fn cleanup_is_noop_when_file_missing() {
+        cleanup_done_file("no-such-worker"); // パニックしないこと
     }
 }

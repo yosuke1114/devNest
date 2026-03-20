@@ -116,9 +116,10 @@ export function SwarmScreen({ workingDir, projectPath }: SwarmScreenProps) {
         {activeTab === "split" && (
           <SwarmSplitTab workingDir={workingDir} onRunStarted={handleRunStarted} />
         )}
-        {activeTab === "running" && (
+        {/* SwarmRunningTab は常にマウント: PTY worker-output イベントを取り逃さないため */}
+        <div style={{ height: "100%", display: activeTab === "running" ? "flex" : "none", flexDirection: "column" }}>
           <SwarmRunningTab workingDir={workingDir} />
-        )}
+        </div>
         {activeTab === "conflicts" && (
           <SwarmConflictsTab />
         )}

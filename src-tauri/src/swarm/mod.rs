@@ -1,4 +1,5 @@
 pub mod agentic_bridge;
+pub mod history;
 pub mod ai_resolver;
 pub mod completion;
 pub mod hooks;

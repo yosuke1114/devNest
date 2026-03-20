@@ -6,7 +6,8 @@ use crate::services::github::GitHubPullRequest;
 
 /// GitHub PR を DB に upsert する。
 pub async fn upsert(pool: &DbPool, project_id: i64, gh: &GitHubPullRequest, now: &str) -> Result<i64> {
-    let state = if gh.merged.unwrap_or(false) { "merged" } else { &gh.state };
+    // GitHub PR一覧APIは `merged` フィールドを返さないため merged_at で判定する
+    let state = if gh.merged.unwrap_or(false) || gh.merged_at.is_some() { "merged" } else { &gh.state };
 
     let row: (i64,) = sqlx::query_as(
         r#"

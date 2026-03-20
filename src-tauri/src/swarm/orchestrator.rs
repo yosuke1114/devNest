@@ -558,6 +558,7 @@ fn collect_spawn_requests(run: &mut OrchestratorRun) -> Vec<SpawnRequest> {
             worker_config: OrchestratorTaskConfig {
                 task: assign.task.clone(),
                 branch_name: assign.branch_name.clone(),
+                base_branch: run.base_branch.clone(),
                 project_path: run.project_path.clone(),
                 run_id: run.run_id.clone(),
                 default_shell: run.settings.default_shell.clone(),

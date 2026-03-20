@@ -133,6 +133,7 @@ pub struct WorkerAssignment {
 pub struct OrchestratorTaskConfig {
     pub task: SubTask,
     pub branch_name: String,
+    pub base_branch: String,
     pub project_path: String,
     pub run_id: String,
     // Settings から引き継ぐフィールド（manager が参照）
@@ -164,7 +165,37 @@ pub enum RunStatus {
 impl From<OrchestratorTaskConfig> for WorkerConfig {
     fn from(cfg: OrchestratorTaskConfig) -> Self {
         let mut metadata = HashMap::new();
-        metadata.insert("task_instruction".to_string(), cfg.task.instruction.clone());
+        // ロール別指示前文 + コミット・プッシュ（・PR作成）指示を末尾に付与
+        let commit_msg = cfg.task.title.replace('\'', "\\'");
+        let branch = cfg.branch_name.replace('\'', "\\'");
+        let base = cfg.base_branch.replace('\'', "\\'");
+
+        let completion_steps = if cfg.task.role == crate::swarm::subtask::TaskRole::Merger {
+            format!(
+                "作業が完了したら必ず以下を順番に実行してください:\n\
+                1. git add -A && git commit -m 'feat: {commit_msg}'\n\
+                2. git push origin {branch}\n\
+                3. gh pr create --title 'feat: {commit_msg}' --body '## 変更概要\n\nSwarm Merger による統合・コンフリクト解消\n\n## 確認事項\n- [ ] コンフリクト解消済み\n- [ ] テスト通過確認済み' --head {branch} --base {base}\n\
+                ※ gh コマンドが使えない場合は `gh auth login` で認証してから再実行してください。",
+                commit_msg = commit_msg,
+                branch = branch,
+                base = base,
+            )
+        } else {
+            format!(
+                "作業が完了したら必ず以下を実行してください:\ngit add -A && git commit -m 'feat: {commit_msg}' && git push origin {branch}",
+                commit_msg = commit_msg,
+                branch = branch,
+            )
+        };
+
+        let instruction = format!(
+            "{}{}\n\n---\n{}",
+            cfg.task.role.system_context(),
+            cfg.task.instruction,
+            completion_steps,
+        );
+        metadata.insert("task_instruction".to_string(), instruction);
         metadata.insert("task_branch".to_string(), cfg.branch_name.clone());
         metadata.insert("run_id".to_string(), cfg.run_id.clone());
         metadata.insert("default_shell".to_string(), cfg.default_shell.clone());
@@ -178,10 +209,18 @@ impl From<OrchestratorTaskConfig> for WorkerConfig {
             metadata.insert("claude_interactive".to_string(), "1".to_string());
         }
         let mode = if cfg.claude_interactive { WorkerMode::Interactive } else { WorkerMode::Batch };
+        let worker_role = match cfg.task.role {
+            crate::swarm::subtask::TaskRole::Designer => WorkerRole::Builder,
+            crate::swarm::subtask::TaskRole::Reviewer => WorkerRole::Reviewer,
+            crate::swarm::subtask::TaskRole::Scout    => WorkerRole::Scout,
+            crate::swarm::subtask::TaskRole::Merger   => WorkerRole::Merger,
+            crate::swarm::subtask::TaskRole::Tester   => WorkerRole::Builder,
+            _                                         => WorkerRole::Builder,
+        };
         WorkerConfig {
             kind: WorkerKind::ClaudeCode,
             mode,
-            role: WorkerRole::Builder,
+            role: worker_role,
             label: cfg.task.title.clone(),
             working_dir: std::path::PathBuf::from(&cfg.project_path),
             assigned_files: cfg.task.files.iter().map(|f| std::path::PathBuf::from(f)).collect(),

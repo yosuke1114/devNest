@@ -2,7 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSwarmStore } from "../../stores/swarmStore";
 import type { SubTask, SplitTaskResult, SwarmSettings } from "./types";
-import { DEFAULT_SWARM_SETTINGS } from "./types";
+import { DEFAULT_SWARM_SETTINGS, ROLE_ICON, ROLE_LABEL } from "./types";
 
 // ─── Wave算出ロジック ──────────────────────────────────────────
 
@@ -230,6 +230,9 @@ export function SwarmSplitTab({ workingDir, onRunStarted }: SwarmSplitTabProps) 
 // ─── TaskCard ─────────────────────────────────────────────────
 
 function TaskCard({ task, onDelete }: { task: SubTask; onDelete: (id: number) => void }) {
+  const role = task.role ?? "builder";
+  const roleIcon = ROLE_ICON[role] ?? "🔨";
+  const roleLabel = ROLE_LABEL[role] ?? role;
   return (
     <div style={taskCardStyle} data-testid={`task-card-${task.id}`}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
@@ -242,6 +245,12 @@ function TaskCard({ task, onDelete }: { task: SubTask; onDelete: (id: number) =>
         >
           ✕
         </button>
+      </div>
+      {/* ロールバッジ */}
+      <div style={{ marginTop: 4 }}>
+        <span style={roleBadgeStyle(role)}>
+          {roleIcon} {roleLabel}
+        </span>
       </div>
       {task.dependsOn.length > 0 && (
         <div style={{ fontSize: 10, color: "#f6ad55", marginTop: 3 }}>
@@ -437,6 +446,31 @@ const taskCardStyle: React.CSSProperties = {
   border: "1px solid #21262d",
   borderRadius: 6,
 };
+
+const ROLE_COLORS: Record<string, { bg: string; border: string; color: string }> = {
+  builder:  { bg: "#1b2d3e", border: "#1f6feb40", color: "#58a6ff" },
+  designer: { bg: "#2d1b3e", border: "#a371f740", color: "#a371f7" },
+  reviewer: { bg: "#1e2d1e", border: "#56d36440", color: "#56d364" },
+  scout:    { bg: "#2d2614", border: "#f6ad5540", color: "#f6ad55" },
+  merger:   { bg: "#2d1b1b", border: "#fc818140", color: "#fc8181" },
+  tester:   { bg: "#1e2d2d", border: "#2dd4bf40", color: "#2dd4bf" },
+  shell:    { bg: "#1e2020", border: "#8b949e40", color: "#8b949e" },
+};
+
+function roleBadgeStyle(role: string): React.CSSProperties {
+  const c = ROLE_COLORS[role] ?? ROLE_COLORS.builder;
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    fontSize: 10,
+    fontWeight: 700,
+    color: c.color,
+    background: c.bg,
+    border: `1px solid ${c.border}`,
+    borderRadius: 3,
+    padding: "2px 6px",
+  };
+}
 
 const errorBannerStyle: React.CSSProperties = {
   padding: "8px 12px",
