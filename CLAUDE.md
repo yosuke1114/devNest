@@ -232,6 +232,46 @@ pandoc docs/commands-v4.docx -t markdown | less
 
 ---
 
+## push 前に CI と同様のテストを実行する
+
+push する前に以下のコマンドで CI と同等のチェックを手元で実行できる。
+
+### フロントエンド（TypeScript + Vitest）
+
+```bash
+# 型チェック
+npx tsc --noEmit
+
+# ユニットテスト
+npx vitest run
+
+# ビルド確認
+npm run build
+```
+
+### Rust（cargo test + clippy）
+
+```bash
+cd src-tauri
+
+# テスト
+cargo test
+
+# Clippy（CI と同じ設定）
+cargo clippy -- -D warnings
+
+# 戻る
+cd ..
+```
+
+### まとめて実行（push 前の一括チェック）
+
+```bash
+npx tsc --noEmit && npx vitest run && npm run build && (cd src-tauri && cargo test && cargo clippy -- -D warnings)
+```
+
+---
+
 ## エラー対応方針
 
 - `cargo build` エラーは自分で読んで修正する
