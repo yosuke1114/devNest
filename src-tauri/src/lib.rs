@@ -18,6 +18,7 @@ pub mod swarm;
 pub mod notification;
 pub mod browser;
 pub mod api;
+pub mod mobile;
 
 use tauri::Manager;
 
@@ -52,6 +53,20 @@ pub fn run() {
                 let api_handle = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
                     api::socket_server::DevNestApiServer::start(api_handle).await.ok();
+                });
+
+                // Mobile WebSocket サーバー起動
+                let ws_handle = app_handle.clone();
+                let ws_bind_addr = std::env::var("WS_BIND_ADDR")
+                    .unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+                let (ws_tx, _) = tokio::sync::broadcast::channel::<mobile::message::ServerMessage>(64);
+                let ws_state = std::sync::Arc::new(mobile::ws_server::WsState {
+                    broadcast_tx: ws_tx,
+                    swarm: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
+                    app_handle: ws_handle,
+                });
+                tauri::async_runtime::spawn(async move {
+                    mobile::ws_server::start(ws_state, ws_bind_addr).await;
                 });
 
                 let pool_cleanup = pool.clone();
