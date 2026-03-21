@@ -256,7 +256,7 @@ pub async fn file_save(
                 loop {
                     match svc.push(&tok, "origin", &branch2) {
                         Ok(()) => return Ok(()),
-                        Err(e) if attempt < 3 => {
+                        Err(_e) if attempt < 3 => {
                             attempt += 1;
                             std::thread::sleep(std::time::Duration::from_secs(2u64.pow(attempt - 1)));
                         }

@@ -99,6 +99,7 @@ const documentState = {
   saveStatus: "idle" as string,
   saveProgress: null as { status: "committing" | "pushing" | "synced" | "push_failed" } | null,
   fetchDocuments: vi.fn(() => Promise.resolve()),
+  scanDocuments: vi.fn(() => Promise.resolve()),
   openDocument: vi.fn(() => Promise.resolve()),
   saveDocument: vi.fn(() => Promise.resolve()),
   retryPush: vi.fn(() => Promise.resolve()),

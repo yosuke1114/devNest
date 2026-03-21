@@ -125,7 +125,7 @@ describe("prStore", () => {
   it("syncPrs() が prSync を呼ぶ", async () => {
     mockIpc.prSync.mockResolvedValueOnce({ synced_count: 3 });
     await usePrStore.getState().syncPrs(1);
-    expect(mockIpc.prSync).toHaveBeenCalledWith(1, "open");
+    expect(mockIpc.prSync).toHaveBeenCalledWith(1, undefined);
   });
 
   it("syncPrs() 成功時に syncStatus が 'success' になる", async () => {
