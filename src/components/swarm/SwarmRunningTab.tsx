@@ -106,11 +106,16 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
 
   if (!currentRun) {
     return (
-      <div style={emptyStyle} data-testid="running-tab-empty">
-        <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
-        <div style={{ color: "#484f58", fontSize: 14 }}>実行中のSwarmセッションはありません</div>
-        <div style={{ color: "#30363d", fontSize: 12, marginTop: 6 }}>
-          「タスク分解」タブでタスクを分解してから「Swarm実行を開始」してください
+      <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1117" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 0", flexShrink: 0 }} data-testid="running-tab-empty">
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+          <div style={{ color: "#484f58", fontSize: 14 }}>実行中のSwarmセッションはありません</div>
+          <div style={{ color: "#30363d", fontSize: 12, marginTop: 6 }}>
+            「タスク分解」タブでタスクを分解してから「Swarm実行を開始」してください
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: "hidden", padding: 8 }}>
+          <TerminalGrid workingDir={workingDir} />
         </div>
       </div>
     );
@@ -511,14 +516,6 @@ const headerStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const emptyStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  height: "100%",
-  background: "#0d1117",
-};
 
 const panelSection: React.CSSProperties = {
   padding: "12px",

@@ -86,6 +86,7 @@ interface SidebarItemProps {
 }
 
 const SidebarItem = memo(function SidebarItem({
+  screen,
   label,
   icon,
   active,
