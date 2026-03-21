@@ -174,10 +174,14 @@ describe("swarmStore", () => {
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
-    it("workerId が assignments にない場合は invoke しない", async () => {
+    it("workerId が assignments にない場合も orchestrator_notify_worker_done を呼ぶ（ベストエフォート）", async () => {
       useSwarmStore.setState({ currentRun: makeRun({ assignments: [makeAssignment({ workerId: "w-999" })] }) });
+      mockInvoke.mockResolvedValue(null);
       await useSwarmStore.getState().notifyWorkerDone("w-001", "done");
-      expect(mockInvoke).not.toHaveBeenCalled();
+      expect(mockInvoke).toHaveBeenCalledWith("orchestrator_notify_worker_done", {
+        workerId: "w-001",
+        status: "done",
+      });
     });
 
     it("workerId が assignments にある場合は orchestrator_notify_worker_done を呼ぶ", async () => {
