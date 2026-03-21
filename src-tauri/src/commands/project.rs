@@ -158,7 +158,7 @@ pub async fn project_set_last_opened_document(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use tempfile::TempDir;
 
     async fn setup() -> (AppState, TempDir) {

@@ -312,7 +312,7 @@ async fn vector_search(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::{self, connect, migrations};
+    use crate::db::{self, connect_for_test as connect, migrations};
     use crate::db::project;
     use crate::services::{chunker, git::GitService};
     use crate::services::github::{GitHubIssue, GitHubLabel, GitHubMilestone, GitHubUser};

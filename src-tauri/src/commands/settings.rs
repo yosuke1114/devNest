@@ -41,7 +41,7 @@ pub async fn settings_set(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::models::settings::AppSettingKey;
     use tempfile::TempDir;
     use super::*;

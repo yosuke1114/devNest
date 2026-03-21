@@ -517,7 +517,7 @@ fn push_with_retry_sync(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::db::project;
     use crate::services::git::GitService;
     use git2::Repository;

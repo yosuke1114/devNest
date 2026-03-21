@@ -342,7 +342,7 @@ fn get_git_info_sync(path: &str) -> Option<(String, String, Vec<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations, terminal as db_terminal};
+    use crate::db::{connect_for_test as connect, migrations, terminal as db_terminal};
     use crate::state::AppState;
     use tempfile::TempDir;
 

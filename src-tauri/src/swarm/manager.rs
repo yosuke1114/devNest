@@ -507,28 +507,32 @@ mod tests {
 
     #[test]
     fn build_claude_arg_basic() {
-        // -p フラグ付きで非インタラクティブ実行
+        // バッチモードは常に --dangerously-skip-permissions を付与し stdin を EOF にする
         let arg = build_claude_arg("fix the bug", &meta(&[]));
-        assert_eq!(arg, "claude -p 'fix the bug'");
+        assert_eq!(arg, "claude --dangerously-skip-permissions -p 'fix the bug' < /dev/null");
     }
 
     #[test]
     fn build_claude_arg_escapes_single_quote() {
         // シェルインジェクション防止: ' → '\'' にエスケープされる
         let arg = build_claude_arg("it's broken", &meta(&[]));
-        assert_eq!(arg, "claude -p 'it'\\''s broken'");
+        assert_eq!(arg, "claude --dangerously-skip-permissions -p 'it'\\''s broken' < /dev/null");
     }
 
     #[test]
     fn build_claude_arg_skip_permissions_flag() {
+        // 既にバッチモードで skip_permissions が付くので明示フラグでも同じ結果
         let arg = build_claude_arg("do x", &meta(&[("claude_flag_skip_permissions", "1")]));
-        assert_eq!(arg, "claude -p --dangerously-skip-permissions 'do x'");
+        assert!(arg.contains("--dangerously-skip-permissions"));
+        assert!(arg.contains("-p 'do x'"));
     }
 
     #[test]
     fn build_claude_arg_no_stream_flag() {
         let arg = build_claude_arg("do x", &meta(&[("claude_flag_no_stream", "1")]));
-        assert_eq!(arg, "claude -p --no-stream 'do x'");
+        assert!(arg.contains("--dangerously-skip-permissions"));
+        assert!(arg.contains("--no-stream"));
+        assert!(arg.contains("-p 'do x'"));
     }
 
     #[test]
@@ -540,14 +544,15 @@ mod tests {
         assert!(arg.contains("-p"));
         assert!(arg.contains("--dangerously-skip-permissions"));
         assert!(arg.contains("--no-stream"));
-        assert!(arg.ends_with("'do x'"));
+        assert!(arg.contains("'do x'"));
     }
 
     #[test]
     fn build_claude_arg_flag_off_when_zero() {
+        // バッチモードは常に --dangerously-skip-permissions が付く
         let arg = build_claude_arg("do x", &meta(&[("claude_flag_skip_permissions", "0")]));
-        assert!(!arg.contains("--dangerously-skip-permissions"));
-        assert_eq!(arg, "claude -p 'do x'");
+        assert!(arg.contains("--dangerously-skip-permissions"));
+        assert!(arg.contains("-p 'do x'"));
     }
 
     #[test]

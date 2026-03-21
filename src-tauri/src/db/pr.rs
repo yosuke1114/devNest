@@ -202,7 +202,7 @@ pub async fn update_checks_status(pool: &DbPool, pr_id: i64, status: &str) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::services::github::{GitHubBranch, GitHubPullRequest, GitHubUser};
     use tempfile::TempDir;
 

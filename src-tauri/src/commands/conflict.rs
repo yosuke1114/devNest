@@ -202,7 +202,7 @@ pub async fn conflict_resolve_all(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::db::project;
     use crate::models::conflict::{BlockResolutionInput, parse_conflict_blocks, apply_resolutions};
     use crate::services::git::GitService;
