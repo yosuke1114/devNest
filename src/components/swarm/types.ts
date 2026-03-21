@@ -1,6 +1,7 @@
 export interface SubTask {
   id: number;
   title: string;
+  role: WorkerRole;
   files: string[];
   instruction: string;
   dependsOn: number[];
@@ -70,23 +71,29 @@ export interface WorkerInfo {
 export type WorkerRole =
   | "scout"
   | "builder"
+  | "designer"
   | "reviewer"
   | "merger"
+  | "tester"
   | "shell";
 
 export const ROLE_ICON: Record<WorkerRole, string> = {
   scout:    "🔍",
   builder:  "🔨",
+  designer: "🎨",
   reviewer: "👁️",
   merger:   "🔀",
+  tester:   "🧪",
   shell:    "🐚",
 };
 
 export const ROLE_LABEL: Record<WorkerRole, string> = {
   scout:    "Scout",
   builder:  "Builder",
+  designer: "Designer",
   reviewer: "Reviewer",
   merger:   "Merger",
+  tester:   "Tester",
   shell:    "Shell",
 };
 

@@ -41,7 +41,7 @@ export function EditorScreen() {
     linkedIssues,
     saveStatus,
     saveProgress,
-    fetchDocuments,
+    scanDocuments,
     openDocument,
     saveDocument,
     retryPush,
@@ -139,9 +139,9 @@ export function EditorScreen() {
 
   useEffect(() => {
     if (currentProject) {
-      fetchDocuments(currentProject.id).then(() => {
+      // ディスクをスキャンして追加・削除されたファイルをDBに反映してから一覧を取得
+      scanDocuments(currentProject.id).then(() => {
         if (currentDoc) {
-          // 画面遷移後も store に currentDoc が残っていればそのまま選択状態を復元
           setSelectedDocId(currentDoc.id);
         } else {
           const lastId = currentProject.last_opened_document_id;

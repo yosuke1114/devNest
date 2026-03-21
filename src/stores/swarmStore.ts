@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { SubTask, SwarmSettings, WorkerStatus, ExecutionState, Wave } from "../components/swarm/types";
+import { useProjectStore } from "./projectStore";
 
 // ─── Rust 側と対応する型 ──────────────────────────────────────
 
@@ -156,7 +157,34 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
 
     // Orchestrator ステータス変化
     listen<OrchestratorRun>("orchestrator-status-changed", (event) => {
-      set({ currentRun: event.payload });
+      const prev = get().currentRun;
+      const run = event.payload;
+      set({ currentRun: run });
+
+      // 完了時に通知を作成（初回遷移のみ）
+      const isNewlyDone =
+        (run.status === "done" || run.status === "partialDone") &&
+        prev?.status !== "done" &&
+        prev?.status !== "partialDone";
+      if (isNewlyDone) {
+        // DB に履歴保存
+        invoke("swarm_history_save", { run }).catch(() => {});
+
+        const projectId = useProjectStore.getState().currentProject?.id ?? 1;
+        const title =
+          run.status === "done"
+            ? `Swarm完了: ${run.doneCount}/${run.total} タスク成功`
+            : `Swarm部分完了: ${run.doneCount}/${run.total} タスク成功`;
+        const body = `ブランチ: ${run.baseBranch} | プロジェクト: ${run.projectPath}`;
+        invoke("notification_push", {
+          projectId,
+          eventType: "swarm_done",
+          title,
+          body,
+          destScreen: "swarm",
+          destResourceId: null,
+        }).catch(() => {});
+      }
     }).then((fn) => unlistens.push(fn));
 
     // マージ準備完了

@@ -464,7 +464,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
     mockIpc.issueList.mockResolvedValue([]);
 
@@ -480,7 +480,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     await useIssueStore.getState().listenSyncDone(1);
@@ -494,7 +494,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     await useIssueStore.getState().listenDraftChunk();
@@ -509,7 +509,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     const draft = makeDraft({ id: 3, draft_body: null });

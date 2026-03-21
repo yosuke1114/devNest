@@ -365,7 +365,7 @@ pub async fn github_labels_list(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::state::AppState;
     use tempfile::TempDir;
 

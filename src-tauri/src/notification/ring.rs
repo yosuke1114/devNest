@@ -152,7 +152,7 @@ fn send_native_notification(app: &AppHandle, event: &RingEvent) {
     app.notification()
         .builder()
         .title(event.title())
-        .body(&event.body())
+        .body(event.body())
         .show()
         .ok();
 }

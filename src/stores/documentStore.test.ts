@@ -347,7 +347,7 @@ describe("documentStore", () => {
   // ─── fetchFileTree ────────────────────────────────────────────────────────
 
   it("fetchFileTree() が fileTree を呼んで fileTreeNodes をセットする", async () => {
-    const nodes = [{ id: "n1", name: "src", path: "src", kind: "dir" as const, children: [] }];
+    const nodes = [{ name: "src", path: "src", is_dir: true, children: [] }];
     mockIpc.fileTree.mockResolvedValueOnce(nodes);
 
     await useDocumentStore.getState().fetchFileTree(1);
@@ -398,7 +398,7 @@ describe("documentStore", () => {
   // ─── saveCodeFile ─────────────────────────────────────────────────────────
 
   it("saveCodeFile() 成功時に codeSaveStatus が success になる", async () => {
-    mockIpc.fileSave.mockResolvedValueOnce(undefined);
+    mockIpc.fileSave.mockResolvedValueOnce({ sha: "abc123", push_status: "synced" });
 
     await useDocumentStore.getState().saveCodeFile(1, "src/foo.ts", "content");
 
@@ -479,17 +479,17 @@ describe("documentStore", () => {
   // listenCodeSaveProgress のコールバックが codeSaveProgress を更新する (line 233)
   it("listenCodeSaveProgress() コールバックが codeSaveProgress をセットする", async () => {
     const { listen } = await import("@tauri-apps/api/event");
-    const mockListen = vi.mocked(listen);
+    const mockListen = listen as unknown as ReturnType<typeof vi.fn>;
     let capturedCb: ((e: { payload: unknown }) => void) | null = null;
-    mockListen.mockImplementationOnce((_evt, cb) => {
-      capturedCb = cb as (e: { payload: unknown }) => void;
-      return Promise.resolve(vi.fn());
+    mockListen.mockImplementationOnce((_evt: unknown, cb: (e: { payload: unknown }) => void) => {
+      capturedCb = cb;
+      return Promise.resolve(() => {});
     });
 
     await useDocumentStore.getState().listenCodeSaveProgress();
 
     const payload = { file: "docs/spec.md", progress: 50, total: 100 };
-    capturedCb?.({ payload });
+    if (capturedCb) (capturedCb as (e: { payload: unknown }) => void)({ payload });
 
     expect(useDocumentStore.getState().codeSaveProgress).toEqual(payload);
   });

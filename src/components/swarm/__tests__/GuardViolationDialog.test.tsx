@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GuardViolationDialog } from "../GuardViolationDialog";
 
 // vi.hoisted で listen コールバックをキャプチャできるよう変数を宣言

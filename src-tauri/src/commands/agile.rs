@@ -3,8 +3,6 @@ use crate::agile::{
     kanban::{KanbanBoard, KanbanCard, KanbanStore, NewCard},
     sprint_planner::{SprintPlan, SprintPlanner},
     retrospective::{Retrospective, RetroGenerator},
-    story_map::{StoryMap, StoryMapStore},
-    flow::{FlowAnalysis, analyze_flow},
 };
 use crate::analytics::sprint::{SprintInfo, analyze_sprint};
 use crate::error::{AppError, Result};
@@ -75,32 +73,6 @@ pub async fn sprint_generate_retro(
     RetroGenerator::new(&api_key).generate(&analysis).await
 }
 
-#[tauri::command]
-pub async fn story_map_get(
-    project_path: String,
-    product_id: String,
-    _state: State<'_, AppState>,
-) -> Result<StoryMap> {
-    Ok(StoryMapStore::new(std::path::Path::new(&project_path)).load(&product_id))
-}
-
-#[tauri::command]
-pub async fn story_map_save(
-    project_path: String,
-    map: StoryMap,
-    _state: State<'_, AppState>,
-) -> Result<()> {
-    StoryMapStore::new(std::path::Path::new(&project_path)).save(&map)
-}
-
-#[tauri::command]
-pub async fn flow_analyze(
-    project_path: String,
-    product_id: String,
-    _state: State<'_, AppState>,
-) -> Result<FlowAnalysis> {
-    analyze_flow(std::path::Path::new(&project_path), &product_id)
-}
 
 async fn load_anthropic_key(state: &State<'_, AppState>) -> Result<String> {
     let row: Option<(String,)> =

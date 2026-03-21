@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { XtermPane } from "../XtermPane";
 import type { WorkerInfo } from "../types";
 
@@ -164,7 +164,8 @@ describe("XtermPane", () => {
     const worker = makeWorker({ id: "w-001" });
     render(<XtermPane worker={worker} onKill={vi.fn()} isActive={false} onClick={vi.fn()} />);
     // listen に渡されたコールバックを取得
-    const listenCb = mockListen.mock.calls[0][1] as (e: { payload: { workerId: string; data: string } }) => void;
+    const calls = mockListen.mock.calls as unknown[][];
+    const listenCb = calls[0][1] as (e: { payload: { workerId: string; data: string } }) => void;
     await act(async () => {
       listenCb({ payload: { workerId: "w-001", data: "hello" } });
     });
@@ -178,7 +179,8 @@ describe("XtermPane", () => {
       config: { kind: "shell", mode: "interactive", label: "Shell 1", workingDir: "/", dependsOn: [], metadata: {} },
     });
     render(<XtermPane worker={worker} onKill={vi.fn()} isActive={false} onClick={vi.fn()} />);
-    const listenCb = mockListen.mock.calls[0][1] as (e: { payload: { workerId: string; data: string } }) => void;
+    const calls2 = mockListen.mock.calls as unknown[][];
+    const listenCb = calls2[0][1] as (e: { payload: { workerId: string; data: string } }) => void;
     await act(async () => {
       // SHELL_PROMPT_RE にマッチする文字列 (末尾に $ )
       listenCb({ payload: { workerId: "w-001", data: "user@host:~$ " } });
@@ -193,7 +195,8 @@ describe("XtermPane", () => {
     });
     render(<XtermPane worker={worker} onKill={vi.fn()} isActive={false} onClick={vi.fn()} />);
     // まず idle にする
-    const listenCb = mockListen.mock.calls[0][1] as (e: { payload: { workerId: string; data: string } }) => void;
+    const calls3 = mockListen.mock.calls as unknown[][];
+    const listenCb = calls3[0][1] as (e: { payload: { workerId: string; data: string } }) => void;
     await act(async () => {
       listenCb({ payload: { workerId: "w-001", data: "$ " } });
     });
@@ -223,8 +226,8 @@ describe("XtermPane", () => {
       const worker = makeWorker({ id: "w-wdog" });
       render(<XtermPane worker={worker} onKill={vi.fn()} isActive={false} onClick={vi.fn()} />);
 
-      const nudgedCb = mockListen.mock.calls.find(
-        (c: [string, unknown]) => c[0] === "worker-nudged"
+      const nudgedCb = (mockListen.mock.calls as unknown[][]).find(
+        (c) => c[0] === "worker-nudged"
       )?.[1] as ((e: { payload: { workerId: string } }) => void) | undefined;
       expect(nudgedCb).toBeDefined();
 
@@ -242,8 +245,8 @@ describe("XtermPane", () => {
       const worker = makeWorker({ id: "w-stall" });
       render(<XtermPane worker={worker} onKill={vi.fn()} isActive={false} onClick={vi.fn()} />);
 
-      const stalledCb = mockListen.mock.calls.find(
-        (c: [string, unknown]) => c[0] === "worker-stalled"
+      const stalledCb = (mockListen.mock.calls as unknown[][]).find(
+        (c) => c[0] === "worker-stalled"
       )?.[1] as ((e: { payload: { workerId: string } }) => void) | undefined;
       expect(stalledCb).toBeDefined();
 
@@ -263,11 +266,11 @@ describe("XtermPane", () => {
       const worker = makeWorker({ id: "w-recover" });
       render(<XtermPane worker={worker} onKill={vi.fn()} isActive={false} onClick={vi.fn()} />);
 
-      const stalledCb = mockListen.mock.calls.find(
-        (c: [string, unknown]) => c[0] === "worker-stalled"
+      const stalledCb = (mockListen.mock.calls as unknown[][]).find(
+        (c) => c[0] === "worker-stalled"
       )?.[1] as ((e: { payload: { workerId: string } }) => void) | undefined;
-      const nudgedCb = mockListen.mock.calls.find(
-        (c: [string, unknown]) => c[0] === "worker-nudged"
+      const nudgedCb = (mockListen.mock.calls as unknown[][]).find(
+        (c) => c[0] === "worker-nudged"
       )?.[1] as ((e: { payload: { workerId: string } }) => void) | undefined;
       expect(stalledCb).toBeDefined();
       expect(nudgedCb).toBeDefined();

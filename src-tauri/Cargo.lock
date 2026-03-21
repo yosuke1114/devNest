@@ -897,6 +897,7 @@ dependencies = [
  "futures-util",
  "git2",
  "keyring",
+ "libc",
  "mockall",
  "portable-pty",
  "reqwest 0.12.28",

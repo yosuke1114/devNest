@@ -50,8 +50,10 @@ pub async fn project_create(
         }
     }
 
-    // repo_owner / repo_name は git remote から取得（暫定: 空文字）
-    let project = db::project::insert(&state.db, &name, &local_path, "", "").await?;
+    // git remote origin の URL から repo_owner / repo_name を抽出する
+    let (repo_owner, repo_name) = extract_github_owner_repo(trimmed).unwrap_or_default();
+
+    let project = db::project::insert(&state.db, &name, &local_path, &repo_owner, &repo_name).await?;
 
     // .md ファイルをスキャンして documents に INSERT
     let document_count = db::document::scan_and_insert(&state.db, project.id, &local_path, "docs/").await?;
@@ -59,11 +61,63 @@ pub async fn project_create(
     Ok(ProjectCreateResult { project, document_count })
 }
 
+/// git remote origin の URL から (owner, repo) を抽出する。
+/// 対応形式:
+///   https://github.com/owner/repo.git
+///   git@github.com:owner/repo.git
+fn extract_github_owner_repo(repo_path: &str) -> Option<(String, String)> {
+    let repo = Repository::open(repo_path).ok()?;
+    let remote = repo.find_remote("origin").ok()?;
+    let url = remote.url()?;
+
+    // HTTPS: https://github.com/owner/repo(.git)
+    // SSH:   git@github.com:owner/repo(.git)
+    let path = if let Some(p) = url.strip_prefix("https://github.com/") {
+        p
+    } else if let Some(p) = url.strip_prefix("git@github.com:") {
+        p
+    } else {
+        return None;
+    };
+
+    let path = path.trim_end_matches(".git");
+    let mut parts = path.splitn(2, '/');
+    let owner = parts.next()?.to_string();
+    let repo = parts.next()?.to_string();
+    Some((owner, repo))
+}
+
 #[tauri::command]
 pub async fn project_list(
     state: State<'_, AppState>,
 ) -> std::result::Result<Vec<Project>, AppError> {
-    db::project::list(&state.db).await
+    let mut projects = db::project::list(&state.db).await?;
+
+    // repo_owner が未設定のプロジェクトを git remote から自動補完
+    for project in &mut projects {
+        if !project.repo_owner.is_empty() {
+            continue;
+        }
+        if let Some((owner, repo)) = extract_github_owner_repo(&project.local_path) {
+            let patch = crate::models::project::ProjectPatch {
+                project_id: project.id,
+                repo_owner: Some(Some(owner.clone())),
+                repo_name: Some(Some(repo.clone())),
+                default_branch: None,
+                sync_mode: None,
+                docs_root: None,
+                commit_msg_format: None,
+                debounce_ms: None,
+                remote_poll_interval_min: None,
+            };
+            if db::project::update(&state.db, &patch).await.is_ok() {
+                project.repo_owner = owner;
+                project.repo_name = repo;
+            }
+        }
+    }
+
+    Ok(projects)
 }
 
 #[tauri::command]
@@ -104,7 +158,7 @@ pub async fn project_set_last_opened_document(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use tempfile::TempDir;
 
     async fn setup() -> (AppState, TempDir) {

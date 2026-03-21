@@ -277,7 +277,7 @@ mod tests {
     #[tokio::test]
     async fn test_github_auth_revoke_stops_polling() {
         use std::sync::atomic::Ordering;
-        use crate::db::{connect, migrations};
+        use crate::db::{connect_for_test as connect, migrations};
         use tempfile::TempDir;
 
         let dir = TempDir::new().unwrap();

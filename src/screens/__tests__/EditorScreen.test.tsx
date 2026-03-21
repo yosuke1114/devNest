@@ -99,6 +99,7 @@ const documentState = {
   saveStatus: "idle" as string,
   saveProgress: null as { status: "committing" | "pushing" | "synced" | "push_failed" } | null,
   fetchDocuments: vi.fn(() => Promise.resolve()),
+  scanDocuments: vi.fn(() => Promise.resolve()),
   openDocument: vi.fn(() => Promise.resolve()),
   saveDocument: vi.fn(() => Promise.resolve()),
   retryPush: vi.fn(() => Promise.resolve()),
@@ -233,7 +234,7 @@ describe("EditorScreen — ツールバー", () => {
     documentState.retryPush = vi.fn(() => Promise.resolve());
     documentState.setDirty = vi.fn();
     documentState.fetchLinkedIssues = vi.fn();
-    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99 }));
+    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99, path: "docs/new.md" }));
     documentState.renameDocument = vi.fn(() => Promise.resolve());
     documentState.fetchFileTree = vi.fn();
     documentState.openCodeFile = vi.fn();
@@ -342,7 +343,7 @@ describe("EditorScreen — コンテンツエリア", () => {
     documentState.retryPush = vi.fn(() => Promise.resolve());
     documentState.setDirty = vi.fn();
     documentState.fetchLinkedIssues = vi.fn();
-    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99 }));
+    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99, path: "docs/new.md" }));
     documentState.renameDocument = vi.fn(() => Promise.resolve());
     documentState.fetchFileTree = vi.fn();
     documentState.openCodeFile = vi.fn();
@@ -522,7 +523,7 @@ describe("EditorScreen — UnsavedWarningModal", () => {
     documentState.retryPush = vi.fn(() => Promise.resolve());
     documentState.setDirty = vi.fn();
     documentState.fetchLinkedIssues = vi.fn();
-    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99 }));
+    documentState.createDocument = vi.fn(() => Promise.resolve({ id: 99, path: "docs/new.md" }));
     documentState.renameDocument = vi.fn(() => Promise.resolve());
     documentState.fetchFileTree = vi.fn();
     documentState.openCodeFile = vi.fn();

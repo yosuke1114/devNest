@@ -11,7 +11,7 @@ vi.mock("../lib/ipc", () => mockIpc);
 
 // ─── ヘルパー ──────────────────────────────────────────────────────
 
-const period = { from: "2026-01-01", to: "2026-03-01" };
+const period = { start: "2026-01-01", end: "2026-03-01" };
 const projectPath = "/tmp/proj";
 
 function resetStore() {

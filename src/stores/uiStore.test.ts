@@ -117,7 +117,7 @@ describe("uiStore", () => {
   });
 
   describe("showModal / closeModal", () => {
-    const modal: Modal = { type: "confirm", title: "確認", message: "削除しますか？" };
+    const modal: Modal = { id: "confirm", props: { title: "確認", message: "削除しますか？" } };
 
     it("showModal で activeModal がセットされる", () => {
       useUiStore.getState().showModal(modal);
@@ -187,7 +187,7 @@ describe("uiStore", () => {
 
   describe("reset", () => {
     it("全状態を初期値に戻す", () => {
-      const modal: Modal = { type: "confirm", title: "test", message: "?" };
+      const modal: Modal = { id: "confirm", props: { title: "test", message: "?" } };
       useUiStore.getState().navigate("editor");
       useUiStore.getState().toggleSidebar();
       useUiStore.getState().setSetupStep(3);

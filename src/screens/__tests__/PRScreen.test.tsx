@@ -120,7 +120,7 @@ vi.mock("../../components/pr/PRDetailHeader", () => ({
 }));
 
 vi.mock("../../components/pr/PRDetailTabs", () => ({
-  PRDetailTabs: ({ activeTab, onChange }: { activeTab: string; onChange: (t: string) => void; codeFileCount: number }) => (
+  PRDetailTabs: ({ activeTab: _activeTab, onChange }: { activeTab: string; onChange: (t: string) => void; codeFileCount: number }) => (
     <div data-testid="pr-detail-tabs">
       <button onClick={() => onChange("overview")}>tab-overview</button>
       <button onClick={() => onChange("code-diff")}>tab-code-diff</button>

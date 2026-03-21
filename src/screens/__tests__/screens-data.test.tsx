@@ -97,11 +97,11 @@ const mockKanbanBoard = {
   ],
 };
 
-const mockSprintHistory = [
-  { sprint_id: "s1", name: "Sprint 1", start_date: "2026-01-01", end_date: "2026-01-14",
-    velocity: 12, planned_points: 10, completed_points: 12,
-    ai_assisted_count: 3, total_issues: 5 },
-];
+// const mockSprintHistory = [
+//   { sprint_id: "s1", name: "Sprint 1", start_date: "2026-01-01", end_date: "2026-01-14",
+//     velocity: 12, planned_points: 10, completed_points: 12,
+//     ai_assisted_count: 3, total_issues: 5 },
+// ];
 
 const mockVelocity = {
   period: { from: "2026-01-01", to: "2026-03-01" },

@@ -30,6 +30,22 @@ pub async fn connect(db_url: &str) -> Result<DbPool> {
     Ok(pool)
 }
 
+/// テスト用: WAL の読み取り分離を避けるため接続数 1 で開く
+#[cfg(test)]
+pub async fn connect_for_test(db_url: &str) -> Result<DbPool> {
+    let opts = SqliteConnectOptions::from_str(db_url)?
+        .create_if_missing(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .foreign_keys(true);
+
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(opts)
+        .await?;
+
+    Ok(pool)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -108,6 +108,7 @@ mod tests {
         SubTask {
             id,
             title: format!("Task {}", id),
+            role: crate::swarm::subtask::TaskRole::Builder,
             files: vec![],
             instruction: format!("do {}", id),
             depends_on: deps,

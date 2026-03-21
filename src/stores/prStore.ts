@@ -112,10 +112,11 @@ export const usePrStore = create<PrState>((set, get) => ({
   syncPrs: async (projectId) => {
     set({ syncStatus: "loading", error: null });
     try {
-      const { stateFilter } = get();
-      const filter = stateFilter === "all" ? undefined : stateFilter;
-      await ipc.prSync(projectId, filter);
+      // 常に全状態を取得（タブは表示フィルターのみ）
+      await ipc.prSync(projectId, undefined);
       set({ syncStatus: "success" });
+      // イベント経由の fetchPrs に加え、確実に再取得する
+      await get().fetchPrs(projectId);
     } catch (e) {
       set({ syncStatus: "error", error: String(e) });
     }
