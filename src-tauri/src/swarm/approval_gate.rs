@@ -172,8 +172,7 @@ mod tests {
     #[test]
     fn test_evaluate_skip_permissions_always_spawns() {
         let task = make_task(TaskRole::Merger, 1);
-        let mut settings = SwarmSettings::default();
-        settings.claude_skip_permissions = true;
+        let settings = SwarmSettings { claude_skip_permissions: true, ..Default::default() };
         let decision = evaluate(&task, &settings, ToolPolicy::RequireApproval);
         assert!(matches!(decision, GateDecision::SpawnImmediately));
     }
@@ -181,8 +180,7 @@ mod tests {
     #[test]
     fn test_evaluate_auto_approve_low_risk() {
         let task = make_task(TaskRole::Scout, 1);
-        let mut settings = SwarmSettings::default();
-        settings.auto_approve_high_confidence = true;
+        let settings = SwarmSettings { auto_approve_high_confidence: true, ..Default::default() };
         let decision = evaluate(&task, &settings, ToolPolicy::RequireApproval);
         assert!(matches!(decision, GateDecision::SpawnImmediately));
     }
@@ -190,8 +188,7 @@ mod tests {
     #[test]
     fn test_evaluate_auto_approve_high_risk_still_requires() {
         let task = make_task(TaskRole::Merger, 1);
-        let mut settings = SwarmSettings::default();
-        settings.auto_approve_high_confidence = true;
+        let settings = SwarmSettings { auto_approve_high_confidence: true, ..Default::default() };
         let decision = evaluate(&task, &settings, ToolPolicy::RequireApproval);
         assert!(matches!(decision, GateDecision::RequiresApproval { .. }));
     }
