@@ -1,5 +1,6 @@
 pub mod agile;
 pub mod ai;
+pub mod approval;
 pub mod analytics;
 pub mod collaboration;
 pub mod conflict;
@@ -193,6 +194,13 @@ macro_rules! all_commands {
             commands::swarm::swarm_history_save,
             commands::swarm::swarm_history_list,
             commands::swarm::swarm_history_delete,
+            // 承認キュー
+            commands::approval::approval_list,
+            commands::approval::approval_history,
+            commands::approval::approval_create,
+            commands::approval::approval_decide,
+            commands::approval::approval_cleanup,
+            commands::approval::approval_pending_count,
         ]
     };
 }

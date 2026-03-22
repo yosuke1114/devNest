@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSwarmWS } from "./hooks/useSwarmWS";
 import type { SubTask, SwarmSettings } from "./types/swarm";
 import { DEFAULT_SETTINGS } from "./types/swarm";
+import { WorkerTerminal } from "./components/WorkerTerminal";
+import { ToastContainer } from "./components/Toast";
+import { SettingsPanel, type MobileSettings } from "./components/SettingsPanel";
 import "./App.css";
 
 // ────────────────────────────────────────
@@ -18,11 +21,12 @@ const STATUS_COLORS: Record<string, string> = {
 //  App
 // ────────────────────────────────────────
 export default function App() {
-  const { state, send } = useSwarmWS();
+  const { state, send, reconnect } = useSwarmWS();
   const [inputText, setInputText] = useState("");
   const [projectPath, setProjectPath] = useState("");
   const [workerInputText, setWorkerInputText] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,13 +62,28 @@ export default function App() {
     send({ type: "RunGate" });
   };
 
-  const handleWorkerInput = () => {
+  const handleWorkerInput = useCallback(
+    (data: string) => {
+      if (!selectedWorkerId) return;
+      send({
+        type: "WorkerInput",
+        payload: { worker_id: selectedWorkerId, data },
+      });
+    },
+    [selectedWorkerId, send],
+  );
+
+  const handleWorkerInputText = () => {
     if (!workerInputText.trim() || !selectedWorkerId) return;
     send({
       type: "WorkerInput",
       payload: { worker_id: selectedWorkerId, data: workerInputText.trim() + "\n" },
     });
     setWorkerInputText("");
+  };
+
+  const handleSettingsSave = (_s: MobileSettings) => {
+    reconnect();
   };
 
   const { swarm, workers } = state;
@@ -76,12 +95,28 @@ export default function App() {
 
   return (
     <div className="app">
+      <ToastContainer />
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleSettingsSave}
+      />
+
       {/* Header */}
       <header className="header">
         <h1>DevNest Mobile</h1>
-        <span className={`conn-badge ${state.connected ? "on" : "off"}`}>
-          {state.connected ? "Connected" : "Disconnected"}
-        </span>
+        <div className="header-right">
+          <span className={`conn-badge ${state.connected ? "on" : "off"}`}>
+            {state.connected ? "Connected" : "Disconnected"}
+          </span>
+          <button
+            className="settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+          >
+            &#9881;
+          </button>
+        </div>
       </header>
 
       {/* Task Input */}
@@ -215,17 +250,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Worker Output */}
+      {/* Worker Output — xterm.js */}
       {selectedWorkerId && state.workerLogs[selectedWorkerId] && (
-        <div className="card log-card">
+        <div className="card">
           <h2>Worker Output</h2>
-          <div className="log-stream worker-output">
-            {state.workerLogs[selectedWorkerId].map((line, i) => (
-              <div key={i} className="log-entry log-info">
-                <span className="log-text">{line}</span>
-              </div>
-            ))}
-          </div>
+          <WorkerTerminal
+            lines={state.workerLogs[selectedWorkerId]}
+            onInput={handleWorkerInput}
+          />
           <div className="worker-input-row">
             <input
               className="modal-input"
@@ -233,9 +265,9 @@ export default function App() {
               placeholder="Worker に入力..."
               value={workerInputText}
               onChange={(e) => setWorkerInputText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleWorkerInput()}
+              onKeyDown={(e) => e.key === "Enter" && handleWorkerInputText()}
             />
-            <button className="btn btn-primary btn-send" onClick={handleWorkerInput}>
+            <button className="btn btn-primary btn-send" onClick={handleWorkerInputText}>
               Send
             </button>
           </div>
