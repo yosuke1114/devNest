@@ -196,9 +196,20 @@ pub fn merge_worker_branch(
 
     let _ = repo.cleanup_state();
 
+    // マージ成功後: ローカルブランチを削除
+    if let Ok(mut branch) = repo.find_branch(worker_branch, BranchType::Local) {
+        let _ = branch.delete();
+    }
+
+    // マージ成功後: リモートブランチを削除（origin が存在する場合のみ、失敗は無視）
+    if let Ok(mut remote) = repo.find_remote("origin") {
+        let refspec = format!(":refs/heads/{}", worker_branch);
+        let _ = remote.push(&[refspec.as_str()], None);
+    }
+
     MergeOutcome {
         success: true,
-        message: format!("マージ成功: {}", worker_branch),
+        message: format!("マージ成功・ブランチ削除: {}", worker_branch),
         conflict_files: vec![],
     }
 }
