@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "npm run mobile:dev & npm run tauri dev",
+    "mobile:dev": "npm --prefix packages/mobile run dev",
+    "mobile:build": "npm --prefix packages/mobile run build",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
