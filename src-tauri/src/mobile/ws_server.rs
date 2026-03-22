@@ -283,6 +283,14 @@ async fn cmd_swarm_start(
 
     // スナップショットをブロードキャスト
     broadcast_snapshot(state);
+
+    // デスクトップ UI に実行中を通知（currentRun を設定させる）
+    use tauri::Emitter;
+    if let Ok(wo) = state.wave_orch.lock() {
+        if let Some(run) = &wo.orchestrator.current_run {
+            let _ = state.app_handle.emit("orchestrator-status-changed", run);
+        }
+    }
 }
 
 async fn cmd_swarm_stop(state: &Arc<WsState>) {
@@ -400,6 +408,22 @@ async fn cmd_sync(state: &Arc<WsState>, socket: &mut WebSocket) {
 
     let workers = make_worker_list(state);
     send_direct(socket, ServerMessage::Workers(workers)).await;
+
+    // プロジェクト一覧を送信
+    use tauri::Manager;
+    let app_state = state.app_handle.state::<AppState>();
+    if let Ok(projects) = sqlx::query_as::<_, (i64, String, String)>(
+        "SELECT id, name, local_path FROM projects ORDER BY name"
+    )
+    .fetch_all(&app_state.db)
+    .await
+    {
+        let project_list = projects
+            .into_iter()
+            .map(|(id, name, local_path)| crate::mobile::message::ProjectInfo { id, name, local_path })
+            .collect();
+        send_direct(socket, ServerMessage::Projects(project_list)).await;
+    }
 }
 
 // ────────────────────────────────────────
@@ -446,10 +470,15 @@ pub fn setup_event_bridge(state: Arc<WsState>) {
                     if let Ok(mut wo) = state_clone.wave_orch.lock() {
                         let result = wo.update_worker_status(&worker_id, ws);
 
-                        // Gate Ready 通知
+                        // Gate Ready → デスクトップと同様に自動実行
                         if result.wave_gate_ready {
                             let wave_number = wo.snapshot().current_wave;
                             let _ = tx.send(ServerMessage::GateReady { wave_number });
+                            // ロックを解放してから spawn（WaveOrchestrator ロック競合を避ける）
+                            let state_gate = Arc::clone(&state_clone);
+                            tauri::async_runtime::spawn(async move {
+                                cmd_run_gate(&state_gate).await;
+                            });
                         }
 
                         // スナップショット更新
@@ -461,6 +490,12 @@ pub fn setup_event_bridge(state: Arc<WsState>) {
                             completed_tasks: snap.completed_tasks,
                             failed_tasks: snap.failed_tasks,
                         }));
+
+                        // デスクトップ UI に worker 状態変化を通知
+                        use tauri::Emitter;
+                        if let Some(run) = &wo.orchestrator.current_run {
+                            let _ = state_clone.app_handle.emit("orchestrator-status-changed", run);
+                        }
 
                         // 新 Spawn がある場合（依存解決で Ready になったタスク）
                         if !result.new_spawns.is_empty() {
