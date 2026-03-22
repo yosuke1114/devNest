@@ -1,11 +1,15 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
 import { useSwarmWS } from "./hooks/useSwarmWS";
 import type { TaskSnapshot, SubTask, SwarmSettings, ClientMessage, SwarmRunRecord } from "./types/swarm";
 import { DEFAULT_SETTINGS } from "./types/swarm";
-import { WorkerTerminal } from "./components/WorkerTerminal";
 import { ToastContainer, showToast } from "./components/Toast";
 import { SettingsPanel, type MobileSettings } from "./components/SettingsPanel";
 import "./App.css";
+
+// xterm.js は iOS Safari でトップレベル import するとクラッシュするため遅延ロード
+const WorkerTerminal = lazy(() =>
+  import("./components/WorkerTerminal").then((m) => ({ default: m.WorkerTerminal }))
+);
 
 // ────────────────────────────────────────
 //  Worker status colors
@@ -820,10 +824,12 @@ export default function App() {
       {selectedWorkerId && state.workerLogs[selectedWorkerId] && !workerModal && (
         <div className="card">
           <h2>Worker Output</h2>
-          <WorkerTerminal
-            lines={state.workerLogs[selectedWorkerId]}
-            onInput={handleWorkerInput}
-          />
+          <Suspense fallback={<div style={{ color: "#71717a", padding: 8 }}>Loading terminal...</div>}>
+            <WorkerTerminal
+              lines={state.workerLogs[selectedWorkerId]}
+              onInput={handleWorkerInput}
+            />
+          </Suspense>
           <div className="worker-input-row">
             <input
               className="modal-input"

@@ -36,8 +36,29 @@ pub struct WsState {
 //  サーバー起動
 // ────────────────────────────────────────
 pub async fn start(state: Arc<WsState>, bind_addr: String) {
-    let dist_path = std::env::var("MOBILE_DIST_PATH")
-        .unwrap_or_else(|_| "./packages/mobile/dist".to_string());
+    // MOBILE_DIST_PATH 環境変数があればそれを使う。
+    // なければ実行ファイルの場所から ../packages/mobile/dist を探し、
+    // それも存在しなければ ./packages/mobile/dist にフォールバック。
+    let dist_path = std::env::var("MOBILE_DIST_PATH").unwrap_or_else(|_| {
+        // dev: プロジェクトルート/packages/mobile/dist
+        // prod: DevNest.app/Contents/MacOS/../Resources/packages/mobile/dist など
+        let candidates = [
+            // 実行ファイルの2階層上（src-tauri/target/debug/ → プロジェクトルート）
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent()?.parent()?.parent()?.parent().map(|p| p.join("packages/mobile/dist"))),
+            // カレントディレクトリ基準
+            std::env::current_dir()
+                .ok()
+                .map(|p| p.join("packages/mobile/dist")),
+        ];
+        for candidate in candidates.into_iter().flatten() {
+            if candidate.exists() {
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+        "./packages/mobile/dist".to_string()
+    });
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
