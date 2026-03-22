@@ -87,7 +87,7 @@ export const useConflictStore = create<ConflictState>((set, get) => ({
       set({
         managedFiles: result.managed,
         unmanagedCount: result.unmanaged_count,
-        unmanagedFiles: result.unmanaged_files,
+        unmanagedFiles: result.unmanaged_files ?? [],
         activeFileId: result.managed[0]?.id ?? null,
         listStatus: "success",
       });
@@ -103,7 +103,7 @@ export const useConflictStore = create<ConflictState>((set, get) => ({
       set({
         managedFiles: result.managed,
         unmanagedCount: result.unmanaged_count,
-        unmanagedFiles: result.unmanaged_files,
+        unmanagedFiles: result.unmanaged_files ?? [],
         activeFileId: result.managed[0]?.id ?? null,
         listStatus: "success",
       });
