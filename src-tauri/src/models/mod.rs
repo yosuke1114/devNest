@@ -1,3 +1,4 @@
+pub mod approval;
 pub mod conflict;
 pub mod document;
 pub mod file_node;

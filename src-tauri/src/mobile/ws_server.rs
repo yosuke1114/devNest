@@ -50,7 +50,7 @@ pub async fn start(state: Arc<WsState>, bind_addr: String) {
 
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
-        .expect(&format!("WSサーバー起動失敗: {}", bind_addr));
+        .unwrap_or_else(|_| panic!("WSサーバー起動失敗: {}", bind_addr));
 
     tracing::info!("Mobile server  : http://{}", bind_addr);
     tracing::info!("WebSocket      : ws://{}/ws", bind_addr);
@@ -100,13 +100,13 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<WsState>) {
             }
             Ok(server_msg) = rx.recv() => {
                 let json = serde_json::to_string(&server_msg).unwrap_or_default();
-                if socket.send(Message::Text(json.into())).await.is_err() {
+                if socket.send(Message::Text(json)).await.is_err() {
                     break;
                 }
             }
             // keepAlive ping（30秒間隔）
             _ = tokio::time::sleep(Duration::from_secs(30)) => {
-                if socket.send(Message::Ping(vec![].into())).await.is_err() {
+                if socket.send(Message::Ping(vec![])).await.is_err() {
                     break;
                 }
             }
@@ -498,7 +498,7 @@ fn broadcast(tx: &broadcast::Sender<ServerMessage>, msg: ServerMessage) {
 
 async fn send_direct(socket: &mut WebSocket, msg: ServerMessage) {
     let json = serde_json::to_string(&msg).unwrap_or_default();
-    let _ = socket.send(Message::Text(json.into())).await;
+    let _ = socket.send(Message::Text(json)).await;
 }
 
 fn make_snapshot(state: &Arc<WsState>) -> SwarmSnapshot {

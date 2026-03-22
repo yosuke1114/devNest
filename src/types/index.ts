@@ -732,3 +732,24 @@ export interface TeamDashboard { members: TeamMember[]; pending_reviews: Pending
 export type KnowledgeType = "design_decision" | "retro_learning" | "tech_note" | "postmortem";
 export interface KnowledgeComment { id: string; author: string; content: string; created_at: string; }
 export interface KnowledgeEntry { id: string; entry_type: KnowledgeType; title: string; content: string; author: string; product_id: string; linked_docs: string[]; tags: string[]; created_at: string; comments: KnowledgeComment[]; }
+
+// ─── 承認キュー ──────────────────────────────────────────────────────────────
+export type ApprovalStatusType = "pending" | "approved" | "rejected" | "expired";
+export type RiskLevel = "low" | "medium" | "high" | "critical";
+export interface ApprovalRequest {
+  id: number;
+  request_id: string;
+  worker_id: string | null;
+  tool_name: string;
+  tool_input: string;
+  risk_level: RiskLevel;
+  status: ApprovalStatusType;
+  decision_reason: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+export interface ApprovalDecision {
+  request_id: string;
+  approved: boolean;
+  reason: string | null;
+}
