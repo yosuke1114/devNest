@@ -23,6 +23,7 @@ pub mod context_store;
 pub mod mail_store;
 pub mod session_store;
 pub mod knowledge_store;
+pub mod approval_gate;
 pub mod health_check;
 
 use std::collections::HashMap;
@@ -37,6 +38,7 @@ pub fn create_manager() -> SharedWorkerManager {
 }
 
 pub use orchestrator::{create_orchestrator, SharedOrchestrator};
+pub use approval_gate::{create_pending_spawns, SharedPendingSpawns};
 
 /// Swarm ワーカー完了フック通知レジストリ
 /// Claude Code の PostTask/TaskError フックが `devnest worker done` を呼ぶと、

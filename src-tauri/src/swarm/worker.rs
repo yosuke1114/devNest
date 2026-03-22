@@ -105,6 +105,8 @@ pub enum ExecutionState {
     Waiting,
     /// 依存解決済み・実行可能
     Ready,
+    /// 承認待ち（ポリシーにより承認が必要）
+    AwaitingApproval,
     /// ワーカーが実行中
     Running,
     /// 正常完了

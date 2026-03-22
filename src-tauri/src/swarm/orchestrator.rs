@@ -349,6 +349,64 @@ impl Orchestrator {
         }
     }
 
+    /// タスクを承認待ち状態に設定する
+    pub fn set_awaiting_approval(&mut self, task_id: u32) {
+        if let Some(run) = &mut self.current_run {
+            if let Some(assign) = run.assignments.iter_mut().find(|a| a.task.id == task_id) {
+                assign.execution_state = ExecutionState::AwaitingApproval;
+            }
+        }
+    }
+
+    /// 承認拒否されたタスクをスキップし、依存タスクも連鎖スキップする
+    pub fn reject_task(&mut self, task_id: u32) {
+        if let Some(run) = &mut self.current_run {
+            // 対象タスクを Skipped に
+            if let Some(assign) = run.assignments.iter_mut().find(|a| a.task.id == task_id) {
+                assign.execution_state = ExecutionState::Skipped;
+            }
+            run.failed += 1;
+
+            // 依存タスクも連鎖スキップ
+            let mut to_skip = vec![task_id];
+            loop {
+                let newly_skipped: Vec<u32> = run
+                    .assignments
+                    .iter()
+                    .filter(|a| {
+                        !matches!(a.execution_state, ExecutionState::Skipped)
+                            && a.task.depends_on.iter().any(|d| to_skip.contains(d))
+                    })
+                    .map(|a| a.task.id)
+                    .collect();
+                if newly_skipped.is_empty() {
+                    break;
+                }
+                for id in &newly_skipped {
+                    if let Some(assign) = run.assignments.iter_mut().find(|a| a.task.id == *id) {
+                        assign.execution_state = ExecutionState::Skipped;
+                    }
+                }
+                to_skip = newly_skipped;
+            }
+
+            // Run 全体のステータス更新
+            let all_terminal = run.assignments.iter().all(|a| {
+                matches!(
+                    a.execution_state,
+                    ExecutionState::Done | ExecutionState::Error | ExecutionState::Skipped
+                )
+            });
+            if all_terminal {
+                if run.completed > 0 {
+                    run.status = RunStatus::PartialDone;
+                } else {
+                    run.status = RunStatus::Done;
+                }
+            }
+        }
+    }
+
     /// 実行をキャンセルする
     pub fn cancel(&mut self) {
         if let Some(run) = &mut self.current_run {
@@ -356,7 +414,7 @@ impl Orchestrator {
             for assign in &mut run.assignments {
                 if matches!(
                     assign.execution_state,
-                    ExecutionState::Waiting | ExecutionState::Ready
+                    ExecutionState::Waiting | ExecutionState::Ready | ExecutionState::AwaitingApproval
                 ) {
                     assign.execution_state = ExecutionState::Skipped;
                 }

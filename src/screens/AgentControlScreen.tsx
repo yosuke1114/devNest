@@ -237,6 +237,55 @@ function ApprovalTab() {
                 </div>
               )}
 
+              {/* タスク情報（swarm_worker_spawn の場合） */}
+              {req.tool_name === "swarm_worker_spawn" && (() => {
+                try {
+                  const info = JSON.parse(req.tool_input);
+                  return (
+                    <div style={{
+                      display: "flex",
+                      gap: 6,
+                      marginBottom: 8,
+                      flexWrap: "wrap",
+                    }}>
+                      {info.role && (
+                        <span style={{
+                          fontSize: 11,
+                          padding: "2px 8px",
+                          borderRadius: 10,
+                          background: "#7c6af722",
+                          color: "#7c6af7",
+                        }}>
+                          {info.role}
+                        </span>
+                      )}
+                      {info.title && (
+                        <span style={{
+                          fontSize: 11,
+                          color: "#aaa",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 300,
+                        }}>
+                          {info.title}
+                        </span>
+                      )}
+                      {info.files?.length > 0 && (
+                        <span style={{
+                          fontSize: 10,
+                          color: "#666",
+                        }}>
+                          ({info.files.length} files)
+                        </span>
+                      )}
+                    </div>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
+
               {/* ツール入力のプレビュー */}
               <div
                 style={{

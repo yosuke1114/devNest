@@ -453,6 +453,7 @@ function ExecutionIcon({ state }: { state: ExecutionState }) {
   const icons: Record<ExecutionState, string> = {
     waiting: "⏳",
     ready:   "🟢",
+    awaitingApproval: "🔒",
     running: "🔄",
     done:    "✅",
     error:   "❌",
@@ -465,6 +466,7 @@ function ExecutionLabel({ state }: { state: ExecutionState }) {
   const map: Record<ExecutionState, { color: string; label: string }> = {
     waiting: { color: "#4a5568", label: "Waiting" },
     ready:   { color: "#68d391", label: "Ready" },
+    awaitingApproval: { color: "#f59e0b", label: "Approval" },
     running: { color: "#f6ad55", label: "Running" },
     done:    { color: "#68d391", label: "Done" },
     error:   { color: "#fc8181", label: "Error" },
