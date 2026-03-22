@@ -46,6 +46,9 @@ pub struct BlockResolutionInput {
 pub struct ConflictScanResult {
     pub managed: Vec<ConflictFile>,
     pub unmanaged_count: usize,
+    /// docs/ 外のコンフリクトファイルパス一覧
+    #[serde(default)]
+    pub unmanaged_files: Vec<String>,
 }
 
 /// conflict_resolve_all の結果

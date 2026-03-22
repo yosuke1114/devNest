@@ -5,6 +5,7 @@ use crate::doc_mapping::index::build_index;
 use crate::state::AppState;
 use crate::swarm::{
     ai_resolver::{AiConflictResolver, AiResolution},
+    approval_gate::{self, GateDecision, PendingSpawn, SharedPendingSpawns},
     resource_monitor::{get_resource_usage, ResourceUsage},
     conflict_resolver::{self, commit_conflict_resolution, parse_conflict_blocks, ConflictBlock, ConflictResolution},
     orchestrator::OrchestratorRun,
@@ -15,10 +16,11 @@ use crate::swarm::{
     wave::{Wave, WaveGateResult},
     wave_gate::WaveGate,
     wave_orchestrator::{SharedWaveOrchestrator, WaveOrchestratorSnapshot, WaveOrchestratorStatus},
-    worker::{WorkerConfig, WorkerInfo, WorkerStatus},
+    worker::{SpawnRequest, WorkerConfig, WorkerInfo, WorkerStatus},
     SharedOrchestrator,
     SharedWorkerManager,
 };
+use crate::policy::engine::PolicyEngine;
 use tauri::Emitter;
 
 #[tauri::command]
@@ -110,7 +112,140 @@ pub async fn split_task(
     })
 }
 
+/// 承認ゲート経由の spawn 処理に必要な参照をまとめた構造体
+struct SpawnContext<'a> {
+    settings: &'a SwarmSettings,
+    project_path: &'a str,
+    orchestrator: &'a SharedOrchestrator,
+    manager: &'a SharedWorkerManager,
+    pending_spawns: &'a SharedPendingSpawns,
+    state: &'a AppState,
+    app: &'a tauri::AppHandle,
+}
+
+/// SpawnRequest を承認ゲート経由で処理する共通ヘルパー。
+/// ポリシーに基づき即座にワーカーを起動するか、承認待ちにする。
+fn process_spawn_requests(
+    spawn_requests: Vec<SpawnRequest>,
+    ctx: &SpawnContext<'_>,
+) -> Result<(), String> {
+    let policy_engine = PolicyEngine::new(Path::new(ctx.project_path));
+
+    for req in spawn_requests {
+        let tool_policy = policy_engine.check("swarm_worker");
+        let decision = approval_gate::evaluate(&req.worker_config.task, ctx.settings, tool_policy);
+
+        match decision {
+            GateDecision::SpawnImmediately => {
+                let new_id = {
+                    let mut mgr = ctx.manager.lock().map_err(|e| e.to_string())?;
+                    mgr.spawn_worker(req.worker_config.into(), ctx.app.clone())
+                        .map_err(|e| e.to_string())?
+                };
+                let mut orch = ctx.orchestrator.lock().map_err(|e| e.to_string())?;
+                orch.assign_worker_id(req.task_id, new_id);
+            }
+            GateDecision::RequiresApproval { risk_level } => {
+                let request_id = uuid::Uuid::new_v4().to_string();
+
+                // Orchestrator のタスクを承認待ちに
+                {
+                    let mut orch = ctx.orchestrator.lock().map_err(|e| e.to_string())?;
+                    orch.set_awaiting_approval(req.task_id);
+                }
+
+                // PendingSpawns に保存
+                {
+                    let mut ps = ctx.pending_spawns.lock().map_err(|e| e.to_string())?;
+                    ps.insert(request_id.clone(), PendingSpawn {
+                        request_id: request_id.clone(),
+                        spawn_request: req.clone(),
+                        risk_level: risk_level.clone(),
+                    });
+                }
+
+                // 承認チャネルを登録
+                {
+                    let (tx, _rx) = tokio::sync::watch::channel(false);
+                    let mut channels = ctx.state.approval_channels.lock().unwrap();
+                    channels.insert(request_id.clone(), tx);
+                }
+
+                // DB に承認リクエストを作成
+                let risk_str = match risk_level {
+                    crate::policy::rules::RiskLevel::Low => "low",
+                    crate::policy::rules::RiskLevel::Medium => "medium",
+                    crate::policy::rules::RiskLevel::High => "high",
+                    crate::policy::rules::RiskLevel::Critical => "critical",
+                };
+                let tool_input = serde_json::json!({
+                    "taskId": req.task_id,
+                    "title": req.worker_config.task.title,
+                    "role": req.worker_config.task.role.as_str(),
+                    "files": req.worker_config.task.files,
+                    "isRetry": req.is_retry,
+                }).to_string();
+
+                let db = ctx.state.db.clone();
+                let rid = request_id.clone();
+                let app_clone = ctx.app.clone();
+                // 非同期で DB 挿入 + フロントエンド通知
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(()) = sqlx::query(
+                        "INSERT INTO approval_requests (request_id, worker_id, tool_name, tool_input, risk_level)
+                         VALUES (?, ?, ?, ?, ?)",
+                    )
+                    .bind(&rid)
+                    .bind::<Option<String>>(None)
+                    .bind("swarm_worker_spawn")
+                    .bind(&tool_input)
+                    .bind(risk_str)
+                    .execute(&db)
+                    .await
+                    .map(|_| ())
+                    {
+                        let row = sqlx::query(
+                            "SELECT id, request_id, worker_id, tool_name, tool_input,
+                                    risk_level, status, decision_reason, created_at, decided_at
+                             FROM approval_requests WHERE request_id = ?",
+                        )
+                        .bind(&rid)
+                        .fetch_one(&db)
+                        .await;
+                        if let Ok(row) = row {
+                            use sqlx::Row;
+                            let req = crate::models::approval::ApprovalRequest {
+                                id: row.get("id"),
+                                request_id: row.get("request_id"),
+                                worker_id: row.get("worker_id"),
+                                tool_name: row.get("tool_name"),
+                                tool_input: row.get("tool_input"),
+                                risk_level: row.get("risk_level"),
+                                status: row.get("status"),
+                                decision_reason: row.get("decision_reason"),
+                                created_at: row.get("created_at"),
+                                decided_at: row.get("decided_at"),
+                            };
+                            let _ = app_clone.emit("approval-request-pending", &req);
+                        }
+                    }
+                });
+            }
+            GateDecision::Denied => {
+                let mut orch = ctx.orchestrator.lock().map_err(|e| e.to_string())?;
+                orch.reject_task(req.task_id);
+                eprintln!(
+                    "[ApprovalGate] Task {} denied by policy",
+                    req.task_id
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 /// SubTask リストを Worker に割り当てて並列実行を開始する
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn orchestrator_start(
     tasks: Vec<SubTask>,
@@ -118,10 +253,11 @@ pub async fn orchestrator_start(
     project_path: String,
     orchestrator: State<'_, SharedOrchestrator>,
     manager: State<'_, SharedWorkerManager>,
+    pending_spawns: State<'_, SharedPendingSpawns>,
+    state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<OrchestratorRun, String> {
-    use tauri::Emitter;
-    let (_run, spawn_requests) = {
+    let (saved_settings, saved_project_path, spawn_requests) = {
         let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
         // 前回の Run が終了済みなら自動クリアして再実行可能にする
         if let Some(prev) = &orch.current_run {
@@ -135,21 +271,23 @@ pub async fn orchestrator_start(
                 }
             }
         }
-        orch.start_run(tasks, settings, project_path)?
+        let (_run, spawns) = orch.start_run(tasks, settings.clone(), project_path.clone())?;
+        (settings, project_path, spawns)
     };
 
-    // 最初の Wave のワーカーを起動
-    for req in spawn_requests {
-        let new_id = {
-            let mut mgr = manager.lock().map_err(|e| e.to_string())?;
-            mgr.spawn_worker(req.worker_config.into(), app.clone())
-                .map_err(|e| e.to_string())?
-        };
-        let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
-        orch.assign_worker_id(req.task_id, new_id);
-    }
+    // 承認ゲート経由でワーカーを起動
+    let ctx = SpawnContext {
+        settings: &saved_settings,
+        project_path: &saved_project_path,
+        orchestrator: &orchestrator,
+        manager: &manager,
+        pending_spawns: &pending_spawns,
+        state: &state,
+        app: &app,
+    };
+    process_spawn_requests(spawn_requests, &ctx)?;
 
-    // assign_worker_id 後の最新ステートを取得して返す
+    // 最新ステートを取得して返す
     let updated_run = {
         let orch = orchestrator.lock().map_err(|e| e.to_string())?;
         orch.current_run.clone().ok_or_else(|| "No active run".to_string())?
@@ -168,37 +306,39 @@ pub async fn orchestrator_get_status(
 }
 
 /// Worker のステータス変化を Orchestrator に通知する（Case A リトライ + 依存チェーン解放）
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn orchestrator_notify_worker_done(
     worker_id: String,
     status: WorkerStatus,
     orchestrator: State<'_, SharedOrchestrator>,
     manager: State<'_, SharedWorkerManager>,
+    pending_spawns: State<'_, SharedPendingSpawns>,
+    state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let spawn_requests = {
+    let (spawn_requests, settings, project_path) = {
         let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
-        orch.update_worker_status(&worker_id, status)
+        let spawns = orch.update_worker_status(&worker_id, status);
+        let (settings, project_path) = orch.current_run.as_ref()
+            .map(|r| (r.settings.clone(), r.project_path.clone()))
+            .unwrap_or_else(|| (SwarmSettings::default(), String::new()));
+        (spawns, settings, project_path)
     };
 
-    for req in spawn_requests {
-        let spawn_result = {
-            let mut mgr = manager.lock().map_err(|e| e.to_string())?;
-            mgr.spawn_worker(req.worker_config.into(), app.clone())
-        };
-        let new_id = match spawn_result {
-            Ok(id) => id,
-            Err(e) => {
-                eprintln!("[Orchestrator] spawn_worker failed for task {}: {}", req.task_id, e);
-                continue;
-            }
-        };
+    // 承認ゲート経由でワーカーを起動
+    let ctx = SpawnContext {
+        settings: &settings,
+        project_path: &project_path,
+        orchestrator: &orchestrator,
+        manager: &manager,
+        pending_spawns: &pending_spawns,
+        state: &state,
+        app: &app,
+    };
+    process_spawn_requests(spawn_requests, &ctx)?;
 
-        let mut orch = orchestrator.lock().map_err(|e| e.to_string())?;
-        orch.assign_worker_id(req.task_id, new_id);
-    }
-
-    // assign_worker_id 後の最新ステートを emit する
+    // 最新ステートを emit する
     let orch = orchestrator.lock().map_err(|e| e.to_string())?;
     if let Some(run) = &orch.current_run {
         let _ = app.emit("orchestrator-status-changed", run);
@@ -351,7 +491,8 @@ pub async fn orchestrator_run_wave_gate(
         (wo.project_path.clone(), wo.settings.base_branch.clone(), branches)
     };
 
-    let gate = WaveGate::new(&project_path, &base_branch);
+    let gate_config = crate::swarm::wave_gate::GateConfig::load(Path::new(&project_path));
+    let gate = WaveGate::with_config(&project_path, &base_branch, gate_config);
     let result = gate.execute(&branches).await;
 
     // Gate 結果を適用して次 Wave の SpawnRequest を取得

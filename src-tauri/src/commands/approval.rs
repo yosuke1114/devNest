@@ -1,7 +1,9 @@
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use crate::error::{AppError, Result};
 use crate::models::approval::{ApprovalDecision, ApprovalRequest};
 use crate::state::AppState;
+use crate::swarm::{SharedOrchestrator, SharedWorkerManager};
+use crate::swarm::approval_gate::SharedPendingSpawns;
 
 /// ApprovalRequest を sqlx::Row から構築するヘルパー
 fn row_to_request(row: &sqlx::sqlite::SqliteRow) -> ApprovalRequest {
@@ -96,6 +98,9 @@ pub async fn approval_create(
 }
 
 /// 承認/拒否の判定を送信する
+///
+/// 承認された場合、PendingSpawns に該当する SpawnRequest があればワーカーを起動する。
+/// 拒否された場合、Orchestrator のタスクを Skipped に更新する。
 #[tauri::command]
 pub async fn approval_decide(
     decision: ApprovalDecision,
@@ -122,11 +127,79 @@ pub async fn approval_decide(
         )));
     }
 
-    // 承認チャネルに結果を送信（ワーカーが待機中の場合）
+    // 承認チャネルに結果を送信（レガシー互換）
     {
-        let channels = state.approval_channels.lock().unwrap();
+        let mut channels = state.approval_channels.lock().unwrap();
         if let Some(tx) = channels.get(&decision.request_id) {
             let _ = tx.send(decision.approved);
+        }
+        // チャネルをクリーンアップ
+        channels.remove(&decision.request_id);
+    }
+
+    // PendingSpawns からワーカー起動リクエストを取得して処理
+    let pending_spawn = {
+        if let Some(ps_state) = app.try_state::<SharedPendingSpawns>() {
+            let mut ps = ps_state.lock().unwrap();
+            ps.take(&decision.request_id)
+        } else {
+            None
+        }
+    };
+
+    if let Some(pending) = pending_spawn {
+        if decision.approved {
+            // 承認 → ワーカーを起動
+            let task_id = pending.spawn_request.task_id;
+            let spawn_result = if let Some(mgr_state) = app.try_state::<SharedWorkerManager>() {
+                let mut mgr = mgr_state.lock().map_err(|e| {
+                    AppError::Internal(format!("WorkerManager lock failed: {}", e))
+                })?;
+                mgr.spawn_worker(pending.spawn_request.worker_config.into(), app.clone())
+                    .map_err(|e| AppError::Internal(format!("spawn_worker failed: {}", e)))
+            } else {
+                Err(AppError::Internal("WorkerManager not available".into()))
+            };
+
+            match spawn_result {
+                Ok(new_worker_id) => {
+                    if let Some(orch_state) = app.try_state::<SharedOrchestrator>() {
+                        let mut orch = orch_state.lock().map_err(|e| {
+                            AppError::Internal(format!("Orchestrator lock failed: {}", e))
+                        })?;
+                        orch.assign_worker_id(task_id, new_worker_id);
+                        // 最新ステートを emit
+                        if let Some(run) = &orch.current_run {
+                            let _ = app.emit("orchestrator-status-changed", run);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[ApprovalDecide] Worker spawn failed: {}", e);
+                    // 起動失敗時はタスクをエラーに
+                    if let Some(orch_state) = app.try_state::<SharedOrchestrator>() {
+                        let mut orch = orch_state.lock().map_err(|e| {
+                            AppError::Internal(format!("Orchestrator lock failed: {}", e))
+                        })?;
+                        orch.reject_task(task_id);
+                        if let Some(run) = &orch.current_run {
+                            let _ = app.emit("orchestrator-status-changed", run);
+                        }
+                    }
+                }
+            }
+        } else {
+            // 拒否 → タスクをスキップ
+            let task_id = pending.spawn_request.task_id;
+            if let Some(orch_state) = app.try_state::<SharedOrchestrator>() {
+                let mut orch = orch_state.lock().map_err(|e| {
+                    AppError::Internal(format!("Orchestrator lock failed: {}", e))
+                })?;
+                orch.reject_task(task_id);
+                if let Some(run) = &orch.current_run {
+                    let _ = app.emit("orchestrator-status-changed", run);
+                }
+            }
         }
     }
 

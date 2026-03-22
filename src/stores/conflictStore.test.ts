@@ -29,7 +29,7 @@ function makeConflictFile(overrides: Partial<ConflictFile> = {}): ConflictFile {
 }
 
 function makeScanResult(files: ConflictFile[] = [], unmanagedCount = 0): ConflictScanResult {
-  return { managed: files, unmanaged_count: unmanagedCount };
+  return { managed: files, unmanaged_count: unmanagedCount, unmanaged_files: [] };
 }
 
 describe("conflictStore", () => {

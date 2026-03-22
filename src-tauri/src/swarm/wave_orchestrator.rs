@@ -172,7 +172,8 @@ impl WaveOrchestrator {
             .and_then(|r| r.current_wave)
             .unwrap_or(1);
         let branches = self.orchestrator.completed_branches_for_wave(current_wave);
-        let gate = WaveGate::new(&self.project_path, &self.settings.base_branch);
+        let gate_config = super::wave_gate::GateConfig::load(std::path::Path::new(&self.project_path));
+        let gate = WaveGate::with_config(&self.project_path, &self.settings.base_branch, gate_config);
         let result = gate.execute(&branches).await;
 
         Ok(result)

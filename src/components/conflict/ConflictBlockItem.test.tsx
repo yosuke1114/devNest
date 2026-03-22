@@ -15,6 +15,7 @@ function makeBlock(overrides: Partial<ConflictBlock> = {}): ConflictBlock {
 describe("ConflictBlockItem", () => {
   const defaultProps = {
     block: makeBlock(),
+    filePath: "docs/test.md",
     resolution: undefined,
     manualContent: undefined,
     onResolve: vi.fn(),
