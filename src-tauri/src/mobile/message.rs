@@ -1,68 +1,98 @@
 use serde::{Deserialize, Serialize};
 
-/// クライアント → サーバー
+use crate::swarm::settings::SwarmSettings;
+use crate::swarm::subtask::SubTask;
+
+// ────────────────────────────────────────
+//  クライアント → サーバー
+// ────────────────────────────────────────
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum ClientMessage {
-    SwarmStart { tasks: Vec<SubTask> },
+    /// タスク分割リクエスト（既存 TaskSplitter 使用）
+    TaskSplit {
+        prompt: String,
+        project_path: String,
+    },
+    /// Swarm 開始（Wave モード）
+    SwarmStart {
+        tasks: Vec<SubTask>,
+        settings: SwarmSettings,
+        project_path: String,
+    },
+    /// Swarm 停止
     SwarmStop,
-    SwarmInput { text: String },
-    TaskSplit { text: String },
+    /// Worker への stdin 入力
+    WorkerInput {
+        worker_id: String,
+        data: String,
+    },
+    /// Wave Gate 実行
+    RunGate,
+    /// 現在の状態取得
     Sync,
     Ping,
 }
 
-/// サーバー → クライアント
+// ────────────────────────────────────────
+//  サーバー → クライアント
+// ────────────────────────────────────────
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "type", content = "payload")]
 pub enum ServerMessage {
-    Status {
-        phase: SwarmPhase,
-        agent: Option<String>,
-        completed: u32,
-        total: u32,
+    /// Swarm 全体のスナップショット
+    SwarmStatus(SwarmSnapshot),
+    /// 個別 Worker のステータス変更
+    WorkerStatus {
+        worker_id: String,
+        status: String,
     },
-    WaitingInput {
-        prompt: String,
+    /// Worker の PTY 出力（ストリーミング）
+    WorkerOutput {
+        worker_id: String,
+        data: String,
     },
-    Log {
-        text: String,
-        level: LogLevel,
-    },
+    /// Worker 一覧
+    Workers(Vec<WorkerSnapshot>),
+    /// タスク分割中
     Splitting,
+    /// タスク分割結果
     SplitResult {
         tasks: Vec<SubTask>,
+        conflict_warnings: Vec<String>,
     },
+    /// Wave Gate 結果
+    GateResult {
+        wave_number: u32,
+        overall: String,
+    },
+    /// Gate 実行可能通知
+    GateReady {
+        wave_number: u32,
+    },
+    /// エラー
     Error {
         message: String,
     },
     Pong,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum SwarmPhase {
-    Idle,
-    Starting,
-    Running,
-    WaitingInput,
-    Stopping,
-    Error,
+/// Swarm 全体のスナップショット
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SwarmSnapshot {
+    pub status: String,
+    pub current_wave: u32,
+    pub total_tasks: u32,
+    pub completed_tasks: u32,
+    pub failed_tasks: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub enum LogLevel {
-    Info,
-    Warn,
-    Error,
-    Success,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SubTask {
-    pub id: u32,
-    pub title: String,
-    pub tag: String,
-    pub points: u8,
+/// Worker 単体のスナップショット
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerSnapshot {
+    pub id: String,
+    pub label: String,
+    pub status: String,
 }

@@ -55,6 +55,15 @@ pub fn run() {
                     api::socket_server::DevNestApiServer::start(api_handle).await.ok();
                 });
 
+                // Swarm Wave Orchestrator 状態を登録
+                let wave_orch: swarm::wave_orchestrator::SharedWaveOrchestrator =
+                    std::sync::Arc::new(std::sync::Mutex::new(
+                        swarm::wave_orchestrator::WaveOrchestrator::new(
+                            vec![], swarm::settings::SwarmSettings::default(), String::new(),
+                        ),
+                    ));
+                app_handle.manage(wave_orch.clone());
+
                 // Mobile WebSocket サーバー起動
                 let ws_handle = app_handle.clone();
                 let ws_bind_addr = std::env::var("WS_BIND_ADDR")
@@ -62,9 +71,14 @@ pub fn run() {
                 let (ws_tx, _) = tokio::sync::broadcast::channel::<mobile::message::ServerMessage>(64);
                 let ws_state = std::sync::Arc::new(mobile::ws_server::WsState {
                     broadcast_tx: ws_tx,
-                    swarm: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
+                    wave_orch: wave_orch.clone(),
+                    manager: app_handle.state::<swarm::SharedWorkerManager>().inner().clone(),
                     app_handle: ws_handle,
                 });
+
+                // Tauri イベント → WS broadcast ブリッジ
+                mobile::ws_server::setup_event_bridge(ws_state.clone());
+
                 tauri::async_runtime::spawn(async move {
                     mobile::ws_server::start(ws_state, ws_bind_addr).await;
                 });
@@ -76,15 +90,6 @@ pub fn run() {
 
                 // バックグラウンドポーリング起動
                 services::poller::start(app_handle.clone(), pool);
-
-                // Swarm Wave Orchestrator 状態を登録
-                let wave_orch: swarm::wave_orchestrator::SharedWaveOrchestrator =
-                    std::sync::Arc::new(std::sync::Mutex::new(
-                        swarm::wave_orchestrator::WaveOrchestrator::new(
-                            vec![], swarm::settings::SwarmSettings::default(), String::new(),
-                        ),
-                    ));
-                app_handle.manage(wave_orch);
 
                 Ok(())
             })
