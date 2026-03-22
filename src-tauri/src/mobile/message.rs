@@ -30,6 +30,8 @@ pub enum ClientMessage {
     },
     /// Wave Gate 実行
     RunGate,
+    /// Swarm を Idle にリセット（新規タスク入力を可能にする）
+    SwarmReset,
     /// 部分完了した Swarm を履歴から再実行
     HistoryResume {
         run_id: String,

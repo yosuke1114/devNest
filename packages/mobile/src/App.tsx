@@ -747,6 +747,15 @@ export default function App() {
               Stop Swarm
             </button>
           )}
+          {!isRunning && (swarm.status === "done" || swarm.status === "blocked" || swarm.status === "cancelled") && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => safeSend({ type: "SwarmReset" })}
+              style={{ marginTop: 8 }}
+            >
+              ＋ 新規タスク
+            </button>
+          )}
         </div>
       )}
 

@@ -326,6 +326,15 @@ impl WaveOrchestrator {
         self.sync_waves_from_orchestrator();
     }
 
+    /// 完了・ブロック後に Idle へリセットする（新規 Swarm 開始を可能にする）
+    pub fn reset(&mut self) {
+        self.orchestrator = crate::swarm::orchestrator::Orchestrator::new();
+        self.all_tasks.clear();
+        self.waves.clear();
+        self.status = WaveOrchestratorStatus::Idle;
+        self.resolver_worker_id = None;
+    }
+
     /// 状態スナップショットを生成する
     pub fn snapshot(&self) -> WaveOrchestratorSnapshot {
         if let Some(run) = &self.orchestrator.current_run {

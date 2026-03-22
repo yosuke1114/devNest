@@ -152,6 +152,9 @@ async fn handle_client_message(
         ClientMessage::RunGate => {
             cmd_run_gate(state).await;
         }
+        ClientMessage::SwarmReset => {
+            cmd_swarm_reset(state);
+        }
         ClientMessage::HistoryResume { run_id, settings } => {
             cmd_history_resume(run_id, settings, state).await;
         }
@@ -321,6 +324,13 @@ async fn cmd_swarm_stop(state: &Arc<WsState>) {
         }
     }
 
+    broadcast_snapshot(state);
+}
+
+fn cmd_swarm_reset(state: &Arc<WsState>) {
+    if let Ok(mut wo) = state.wave_orch.lock() {
+        wo.reset();
+    }
     broadcast_snapshot(state);
 }
 

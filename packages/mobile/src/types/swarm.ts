@@ -126,5 +126,6 @@ export type ClientMessage =
   | { type: "WorkerInput"; payload: { worker_id: string; data: string } }
   | { type: "RunGate" }
   | { type: "HistoryResume"; payload: { run_id: string; settings: SwarmSettings } }
+  | { type: "SwarmReset" }
   | { type: "Sync" }
   | { type: "Ping" };
