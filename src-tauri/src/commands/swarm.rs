@@ -491,7 +491,8 @@ pub async fn orchestrator_run_wave_gate(
         (wo.project_path.clone(), wo.settings.base_branch.clone(), branches)
     };
 
-    let gate = WaveGate::new(&project_path, &base_branch);
+    let gate_config = crate::swarm::wave_gate::GateConfig::load(Path::new(&project_path));
+    let gate = WaveGate::with_config(&project_path, &base_branch, gate_config);
     let result = gate.execute(&branches).await;
 
     // Gate 結果を適用して次 Wave の SpawnRequest を取得
