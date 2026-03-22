@@ -1,0 +1,25 @@
+# DevNest Mobile 設定ファイル
+# scrum.shの実際の出力に合わせてキーワードを調整すること
+
+[swarm.completion_keywords]
+task_done = [
+  "Task completed",
+  "タスク完了",
+  "✅",
+  "Done:",
+  "完了",
+]
+
+waiting_input = [
+  "Waiting for input",
+  "承認しますか",
+  "続行しますか",
+  "[y/n]",
+  "(y/n)",
+  "Enter your response",
+]
+
+[swarm.timeout]
+# waiting_input状態のタイムアウト（分）
+# 0 = タイムアウトなし（現時点はなし）
+waiting_input_minutes = 0

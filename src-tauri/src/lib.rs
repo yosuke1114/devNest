@@ -18,6 +18,7 @@ pub mod swarm;
 pub mod notification;
 pub mod browser;
 pub mod api;
+pub mod mobile;
 
 use tauri::Manager;
 
@@ -58,14 +59,6 @@ pub fn run() {
                     api::socket_server::DevNestApiServer::start(api_handle).await.ok();
                 });
 
-                let pool_cleanup = pool.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = db::cleanup::run(&pool_cleanup).await;
-                });
-
-                // バックグラウンドポーリング起動
-                services::poller::start(app_handle.clone(), pool);
-
                 // Swarm Wave Orchestrator 状態を登録
                 let wave_orch: swarm::wave_orchestrator::SharedWaveOrchestrator =
                     std::sync::Arc::new(std::sync::Mutex::new(
@@ -73,7 +66,34 @@ pub fn run() {
                             vec![], swarm::settings::SwarmSettings::default(), String::new(),
                         ),
                     ));
-                app_handle.manage(wave_orch);
+                app_handle.manage(wave_orch.clone());
+
+                // Mobile WebSocket サーバー起動
+                let ws_handle = app_handle.clone();
+                let ws_bind_addr = std::env::var("WS_BIND_ADDR")
+                    .unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+                let (ws_tx, _) = tokio::sync::broadcast::channel::<mobile::message::ServerMessage>(64);
+                let ws_state = std::sync::Arc::new(mobile::ws_server::WsState {
+                    broadcast_tx: ws_tx,
+                    wave_orch: wave_orch.clone(),
+                    manager: app_handle.state::<swarm::SharedWorkerManager>().inner().clone(),
+                    app_handle: ws_handle,
+                });
+
+                // Tauri イベント → WS broadcast ブリッジ
+                mobile::ws_server::setup_event_bridge(ws_state.clone());
+
+                tauri::async_runtime::spawn(async move {
+                    mobile::ws_server::start(ws_state, ws_bind_addr).await;
+                });
+
+                let pool_cleanup = pool.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = db::cleanup::run(&pool_cleanup).await;
+                });
+
+                // バックグラウンドポーリング起動
+                services::poller::start(app_handle.clone(), pool);
 
                 Ok(())
             })
