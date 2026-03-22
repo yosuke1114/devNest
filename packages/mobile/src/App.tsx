@@ -2,6 +2,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useSwarmWS } from "./hooks/useSwarmWS";
 import type { TaskSnapshot, SubTask, SwarmSettings, ClientMessage } from "./types/swarm";
 import { DEFAULT_SETTINGS } from "./types/swarm";
+import { WorkerTerminal } from "./components/WorkerTerminal";
+import { ToastContainer, showToast } from "./components/Toast";
+import { SettingsPanel, type MobileSettings } from "./components/SettingsPanel";
 import "./App.css";
 
 // ────────────────────────────────────────
@@ -25,16 +28,6 @@ const TASK_STATE: Record<string, { icon: string; color: string; label: string }>
   error:    { icon: "❌", color: "#fc8181", label: "エラー" },
   skipped:  { icon: "⏭️", color: "#484f58", label: "スキップ" },
 };
-
-// ────────────────────────────────────────
-//  Toast
-// ────────────────────────────────────────
-interface Toast {
-  id: number;
-  text: string;
-  level: "info" | "success" | "warn" | "error";
-}
-let _toastId = 0;
 
 // ────────────────────────────────────────
 //  TaskBoard
@@ -78,9 +71,9 @@ function TaskBoard({ tasks }: { tasks: TaskSnapshot[] }) {
 }
 
 // ────────────────────────────────────────
-//  SettingsPanel  (#1)
+//  SwarmSettingsPanel  (#1 — swarm-specific settings)
 // ────────────────────────────────────────
-function SettingsPanel({
+function SwarmSettingsPanel({
   settings,
   onChange,
 }: {
@@ -119,7 +112,7 @@ function SettingsPanel({
 
   return (
     <div className="card settings-card">
-      <h2>Settings</h2>
+      <h2>Swarm Settings</h2>
       <div className="settings-grid">
         <div className="setting-row">
           <span>Max Workers</span>
@@ -204,16 +197,18 @@ function WorkerModal({
 //  App
 // ────────────────────────────────────────
 export default function App() {
-  const { state, send } = useSwarmWS();
+  const { state, send, reconnect } = useSwarmWS();
 
   // Core input state
   const [inputText, setInputText] = useState("");
   const [projectPath, setProjectPath] = useState("");
-  const logEndRef = useRef<HTMLDivElement>(null);
 
-  // #1 Settings
-  const [settings, setSettings] = useState<SwarmSettings>(DEFAULT_SETTINGS);
+  // WS settings panel (gear icon)
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // #1 Swarm settings
+  const [settings, setSettings] = useState<SwarmSettings>(DEFAULT_SETTINGS);
+  const [swarmSettingsOpen, setSwarmSettingsOpen] = useState(false);
 
   // #2 Editable task list
   const [editingTasks, setEditingTasks] = useState<SubTask[] | null>(null);
@@ -225,8 +220,9 @@ export default function App() {
   // #4 Worker modal
   const [workerModal, setWorkerModal] = useState<string | null>(null);
 
-  // #5 Toasts
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  // #4b Selected worker for xterm.js view
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [workerInputText, setWorkerInputText] = useState("");
 
   // #6 PR links
   const [prLinks, setPrLinks] = useState<string[]>([]);
@@ -236,6 +232,8 @@ export default function App() {
 
   // #9 Offline queue (only for WorkerInput — other messages are idempotent)
   const pendingMsgs = useRef<ClientMessage[]>([]);
+
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -251,33 +249,26 @@ export default function App() {
     }
   }, [state.splitResult]);
 
-  // #5 Toast helper
-  const addToast = useCallback((text: string, level: Toast["level"] = "info") => {
-    const id = ++_toastId;
-    setToasts((prev) => [...prev, { id, text, level }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
-  }, []);
-
-  // #5 Watch swarm status for notifications
+  // #5 Watch swarm status for toast notifications
   const prevStatus = useRef(state.swarm.status);
   useEffect(() => {
     const cur = state.swarm.status;
     if (cur === prevStatus.current) return;
     if (cur === "done") {
-      addToast("Swarm 完了!", "success");
+      showToast("Swarm 完了!", "success");
       if (typeof Notification !== "undefined" && Notification.permission === "granted") {
         new Notification("DevNest Swarm", { body: "全タスク完了" });
       }
     } else if (cur === "blocked") {
-      addToast("Wave Gate でブロック", "error");
+      showToast("Wave Gate でブロック", "error");
       if (typeof Notification !== "undefined" && Notification.permission === "granted") {
         new Notification("DevNest Swarm", { body: "Wave Gate でブロックされました" });
       }
     } else if (cur === "running" && prevStatus.current === "gating") {
-      addToast(`Wave ${state.swarm.currentWave} 開始`, "info");
+      showToast(`Wave ${state.swarm.currentWave} 開始`, "info");
     }
     prevStatus.current = cur;
-  }, [state.swarm.status, state.swarm.currentWave, addToast]);
+  }, [state.swarm.status, state.swarm.currentWave]);
 
   // #6 Extract PR links from worker output
   useEffect(() => {
@@ -296,9 +287,9 @@ export default function App() {
       const queued = [...pendingMsgs.current];
       pendingMsgs.current = [];
       for (const msg of queued) send(msg);
-      addToast(`オフラインキュー ${queued.length} 件を送信`, "info");
+      showToast(`オフラインキュー ${queued.length} 件を送信`, "info");
     }
-  }, [state.connected, send, addToast]);
+  }, [state.connected, send]);
 
   // #9 Wrapped send with offline queue
   const safeSend = useCallback(
@@ -307,10 +298,10 @@ export default function App() {
         send(msg);
       } else if (msg.type === "WorkerInput") {
         pendingMsgs.current.push(msg);
-        addToast("オフライン - 再接続後に送信します", "warn");
+        showToast("オフライン - 再接続後に送信します", "warn");
       }
     },
-    [state.connected, send, addToast],
+    [state.connected, send],
   );
 
   // #8 Voice input
@@ -318,7 +309,7 @@ export default function App() {
     const SR =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      addToast("このブラウザは音声入力に対応していません", "warn");
+      showToast("このブラウザは音声入力に対応していません", "warn");
       return;
     }
     const rec = new SR();
@@ -332,7 +323,7 @@ export default function App() {
       setInputText((prev) => (prev ? prev + " " + transcript : transcript));
     };
     rec.start();
-  }, [addToast]);
+  }, []);
 
   const handleSplit = () => {
     if (!inputText.trim() || !projectPath.trim()) return;
@@ -357,8 +348,33 @@ export default function App() {
   const handleStop = () => safeSend({ type: "SwarmStop" });
   const handleGate = () => safeSend({ type: "RunGate" });
 
+  const handleWorkerInput = useCallback(
+    (data: string) => {
+      if (!selectedWorkerId) return;
+      safeSend({
+        type: "WorkerInput",
+        payload: { worker_id: selectedWorkerId, data },
+      });
+    },
+    [selectedWorkerId, safeSend],
+  );
+
+  const handleWorkerInputText = () => {
+    if (!workerInputText.trim() || !selectedWorkerId) return;
+    safeSend({
+      type: "WorkerInput",
+      payload: { worker_id: selectedWorkerId, data: workerInputText.trim() + "\n" },
+    });
+    setWorkerInputText("");
+  };
+
+  const handleSettingsSave = (_s: MobileSettings) => {
+    reconnect();
+  };
+
   const { swarm, workers } = state;
   const isRunning = swarm.status === "running" || swarm.status === "gating";
+  const isIdle = swarm.status === "idle";
   const progress =
     swarm.totalTasks > 0 ? (swarm.completedTasks / swarm.totalTasks) * 100 : 0;
 
@@ -369,18 +385,17 @@ export default function App() {
     return true;
   });
 
-  const isIdle = swarm.status === "idle";
-
   return (
     <div className="app">
-      {/* #5 Toasts */}
-      <div className="toast-container">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast toast-${t.level}`}>
-            {t.text}
-          </div>
-        ))}
-      </div>
+      {/* Toast notifications */}
+      <ToastContainer />
+
+      {/* WS Settings modal */}
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSave={handleSettingsSave}
+      />
 
       {/* #4 Worker Modal */}
       {workerModal && (
@@ -398,23 +413,35 @@ export default function App() {
       <header className="header">
         <h1>DevNest Mobile</h1>
         <div className="header-right">
-          {isIdle && !state.splitResult && (
-            <button
-              className={`settings-btn ${settingsOpen ? "active" : ""}`}
-              onClick={() => setSettingsOpen((o) => !o)}
-            >
-              ⚙
-            </button>
-          )}
           <span className={`conn-badge ${state.connected ? "on" : "off"}`}>
             {state.connected ? "Connected" : "Disconnected"}
           </span>
+          <button
+            className="settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+          >
+            &#9881;
+          </button>
         </div>
       </header>
 
-      {/* #1 Settings Panel */}
-      {settingsOpen && isIdle && !state.splitResult && (
-        <SettingsPanel settings={settings} onChange={setSettings} />
+      {/* #1 Swarm Settings Panel (idle only) */}
+      {isIdle && !state.splitResult && (
+        <>
+          <div style={{ textAlign: "right", padding: "0 12px" }}>
+            <button
+              className={`settings-btn ${swarmSettingsOpen ? "active" : ""}`}
+              onClick={() => setSwarmSettingsOpen((o) => !o)}
+              style={{ fontSize: 12, padding: "4px 10px" }}
+            >
+              {swarmSettingsOpen ? "▲ Swarm設定" : "▼ Swarm設定"}
+            </button>
+          </div>
+          {swarmSettingsOpen && (
+            <SwarmSettingsPanel settings={settings} onChange={setSettings} />
+          )}
+        </>
       )}
 
       {/* Task Input */}
@@ -592,7 +619,10 @@ export default function App() {
               <li
                 key={w.id}
                 className="worker-item"
-                onClick={() => setWorkerModal(w.id)}
+                onClick={() => {
+                  setWorkerModal(w.id);
+                  setSelectedWorkerId(w.id);
+                }}
               >
                 <span
                   className="worker-dot"
@@ -604,6 +634,30 @@ export default function App() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Worker Output — xterm.js (selected worker) */}
+      {selectedWorkerId && state.workerLogs[selectedWorkerId] && !workerModal && (
+        <div className="card">
+          <h2>Worker Output</h2>
+          <WorkerTerminal
+            lines={state.workerLogs[selectedWorkerId]}
+            onInput={handleWorkerInput}
+          />
+          <div className="worker-input-row">
+            <input
+              className="modal-input"
+              type="text"
+              placeholder="Worker に入力..."
+              value={workerInputText}
+              onChange={(e) => setWorkerInputText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleWorkerInputText()}
+            />
+            <button className="btn btn-primary btn-send" onClick={handleWorkerInputText}>
+              Send
+            </button>
+          </div>
         </div>
       )}
 
