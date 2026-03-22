@@ -14,6 +14,7 @@ interface TerminalGridProps {
 export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [spawnError, setSpawnError] = useState<string | null>(null);
   const notifyWorkerDone = useSwarmStore((s) => s.notifyWorkerDone);
 
   // worker-spawned: Rust 側で起動された Worker（手動・Orchestrator 問わず）を追加
@@ -60,9 +61,10 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
       metadata: {},
     };
     try {
+      setSpawnError(null);
       await invoke("spawn_worker", { config });
     } catch (err) {
-      console.error("spawn_worker failed:", err);
+      setSpawnError(String(err));
     }
   };
 
@@ -94,6 +96,22 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   return (
     <div data-testid="terminal-grid" style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
       {/* ツールバー */}
+      {spawnError && (
+        <div
+          data-testid="spawn-error"
+          style={{
+            padding: "5px 10px",
+            background: "#2d0a0a",
+            border: "1px solid #fc8181",
+            borderRadius: 4,
+            fontSize: 11,
+            color: "#fc8181",
+            flexShrink: 0,
+          }}
+        >
+          ⚠️ 起動エラー: {spawnError}
+        </div>
+      )}
       <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <button
           data-testid="add-shell-button"
