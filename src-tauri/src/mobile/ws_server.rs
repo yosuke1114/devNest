@@ -378,11 +378,21 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
                 let new_id = {
                     let mut mgr = match state.manager.lock() {
                         Ok(m) => m,
-                        Err(_) => continue,
+                        Err(e) => {
+                            broadcast(&state.broadcast_tx, ServerMessage::Error {
+                                message: format!("Manager ロック失敗 (Gate後): {}", e),
+                            });
+                            continue;
+                        }
                     };
                     match mgr.spawn_worker(req.worker_config.into(), state.app_handle.clone()) {
                         Ok(id) => id,
-                        Err(_) => continue,
+                        Err(e) => {
+                            broadcast(&state.broadcast_tx, ServerMessage::Error {
+                                message: format!("Worker起動失敗 (Wave{}): {}", task_id, e),
+                            });
+                            continue;
+                        }
                     }
                 };
                 if let Ok(mut wo) = state.wave_orch.lock() {
@@ -392,6 +402,14 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
 
             broadcast_snapshot(state);
             broadcast_tasks(state);
+
+            // デスクトップ UI に Gate 後の状態を通知
+            use tauri::Emitter;
+            if let Ok(wo) = state.wave_orch.lock() {
+                if let Some(run) = &wo.orchestrator.current_run {
+                    let _ = state.app_handle.emit("orchestrator-status-changed", run);
+                }
+            }
         }
         Err(e) => {
             broadcast(
