@@ -194,6 +194,7 @@ macro_rules! all_commands {
             commands::swarm::swarm_history_save,
             commands::swarm::swarm_history_list,
             commands::swarm::swarm_history_delete,
+            commands::swarm::swarm_history_resume,
             // 承認キュー
             commands::approval::approval_list,
             commands::approval::approval_history,

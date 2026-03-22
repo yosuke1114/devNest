@@ -152,6 +152,9 @@ async fn handle_client_message(
         ClientMessage::RunGate => {
             cmd_run_gate(state).await;
         }
+        ClientMessage::HistoryResume { run_id, settings } => {
+            cmd_history_resume(run_id, settings, state).await;
+        }
         ClientMessage::Sync => {
             cmd_sync(state, socket).await;
         }
@@ -430,6 +433,59 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
     }
 }
 
+async fn cmd_history_resume(
+    run_id: String,
+    settings: crate::swarm::settings::SwarmSettings,
+    state: &Arc<WsState>,
+) {
+    use tauri::Manager;
+    use crate::swarm::history::get as history_get;
+
+    let app_state = state.app_handle.state::<AppState>();
+    let record = match history_get(&app_state.db, &run_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            broadcast(
+                &state.broadcast_tx,
+                ServerMessage::Error { message: format!("履歴が見つかりません: {run_id}") },
+            );
+            return;
+        }
+        Err(e) => {
+            broadcast(
+                &state.broadcast_tx,
+                ServerMessage::Error { message: format!("履歴取得失敗: {e}") },
+            );
+            return;
+        }
+    };
+
+    // done/skipped 以外のタスクを再実行対象に
+    let resume_tasks: Vec<crate::swarm::subtask::SubTask> = record
+        .tasks
+        .iter()
+        .filter(|t| t.execution_state != "done" && t.execution_state != "skipped")
+        .map(|t| crate::swarm::subtask::SubTask {
+            id: t.id,
+            title: t.title.clone(),
+            role: crate::swarm::subtask::TaskRole::from(t.role.as_str()),
+            files: t.files.clone(),
+            instruction: t.instruction.clone(),
+            depends_on: t.depends_on.clone(),
+        })
+        .collect();
+
+    if resume_tasks.is_empty() {
+        broadcast(
+            &state.broadcast_tx,
+            ServerMessage::Error { message: "再実行対象のタスクがありません（すべて完了済みです）".to_string() },
+        );
+        return;
+    }
+
+    cmd_swarm_start(resume_tasks, settings, record.project_path, state).await;
+}
+
 async fn cmd_sync(state: &Arc<WsState>, socket: &mut WebSocket) {
     let snapshot = make_snapshot(state);
     send_direct(socket, ServerMessage::SwarmStatus(snapshot)).await;
@@ -455,6 +511,11 @@ async fn cmd_sync(state: &Arc<WsState>, socket: &mut WebSocket) {
             .map(|(id, name, local_path)| crate::mobile::message::ProjectInfo { id, name, local_path })
             .collect();
         send_direct(socket, ServerMessage::Projects(project_list)).await;
+    }
+
+    // 履歴を送信
+    if let Ok(history) = crate::swarm::history::list(&app_state.db, 20).await {
+        send_direct(socket, ServerMessage::HistoryList(history)).await;
     }
 }
 

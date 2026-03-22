@@ -672,7 +672,7 @@ pub async fn orchestrator_advance_wave(
 
 // ─── Swarm 履歴コマンド ──────────────────────────────────────
 
-use crate::swarm::history::{SwarmRunRecord, save as history_save, list as history_list, delete as history_delete};
+use crate::swarm::history::{SwarmRunRecord, save as history_save, list as history_list, delete as history_delete, get as history_get};
 
 #[tauri::command]
 pub async fn swarm_history_save(
@@ -702,4 +702,43 @@ pub async fn swarm_history_delete(
     history_delete(&state.db, &run_id)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// 部分完了・失敗した Swarm を履歴から再実行する。
+/// done 以外のタスクのみを SubTask に変換して返す。
+/// 呼び出し側は返却された tasks を SwarmStart に渡す。
+#[tauri::command]
+pub async fn swarm_history_resume(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::swarm::history::ResumePayload, String> {
+    let record = history_get(&state.db, &run_id)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("履歴が見つかりません: {run_id}"))?;
+
+    // done 以外のタスクを SubTask に変換
+    let resume_tasks: Vec<SubTask> = record
+        .tasks
+        .iter()
+        .filter(|t| t.execution_state != "done" && t.execution_state != "skipped")
+        .map(|t| SubTask {
+            id: t.id,
+            title: t.title.clone(),
+            role: crate::swarm::subtask::TaskRole::from(t.role.as_str()),
+            files: t.files.clone(),
+            instruction: t.instruction.clone(),
+            depends_on: t.depends_on.clone(),
+        })
+        .collect();
+
+    if resume_tasks.is_empty() {
+        return Err("再実行対象のタスクがありません（すべて完了済みです）".to_string());
+    }
+
+    Ok(crate::swarm::history::ResumePayload {
+        tasks: resume_tasks,
+        project_path: record.project_path,
+        base_branch: record.base_branch,
+    })
 }

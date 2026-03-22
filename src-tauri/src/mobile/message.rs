@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::swarm::history::SwarmRunRecord;
 use crate::swarm::settings::SwarmSettings;
 use crate::swarm::subtask::SubTask;
 
@@ -29,6 +30,11 @@ pub enum ClientMessage {
     },
     /// Wave Gate 実行
     RunGate,
+    /// 部分完了した Swarm を履歴から再実行
+    HistoryResume {
+        run_id: String,
+        settings: SwarmSettings,
+    },
     /// 現在の状態取得
     Sync,
     Ping,
@@ -78,6 +84,8 @@ pub enum ServerMessage {
     Projects(Vec<ProjectInfo>),
     /// タスク実行状態一覧
     TasksUpdate(Vec<TaskSnapshot>),
+    /// Swarm 実行履歴一覧
+    HistoryList(Vec<SwarmRunRecord>),
     Pong,
 }
 

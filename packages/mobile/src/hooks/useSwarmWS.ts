@@ -6,6 +6,7 @@ import type {
   WorkerSnapshot,
   SubTask,
   TaskSnapshot,
+  SwarmRunRecord,
 } from "../types/swarm";
 import { showToast } from "../components/Toast";
 import { loadSettings } from "../components/SettingsPanel";
@@ -35,6 +36,7 @@ export interface SwarmState {
   logs: LogEntry[];
   projects: ProjectInfo[];
   tasks: TaskSnapshot[];
+  history: SwarmRunRecord[];
 }
 
 export type { TaskSnapshot };
@@ -68,6 +70,7 @@ export function useSwarmWS() {
     logs: [],
     projects: [],
     tasks: [],
+    history: [],
   });
 
   const send = useCallback((msg: ClientMessage) => {
@@ -164,6 +167,9 @@ export function useSwarmWS() {
         break;
       case "TasksUpdate":
         setState((s) => ({ ...s, tasks: msg.payload }));
+        break;
+      case "HistoryList":
+        setState((s) => ({ ...s, history: msg.payload }));
         break;
       case "Error":
         setState((s) => ({
