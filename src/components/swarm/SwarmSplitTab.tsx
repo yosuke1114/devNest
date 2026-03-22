@@ -89,6 +89,24 @@ export function SwarmSplitTab({ workingDir, onRunStarted }: SwarmSplitTabProps) 
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
+  const handleUpdateTask = (id: number, updates: Partial<SubTask>) => {
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, ...updates } : t));
+  };
+
+  const handleAddTask = () => {
+    const nextId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
+    setTasks((prev) => [...prev, {
+      id: nextId,
+      title: `新規タスク ${nextId}`,
+      role: "builder",
+      files: [],
+      instruction: "",
+      dependsOn: [],
+    }]);
+  };
+
+  const [showDryRun, setShowDryRun] = useState(false);
+
   return (
     <div style={containerStyle} data-testid="swarm-split-tab">
       {/* プロンプト入力エリア */}
@@ -175,7 +193,7 @@ export function SwarmSplitTab({ workingDir, onRunStarted }: SwarmSplitTabProps) 
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {wave.map((task) => (
-                  <TaskCard key={task.id} task={task} onDelete={handleDeleteTask} />
+                  <TaskCard key={task.id} task={task} onDelete={handleDeleteTask} onUpdate={handleUpdateTask} />
                 ))}
               </div>
               {wi < waves.length - 1 && (
@@ -199,6 +217,36 @@ export function SwarmSplitTab({ workingDir, onRunStarted }: SwarmSplitTabProps) 
           <SettingsPanel settings={settings} onChange={setSettings} />
         )}
       </section>
+
+      {/* タスク追加 + Dry Run */}
+      {tasks.length > 0 && (
+        <div style={{ padding: "8px 16px", display: "flex", gap: 8, borderBottom: "1px solid #21262d" }}>
+          <button
+            data-testid="add-task-button"
+            onClick={handleAddTask}
+            style={secondaryButtonStyle}
+          >
+            + タスク追加
+          </button>
+          <button
+            data-testid="dry-run-toggle"
+            onClick={() => setShowDryRun(v => !v)}
+            style={{
+              ...secondaryButtonStyle,
+              background: showDryRun ? "#f59e0b20" : "#21262d",
+              color: showDryRun ? "#f59e0b" : "#e6edf3",
+              border: showDryRun ? "1px solid #f59e0b40" : "1px solid #30363d",
+            }}
+          >
+            {showDryRun ? "Dry Run: ON" : "Dry Run"}
+          </button>
+        </div>
+      )}
+
+      {/* Dry Run プレビュー */}
+      {showDryRun && tasks.length > 0 && (
+        <DryRunPreview tasks={tasks} settings={settings} workingDir={workingDir} />
+      )}
 
       {/* Swarm実行ボタン */}
       {tasks.length > 0 && (
@@ -229,15 +277,39 @@ export function SwarmSplitTab({ workingDir, onRunStarted }: SwarmSplitTabProps) 
 
 // ─── TaskCard ─────────────────────────────────────────────────
 
-function TaskCard({ task, onDelete }: { task: SubTask; onDelete: (id: number) => void }) {
+function TaskCard({ task, onDelete, onUpdate }: {
+  task: SubTask;
+  onDelete: (id: number) => void;
+  onUpdate: (id: number, updates: Partial<SubTask>) => void;
+}) {
+  const [editing, setEditing] = useState(false);
   const role = task.role ?? "builder";
   const roleIcon = ROLE_ICON[role] ?? "🔨";
   const roleLabel = ROLE_LABEL[role] ?? role;
+
+  if (editing) {
+    return (
+      <TaskCardEditor
+        task={task}
+        onSave={(updates) => { onUpdate(task.id, updates); setEditing(false); }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
   return (
     <div style={taskCardStyle} data-testid={`task-card-${task.id}`}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
         <span style={{ color: "#58a6ff", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>#{task.id}</span>
         <span style={{ flex: 1, fontSize: 12, color: "#e6edf3" }}>{task.title}</span>
+        <button
+          onClick={() => setEditing(true)}
+          style={{ background: "none", border: "none", color: "#58a6ff", cursor: "pointer", fontSize: 10, padding: 0, marginRight: 4 }}
+          aria-label={`タスク ${task.id} を編集`}
+          data-testid={`edit-task-${task.id}`}
+        >
+          edit
+        </button>
         <button
           onClick={() => onDelete(task.id)}
           style={{ background: "none", border: "none", color: "#484f58", cursor: "pointer", fontSize: 11, padding: 0 }}
@@ -262,6 +334,111 @@ function TaskCard({ task, onDelete }: { task: SubTask; onDelete: (id: number) =>
           files: {task.files.slice(0, 2).join(", ")}{task.files.length > 2 ? ` +${task.files.length - 2}` : ""}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── TaskCardEditor ──────────────────────────────────────────
+
+const ALL_ROLES: import("./types").WorkerRole[] = ["builder", "designer", "reviewer", "scout", "merger", "tester"];
+
+function TaskCardEditor({ task, onSave, onCancel }: {
+  task: SubTask;
+  onSave: (updates: Partial<SubTask>) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [instruction, setInstruction] = useState(task.instruction);
+  const [role, setRole] = useState<import("./types").WorkerRole>(task.role ?? "builder");
+  const [filesText, setFilesText] = useState(task.files.join(", "));
+  const [depsText, setDepsText] = useState(task.dependsOn.join(", "));
+
+  const handleSave = () => {
+    const files = filesText.split(",").map(f => f.trim()).filter(Boolean);
+    const dependsOn = depsText.split(",").map(d => Number(d.trim())).filter(n => !isNaN(n) && n > 0);
+    onSave({ title, instruction, role, files, dependsOn });
+  };
+
+  return (
+    <div style={{ ...taskCardStyle, minWidth: 260, maxWidth: 320, border: "1px solid #1f6feb" }} data-testid={`task-editor-${task.id}`}>
+      <div style={{ fontSize: 11, color: "#58a6ff", fontWeight: 700, marginBottom: 6 }}>#{task.id} 編集中</div>
+
+      <label style={editorLabelStyle}>タイトル</label>
+      <input value={title} onChange={e => setTitle(e.target.value)} style={editorInputStyle} data-testid="edit-title" />
+
+      <label style={editorLabelStyle}>指示</label>
+      <textarea value={instruction} onChange={e => setInstruction(e.target.value)} style={{ ...editorInputStyle, minHeight: 50, resize: "vertical" }} rows={3} data-testid="edit-instruction" />
+
+      <label style={editorLabelStyle}>ロール</label>
+      <select
+        value={role}
+        onChange={e => setRole(e.target.value as import("./types").WorkerRole)}
+        style={editorInputStyle}
+        data-testid="edit-role"
+      >
+        {ALL_ROLES.map(r => (
+          <option key={r} value={r}>{ROLE_ICON[r]} {ROLE_LABEL[r]}</option>
+        ))}
+      </select>
+
+      <label style={editorLabelStyle}>ファイル (カンマ区切り)</label>
+      <input value={filesText} onChange={e => setFilesText(e.target.value)} style={editorInputStyle} placeholder="src/main.ts, src/utils.ts" data-testid="edit-files" />
+
+      <label style={editorLabelStyle}>依存 (タスクID, カンマ区切り)</label>
+      <input value={depsText} onChange={e => setDepsText(e.target.value)} style={editorInputStyle} placeholder="1, 2" data-testid="edit-deps" />
+
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <button onClick={handleSave} style={{ ...secondaryButtonStyle, background: "#1a7f37", color: "#fff", border: "none", flex: 1 }} data-testid="save-edit">保存</button>
+        <button onClick={onCancel} style={{ ...secondaryButtonStyle, flex: 1 }} data-testid="cancel-edit">取消</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── DryRunPreview ──────────────────────────────────────────
+
+function DryRunPreview({ tasks, settings, workingDir }: { tasks: SubTask[]; settings: SwarmSettings; workingDir: string }) {
+  const waves = computeWaves(tasks);
+  const branchPrefix = settings.branchPrefix || "swarm/worker-";
+
+  return (
+    <div style={{ padding: "12px 16px", background: "#0d111750", borderTop: "1px solid #21262d" }} data-testid="dry-run-preview">
+      <h3 style={{ ...sectionTitle, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ color: "#f59e0b" }}>Dry Run プレビュー</span>
+      </h3>
+      <div style={{ fontSize: 12, color: "#8b949e", marginBottom: 8 }}>
+        {tasks.length} タスク / {waves.length} Wave / 最大 {settings.maxWorkers} Worker
+      </div>
+
+      {waves.map((wave, wi) => (
+        <div key={wi} style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#58a6ff", marginBottom: 4 }}>
+            Wave {wi + 1} ({wave.length} タスク{wi === 0 ? ", 即時開始" : ""})
+          </div>
+          {wave.map((task) => {
+            const branch = `${branchPrefix}${task.id}`;
+            return (
+              <div key={task.id} style={{ display: "flex", gap: 8, fontSize: 11, color: "#8b949e", marginBottom: 2, fontFamily: "monospace", paddingLeft: 8 }}>
+                <span style={{ color: "#58a6ff", width: 24 }}>#{task.id}</span>
+                <span style={{ color: ROLE_COLORS[task.role]?.color ?? "#8b949e", width: 60 }}>
+                  {ROLE_ICON[task.role]} {(task.role ?? "builder").slice(0, 6)}
+                </span>
+                <span style={{ flex: 1, color: "#e6edf3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {task.title}
+                </span>
+                <span style={{ color: "#484f58", flexShrink: 0 }}>{branch.split("/").pop()}</span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      <div style={{ fontSize: 11, color: "#484f58", marginTop: 8, borderTop: "1px solid #21262d", paddingTop: 8 }}>
+        base: {workingDir} | prefix: {branchPrefix}
+        {settings.claudeSkipPermissions && " | skip-perms"}
+        {settings.autoApproveHighConfidence && " | auto-approve"}
+        {settings.claudeInteractive && " | interactive"}
+      </div>
     </div>
   );
 }
@@ -497,4 +674,24 @@ const labelStyle: React.CSSProperties = {
   color: "#8b949e",
   fontSize: 11,
   marginBottom: 4,
+};
+
+const editorLabelStyle: React.CSSProperties = {
+  display: "block",
+  color: "#8b949e",
+  fontSize: 10,
+  marginTop: 6,
+  marginBottom: 2,
+};
+
+const editorInputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "#0d1117",
+  border: "1px solid #30363d",
+  borderRadius: 4,
+  color: "#e6edf3",
+  fontSize: 11,
+  fontFamily: "monospace",
+  padding: "4px 6px",
+  boxSizing: "border-box",
 };
