@@ -33,8 +33,15 @@ pub async fn conflict_scan(
             return Ok(ConflictScanResult {
                 managed: vec![],
                 unmanaged_count: 0,
+                unmanaged_files: vec![],
             });
         }
+
+        let unmanaged: Vec<String> = conflicted
+            .iter()
+            .filter(|p| !is_managed_path(p, &docs_root))
+            .cloned()
+            .collect();
 
         Ok(ConflictScanResult {
             managed: conflicted
@@ -54,10 +61,8 @@ pub async fn conflict_scan(
                     },
                 })
                 .collect(),
-            unmanaged_count: conflicted
-                .iter()
-                .filter(|p| !is_managed_path(p, &docs_root))
-                .count(),
+            unmanaged_count: unmanaged.len(),
+            unmanaged_files: unmanaged,
         })
     })
     .await
@@ -78,7 +83,7 @@ pub async fn conflict_list(
     let rows = db::conflict::list_unresolved(&state.db, project_id).await?;
 
     let mut managed = Vec::new();
-    let mut unmanaged_count = 0usize;
+    let mut unmanaged_files = Vec::new();
 
     // 実際のファイルを読んで blocks をパース
     for row in &rows {
@@ -96,7 +101,7 @@ pub async fn conflict_list(
                 blocks,
             });
         } else {
-            unmanaged_count += 1;
+            unmanaged_files.push(row.file_path.clone());
         }
     }
 
@@ -112,7 +117,8 @@ pub async fn conflict_list(
 
     Ok(ConflictScanResult {
         managed,
-        unmanaged_count,
+        unmanaged_count: unmanaged_files.len(),
+        unmanaged_files,
     })
 }
 

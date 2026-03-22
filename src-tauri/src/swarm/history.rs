@@ -36,12 +36,13 @@ pub struct SwarmRunRecord {
 
 fn execution_state_str(s: &ExecutionState) -> &'static str {
     match s {
-        ExecutionState::Waiting => "waiting",
-        ExecutionState::Ready   => "ready",
-        ExecutionState::Running => "running",
-        ExecutionState::Done    => "done",
-        ExecutionState::Error   => "error",
-        ExecutionState::Skipped => "skipped",
+        ExecutionState::Waiting          => "waiting",
+        ExecutionState::Ready            => "ready",
+        ExecutionState::AwaitingApproval => "awaitingApproval",
+        ExecutionState::Running          => "running",
+        ExecutionState::Done             => "done",
+        ExecutionState::Error            => "error",
+        ExecutionState::Skipped          => "skipped",
     }
 }
 

@@ -265,17 +265,20 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
                   : a.executionState === "error" ? "#fc8181"
                   : a.executionState === "skipped" ? "#484f58"
                   : a.executionState === "waiting" ? "#4a5568"
+                  : a.executionState === "awaitingApproval" ? "#f59e0b"
                   : "#f6ad55"
               }}>
                 {a.executionState === "done" ? "✓"
                   : a.executionState === "error" ? "✕"
                   : a.executionState === "skipped" ? "─"
                   : a.executionState === "waiting" ? "⏸"
+                  : a.executionState === "awaitingApproval" ? "⏳"
                   : "●"}
               </span>
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {a.task.title}
                 {a.executionState === "skipped" && <span style={{ color: "#484f58", marginLeft: 4 }}>(スキップ)</span>}
+                {a.executionState === "awaitingApproval" && <span style={{ color: "#f59e0b", marginLeft: 4 }}>(承認待ち)</span>}
                 {a.executionState === "waiting" && a.task.dependsOn?.length > 0 && (
                   <span style={{ color: "#4a5568", marginLeft: 4 }}>← Task {a.task.dependsOn.join(",")}</span>
                 )}

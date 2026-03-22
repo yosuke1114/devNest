@@ -217,8 +217,8 @@ export function buildMockIpcScript(overrides: Record<string, unknown> = {}): str
     terminal_input_send: null,
     terminal_session_stop: null,
     terminal_session_list: [],
-    conflict_scan: { managed: [MOCK_CONFLICT_FILE], unmanaged_count: 0 },
-    conflict_list: { managed: [MOCK_CONFLICT_FILE], unmanaged_count: 0 },
+    conflict_scan: { managed: [MOCK_CONFLICT_FILE], unmanaged_count: 0, unmanaged_files: [] },
+    conflict_list: { managed: [MOCK_CONFLICT_FILE], unmanaged_count: 0, unmanaged_files: [] },
     conflict_resolve: null,
     conflict_resolve_all: { commit_sha: "abc12345", resolved_files: 1 },
     notification_list: [MOCK_NOTIFICATION],
@@ -235,8 +235,8 @@ export function buildMockIpcScript(overrides: Record<string, unknown> = {}): str
     // ─── Swarm (Phase 11-12) ───────────────────────────────────
     split_task: {
       tasks: [
-        { id: 1, title: "Task A: ユーザー認証実装", files: ["src/auth.ts"], instruction: "ユーザー認証を実装してください", dependsOn: [] },
-        { id: 2, title: "Task B: テスト追加", files: ["src/auth.test.ts"], instruction: "テストを追加してください", dependsOn: [1] },
+        { id: 1, title: "Task A: ユーザー認証実装", role: "builder", files: ["src/auth.ts"], instruction: "ユーザー認証を実装してください", dependsOn: [] },
+        { id: 2, title: "Task B: テスト追加", role: "tester", files: ["src/auth.test.ts"], instruction: "テストを追加してください", dependsOn: [1] },
       ],
       conflictWarnings: [],
       cycleError: null,
