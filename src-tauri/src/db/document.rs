@@ -169,7 +169,7 @@ pub async fn sync_log_list(pool: &DbPool, project_id: i64, limit: i64) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::db::project;
     use tempfile::TempDir;
 

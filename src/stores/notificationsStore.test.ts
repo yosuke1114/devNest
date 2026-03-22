@@ -367,9 +367,9 @@ describe("notificationsStore", () => {
     expect(mockListen).toHaveBeenCalledWith("ring-event", expect.any(Function));
   });
 
-  it("ring-event リスナーコールバックで unreadCount が増える", async () => {
+  it("ring-event リスナーコールバックは unreadCount を変えない（no-op）", async () => {
     let ringCb: (() => void) | undefined;
-    mockListen.mockImplementation(async (event: string, cb: () => void) => {
+    (mockListen as ReturnType<typeof vi.fn>).mockImplementation(async (event: string, cb: () => void) => {
       if (event === "ring-event") ringCb = cb;
       return vi.fn();
     });
@@ -377,6 +377,7 @@ describe("notificationsStore", () => {
     useNotificationsStore.getState().listenRingEvents();
     await new Promise((r) => setTimeout(r, 0));
     ringCb?.();
-    expect(useNotificationsStore.getState().unreadCount).toBe(3);
+    // ring-event は badge カウントを増やさない
+    expect(useNotificationsStore.getState().unreadCount).toBe(2);
   });
 });

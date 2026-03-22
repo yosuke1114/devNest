@@ -1,11 +1,91 @@
 use serde::{Deserialize, Serialize};
 
+/// Worker に割り当てるロール
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskRole {
+    #[default]
+    Builder,
+    Designer,
+    Reviewer,
+    Scout,
+    Merger,
+    Tester,
+}
+
+impl TaskRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TaskRole::Builder  => "builder",
+            TaskRole::Designer => "designer",
+            TaskRole::Reviewer => "reviewer",
+            TaskRole::Scout    => "scout",
+            TaskRole::Merger   => "merger",
+            TaskRole::Tester   => "tester",
+        }
+    }
+
+    /// ロール固有の指示前文（instruction の先頭に付与される）
+    pub fn system_context(&self) -> &'static str {
+        match self {
+            TaskRole::Builder => "\
+あなたは「Builder」ロールのWorkerです。コードの実装・追加・修正を担当します。\n\
+- 指定されたファイルへの変更のみ行う\n\
+- テストがある場合は必ず通過させる\n\
+- 新規コードにはコメントを付与する\n\n",
+            TaskRole::Designer => "\
+あなたは「Designer」ロールのWorkerです。UIコンポーネントのデザイン・スタイリングを担当します。\n\
+- ビジュアルの一貫性を保つ（既存のカラーパレット・フォントに合わせる）\n\
+- アクセシビリティ（aria属性・コントラスト比）を考慮する\n\
+- レスポンシブデザインを意識する\n\n",
+            TaskRole::Reviewer => "\
+あなたは「Reviewer」ロールのWorkerです。コードの品質レビューと問題修正を担当します。\n\
+- セキュリティ脆弱性（XSS・SQL injection・認証バイパス等）を確認する\n\
+- パフォーマンス上の問題を確認する\n\
+- 発見した問題は直接コードを修正する\n\n",
+            TaskRole::Scout => "\
+あなたは「Scout」ロールのWorkerです。コードベースの調査・分析を担当します。\n\
+- 対象ファイルの依存関係・呼び出し関係を調査する\n\
+- 調査結果をコード内のコメントまたはREADMEにまとめる\n\
+- コードの変更は最小限に留める\n\n",
+            TaskRole::Merger => "\
+あなたは「Merger」ロールのWorkerです。複数ブランチの統合・コンフリクト解消・PR作成を担当します。\n\
+- コンフリクトが発生している箇所をすべて解消する\n\
+- 統合後に既存のテストがすべて通過することを確認する\n\
+- 破壊的変更は加えない\n\
+- 作業完了後は必ずPRを作成する（後述の手順に従うこと）\n\n",
+            TaskRole::Tester => "\
+あなたは「Tester」ロールのWorkerです。テストコードの作成・実行・カバレッジ向上を担当します。\n\
+- 実装コード（テスト対象）は変更しない\n\
+- ユニットテスト・統合テストを追加または修正する\n\
+- テストを実行して全件パスすることを確認してからコミットする\n\
+- カバレッジが向上するよう境界値・エラー系のテストケースも追加する\n\n",
+        }
+    }
+}
+
+impl From<&str> for TaskRole {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "designer" => TaskRole::Designer,
+            "reviewer" => TaskRole::Reviewer,
+            "scout"    => TaskRole::Scout,
+            "merger"   => TaskRole::Merger,
+            "tester"   => TaskRole::Tester,
+            _          => TaskRole::Builder,
+        }
+    }
+}
+
 /// Claude API が生成するサブタスクの単位
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubTask {
     pub id: u32,
     pub title: String,
+    /// 担当ロール（builder / designer / reviewer / scout / merger）
+    #[serde(default)]
+    pub role: TaskRole,
     /// 操作対象ファイル（競合チェック用）
     pub files: Vec<String>,
     /// Worker に渡す具体的な指示（claude "..." の引数）
@@ -131,6 +211,7 @@ mod tests {
         SubTask {
             id,
             title: format!("Task {}", id),
+            role: super::TaskRole::Builder,
             files: files.into_iter().map(|s| s.to_string()).collect(),
             instruction: "do it".into(),
             depends_on,

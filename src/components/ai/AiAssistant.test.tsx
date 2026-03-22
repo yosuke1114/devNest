@@ -51,7 +51,7 @@ function makeReviewResult(overrides: Partial<ReviewResult> = {}): ReviewResult {
     overall_assessment: "approve",
     summary: "LGTM",
     findings: [],
-    design_consistency: { inconsistencies: [] },
+    design_consistency: { checked_docs: [], inconsistencies: [], missing_doc_updates: [] },
     suggested_doc_updates: [],
     ...overrides,
   };
@@ -229,7 +229,7 @@ describe("AiAssistant", () => {
 
   it("「コード生成」タブ: codegenResult でファイル一覧を表示する", () => {
     aiState.codegenResult = makeCodegenResult({
-      generated_files: [{ path: "src/foo.rs", file_type: "rust", content: "fn main() {}" }],
+      generated_files: [{ path: "src/foo.rs", file_type: "rust", language: "rust", content: "fn main() {}" }],
     });
     render(<AiAssistant onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("コード生成"));
@@ -241,7 +241,7 @@ describe("AiAssistant", () => {
   it("「コード生成」タブ: content が 400文字超の場合に省略表示する", () => {
     const longContent = "x".repeat(500);
     aiState.codegenResult = makeCodegenResult({
-      generated_files: [{ path: "big.rs", file_type: "rust", content: longContent }],
+      generated_files: [{ path: "big.rs", file_type: "rust", language: "rust", content: longContent }],
     });
     render(<AiAssistant onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("コード生成"));
@@ -259,7 +259,7 @@ describe("AiAssistant", () => {
 
   it("「コード生成」タブ: mapping_updates があるとき件数を表示する", () => {
     aiState.codegenResult = makeCodegenResult({
-      mapping_updates: [{ doc_path: "a.md", code_paths: ["a.rs"] }, { doc_path: "b.md", code_paths: ["b.rs"] }],
+      mapping_updates: [{ doc_path: "a.md", source_path: "a.rs" }, { doc_path: "b.md", source_path: "b.rs" }],
     });
     render(<AiAssistant onClose={vi.fn()} />);
     fireEvent.click(screen.getByText("コード生成"));

@@ -124,7 +124,7 @@ describe("PRListItem", () => {
 
   it("checks_status=null のとき ChecksIcon は何も表示しない (line 45)", () => {
     render(
-      <PRListItem {...defaultProps} pr={makePr({ checks_status: null })} />
+      <PRListItem {...defaultProps} pr={makePr({ checks_status: undefined })} />
     );
     // passing/failing/pending どのテキストも表示されない
     expect(screen.queryByText(/passing|failing|pending/)).toBeNull();

@@ -3,9 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TerminalGrid } from "../TerminalGrid";
 import type { WorkerInfo } from "../types";
 
-const { mockInvoke, mockListen } = vi.hoisted(() => ({
+const { mockInvoke } = vi.hoisted(() => ({
   mockInvoke: vi.fn(),
-  mockListen: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mockInvoke }));

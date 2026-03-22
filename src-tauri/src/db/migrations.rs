@@ -10,7 +10,7 @@ pub async fn run(pool: &DbPool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::connect;
+    use crate::db::connect_for_test as connect;
     use tempfile::NamedTempFile;
 
     // Red: マイグレーション後に projects テーブルが存在すること

@@ -37,8 +37,13 @@ vi.mock("../../stores/uiStore", () => ({
 function makeDoc(overrides: Partial<DocStaleness> = {}): DocStaleness {
   return {
     doc_path: "docs/spec.md",
+    current_status: "fresh",
     staleness_score: 0.1,
-    last_scanned_at: "2026-01-01T00:00:00Z",
+    recommended_status: "fresh",
+    days_since_sync: 5,
+    commits_since_sync: 1,
+    lines_changed_in_sources: 10,
+    total_source_lines: 200,
     ...overrides,
   };
 }

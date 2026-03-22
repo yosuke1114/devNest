@@ -139,9 +139,6 @@ macro_rules! all_commands {
             commands::agile::kanban_delete_card,
             commands::agile::sprint_suggest_plan,
             commands::agile::sprint_generate_retro,
-            commands::agile::story_map_get,
-            commands::agile::story_map_save,
-            commands::agile::flow_analyze,
             // Phase 9: MCP
             commands::mcp::mcp_get_status,
             commands::mcp::mcp_add_server,
@@ -192,6 +189,10 @@ macro_rules! all_commands {
             // ハイブリッド: Orchestrator Wave 直接アクセス
             commands::swarm::orchestrator_wave_status,
             commands::swarm::orchestrator_advance_wave,
+            // Swarm 履歴
+            commands::swarm::swarm_history_save,
+            commands::swarm::swarm_history_list,
+            commands::swarm::swarm_history_delete,
         ]
     };
 }

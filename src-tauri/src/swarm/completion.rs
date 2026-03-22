@@ -35,6 +35,14 @@ impl CompletionDetector {
                 "Task complete".to_string(),
                 "Task completed".to_string(),
                 "Completed successfully".to_string(),
+                // Claude バッチモード完了サマリー（PTY環境で process が終了しない場合の検出用）
+                // 例: "* Worked for 2m 6s", "* Crunched for 3m 1s", "* Sautéed for 1m 30s"
+                "* Worked for ".to_string(),
+                "* Crunched for ".to_string(),
+                "* Sautéed for ".to_string(),
+                "* Cooked for ".to_string(),
+                "* Baked for ".to_string(),
+                "* Brewed for ".to_string(),
             ],
             error_patterns: vec![
                 "API Error".to_string(),

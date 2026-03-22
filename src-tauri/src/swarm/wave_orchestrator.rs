@@ -290,6 +290,7 @@ mod tests {
         SubTask {
             id,
             title: format!("Task {}", id),
+            role: crate::swarm::subtask::TaskRole::Builder,
             files: vec![],
             instruction: format!("do {}", id),
             depends_on: deps,
@@ -302,6 +303,13 @@ mod tests {
             branch_prefix: "swarm/task-".into(),
             base_branch: "main".into(),
             max_retries: 0,
+            timeout_minutes: 30,
+            default_shell: "zsh".into(),
+            prompt_patterns: "$|%|>".into(),
+            claude_skip_permissions: false,
+            claude_no_stream: false,
+            auto_approve_high_confidence: false,
+            claude_interactive: false,
         }
     }
 

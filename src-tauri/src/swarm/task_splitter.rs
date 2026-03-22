@@ -3,33 +3,51 @@ use crate::doc_mapping::{index::find_docs_for_source, types::DocIndex};
 use crate::error::{AppError, Result};
 use crate::services::anthropic::AnthropicClient;
 
-use super::subtask::SubTask;
+use super::subtask::{SubTask, TaskRole};
 
 const SYSTEM_PROMPT: &str = r#"あなたはタスク分解の専門家です。
-ユーザーのタスクを並列・直列実行可能なサブタスクに分割してください。
+ユーザーのタスクを並列・直列実行可能なサブタスクに分割し、各タスクに最適なロールを割り当ててください。
 
-制約:
+## ロール定義
+
+各タスクには以下のロールのいずれかを割り当てること:
+
+| role      | 担当                                         | 向いているタスク例                                   |
+|-----------|----------------------------------------------|-----------------------------------------------------|
+| builder   | コードの実装・追加・修正                     | 新機能の実装、バグ修正、リファクタリング             |
+| designer  | UIコンポーネントのデザイン・スタイリング      | 画面レイアウト、CSS/スタイル変更、アニメーション追加 |
+| reviewer  | コードのレビューと品質改善                   | セキュリティ確認、パフォーマンス改善、型安全性確認   |
+| scout     | コードベースの調査・分析                     | 依存関係調査、影響範囲確認、仕様の読み解き          |
+| merger    | 複数ブランチの統合・コンフリクト解消・PR作成  | マージ作業、衝突解消、後処理統合、PR発行            |
+| tester    | テストコードの作成・実行・カバレッジ向上      | ユニットテスト追加、E2Eテスト、テスト修正           |
+
+## 制約
+
 - 各サブタスクには対象ファイル/ディレクトリを明記すること
 - 分割数は最大8つまで
 - 独立して実行できるタスクは depends_on を空配列にすること
 - 依存関係がある場合のみ depends_on に依存先タスクの id を列挙すること（循環依存禁止）
+- instruction はそのロールが実際に行うべき作業を具体的・詳細に記述すること（あいまいな指示は禁止）
 - JSON形式のみで返すこと（説明文や前置きは不要）
 
-出力形式:
+## 出力形式
+
 {
   "tasks": [
     {
       "id": 1,
       "title": "短いタイトル（20文字以内）",
+      "role": "scout",
       "files": ["path/to/file"],
-      "instruction": "Workerへの具体的な指示（claude コマンドに渡すプロンプト）",
+      "instruction": "Workerへの具体的な指示。何を調べ・実装し・確認すべきかを明記する。",
       "depends_on": []
     },
     {
       "id": 2,
       "title": "依存タスクの例",
+      "role": "builder",
       "files": ["path/to/other"],
-      "instruction": "Task 1の結果を踏まえた指示",
+      "instruction": "Task 1の調査結果を踏まえて〇〇を実装する。具体的には...",
       "depends_on": [1]
     }
   ]
@@ -156,10 +174,16 @@ fn parse_subtasks(raw: &str) -> Result<Vec<SubTask>> {
                 .map(|arr| arr.iter().filter_map(|d| d.as_u64().map(|n| n as u32)).collect())
                 .unwrap_or_default();
 
+            let role = v
+                .get("role")
+                .and_then(|x| x.as_str())
+                .map(TaskRole::from)
+                .unwrap_or_default();
+
             if instruction.is_empty() {
                 return None;
             }
-            Some(SubTask { id, title, files, instruction, depends_on })
+            Some(SubTask { id, title, role, files, instruction, depends_on })
         })
         .collect();
 

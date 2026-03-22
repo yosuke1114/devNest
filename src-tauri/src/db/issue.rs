@@ -248,7 +248,7 @@ pub async fn draft_list(pool: &DbPool, project_id: i64) -> Result<Vec<IssueDraft
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::services::github::{GitHubIssue, GitHubLabel, GitHubMilestone, GitHubUser};
     use tempfile::TempDir;
 

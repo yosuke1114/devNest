@@ -402,13 +402,6 @@ export const sprintSuggestPlan = (projectPath: string, sprintInfo: import("../ty
   invoke<import("../types").SprintPlan>("sprint_suggest_plan", { projectPath, sprintInfo });
 export const sprintGenerateRetro = (projectPath: string, sprintInfo: import("../types").SprintInfo) =>
   invoke<import("../types").Retrospective>("sprint_generate_retro", { projectPath, sprintInfo });
-export const storyMapGet = (projectPath: string, productId: string) =>
-  invoke<import("../types").StoryMap>("story_map_get", { projectPath, productId });
-export const storyMapSave = (projectPath: string, map: import("../types").StoryMap) =>
-  invoke<void>("story_map_save", { projectPath, map });
-export const flowAnalyze = (projectPath: string, productId: string) =>
-  invoke<import("../types").FlowAnalysis>("flow_analyze", { projectPath, productId });
-
 // Phase 9: MCP
 export const mcpGetStatus = (projectPath: string) =>
   invoke<import("../types").McpHubStatus>("mcp_get_status", { projectPath });

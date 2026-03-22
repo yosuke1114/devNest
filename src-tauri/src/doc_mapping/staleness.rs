@@ -40,7 +40,7 @@ pub fn calculate_staleness(
 
     // last_synced_commit が未設定の場合はリポジトリ不要で最高スコアを返す
     if fm.last_synced_commit.is_none() {
-        let staleness_score = MAX_DAYS / MAX_DAYS * 0.3 + MAX_COMMITS / MAX_COMMITS * 0.5; // 0.8
+        let staleness_score = 1.0_f64 * 0.3 + 1.0_f64 * 0.5; // 0.8
         return Ok(DocStaleness {
             doc_path: rel_doc,
             current_status: fm.status.clone(),

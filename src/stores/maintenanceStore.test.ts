@@ -24,29 +24,33 @@ vi.mock("../lib/ipc", () => mockIpc);
 const projectPath = "/tmp/proj";
 
 const mockDepReport: DependencyReport = {
-  outdated: [{ name: "react", current: "18.0.0", latest: "18.3.0", kind: "npm" }],
-  scannedAt: "2026-03-01",
+  checked_at: "2026-03-01",
+  rust_deps: [],
+  node_deps: [{ name: "react", ecosystem: "Node", current_version: "18.0.0", latest_version: "18.3.0", update_type: "Minor", has_vulnerability: false, vulnerability_severity: null, affected_sources: [] }],
+  total_outdated: 1,
+  total_vulnerable: 0,
 };
 
 const mockDebtReport: TechDebtReport = {
-  issues: [{ file: "src/foo.ts", line: 10, kind: "todo", message: "fix me" }],
-  score: 85,
-  scannedAt: "2026-03-01",
+  scanned_at: "2026-03-01",
+  items: [{ id: "1", category: "TodoFixme", file_path: "src/foo.ts", line: 10, severity: "Low", description: "fix me", auto_detected: true }],
+  total_score: 85,
+  by_category: {},
 };
 
 const mockCoverageReport: CoverageReport = {
-  lines: 78.5,
-  branches: 65.0,
-  functions: 80.0,
-  generatedAt: "2026-03-01",
+  overall_pct: 78.5,
+  files: [],
+  rust_available: false,
+  node_available: true,
 };
 
 const mockRefactorCandidates: RefactorCandidate[] = [
-  { file: "src/big.ts", linesOfCode: 500, complexity: 20, reason: "too large" },
+  { file_path: "src/big.ts", score: 90, factors: { change_frequency: 5, complexity: 20, file_size: 500 }, estimated_impact: "High" },
 ];
 
 const mockDocStaleness: DocStaleness[] = [
-  { docPath: "docs/arch.md", lastUpdated: "2026-01-01", daysSinceUpdate: 60, stale: true },
+  { doc_path: "docs/arch.md", current_status: "stale", staleness_score: 0.8, recommended_status: "update", days_since_sync: 60, commits_since_sync: 10, lines_changed_in_sources: 100, total_source_lines: 500 },
 ];
 
 function resetStore() {

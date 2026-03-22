@@ -336,7 +336,7 @@ describe("terminalStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     const session = makeSession({ id: 5, status: "running" });
@@ -358,7 +358,7 @@ describe("terminalStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     const session = makeSession({ id: 5, status: "running" });

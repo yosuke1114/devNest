@@ -106,11 +106,16 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
 
   if (!currentRun) {
     return (
-      <div style={emptyStyle} data-testid="running-tab-empty">
-        <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
-        <div style={{ color: "#484f58", fontSize: 14 }}>実行中のSwarmセッションはありません</div>
-        <div style={{ color: "#30363d", fontSize: 12, marginTop: 6 }}>
-          「タスク分解」タブでタスクを分解してから「Swarm実行を開始」してください
+      <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1117" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 0", flexShrink: 0 }} data-testid="running-tab-empty">
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+          <div style={{ color: "#484f58", fontSize: 14 }}>実行中のSwarmセッションはありません</div>
+          <div style={{ color: "#30363d", fontSize: 12, marginTop: 6 }}>
+            「タスク分解」タブでタスクを分解してから「Swarm実行を開始」してください
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: "hidden", padding: 8 }}>
+          <TerminalGrid workingDir={workingDir} />
         </div>
       </div>
     );
@@ -128,8 +133,55 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
     ? Math.round((1 - resources.memFreeGb / resources.memTotalGb) * 100)
     : 0;
 
+  const isDone = currentRun.status === "done" || currentRun.status === "partialDone";
+  const isSuccess = currentRun.status === "done";
+
   return (
     <div style={containerStyle} data-testid="swarm-running-tab">
+      {/* 完了バナー */}
+      {isDone && (
+        <div
+          data-testid="completion-banner"
+          style={{
+            padding: "16px 20px",
+            background: isSuccess ? "#0d2818" : "#2d1f0d",
+            borderBottom: `2px solid ${isSuccess ? "#1a7f37" : "#b45309"}`,
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 32 }}>{isSuccess ? "✅" : "⚠️"}</span>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: isSuccess ? "#4ade80" : "#fbbf24" }}>
+                {isSuccess ? "Swarm 完了" : "Swarm 部分完了"}
+              </div>
+              <div style={{ fontSize: 12, color: "#8b949e", marginTop: 2 }}>
+                {currentRun.doneCount}/{currentRun.total} タスク成功
+                {currentRun.failed > 0 && (
+                  <span style={{ color: "#fc8181", marginLeft: 8 }}>
+                    {currentRun.failed} 件失敗
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              {currentRun.assignments.map((a) => (
+                <span
+                  key={a.workerId || a.task.id}
+                  title={a.task.title}
+                  style={{ fontSize: 18 }}
+                >
+                  {a.executionState === "done" ? "✅"
+                    : a.executionState === "error" ? "❌"
+                    : a.executionState === "skipped" ? "⏭️"
+                    : "⏳"}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ヘッダー情報 */}
       <div style={headerStyle}>
         <div>
@@ -220,13 +272,23 @@ export function SwarmRunningTab({ workingDir }: SwarmRunningTabProps) {
                 {isMerging ? "🔀 マージ中..." : "🔀 ブランチをマージ"}
               </button>
             )}
-            <button
-              data-testid="cancel-run-button"
-              onClick={cancelRun}
-              style={{ ...actionButton, background: "transparent", border: "1px solid #fc8181", color: "#fc8181" }}
-            >
-              ❌ キャンセル
-            </button>
+            {isDone ? (
+              <button
+                data-testid="new-run-button"
+                onClick={cancelRun}
+                style={{ ...actionButton, background: "#1f6feb" }}
+              >
+                ＋ 新しい Swarm を開始
+              </button>
+            ) : (
+              <button
+                data-testid="cancel-run-button"
+                onClick={cancelRun}
+                style={{ ...actionButton, background: "transparent", border: "1px solid #fc8181", color: "#fc8181" }}
+              >
+                ❌ キャンセル
+              </button>
+            )}
           </div>
         </div>
 
@@ -454,14 +516,6 @@ const headerStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const emptyStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  height: "100%",
-  background: "#0d1117",
-};
 
 const panelSection: React.CSSProperties = {
   padding: "12px",
