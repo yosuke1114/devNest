@@ -14,7 +14,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use tauri::AppHandle;
 
 use crate::state::AppState;
-use crate::swarm::wave_orchestrator::{SharedWaveOrchestrator, WaveOrchestratorStatus};
+use crate::swarm::wave_orchestrator::{SharedWaveOrchestrator, WaveOrchestratorStatus, RESOLVER_TASK_ID};
 use crate::swarm::worker::WorkerStatus;
 use crate::swarm::SharedWorkerManager;
 use crate::swarm::subtask::{detect_file_conflicts, detect_circular_deps};
@@ -372,9 +372,11 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
                 },
             );
 
-            // 次 Wave のワーカーを起動
+            // 次 Wave のワーカーを起動（コンフリクト解消 Worker を含む）
             for req in next_spawns {
                 let task_id = req.task_id;
+                let is_resolver = task_id == RESOLVER_TASK_ID;
+
                 let new_id = {
                     let mut mgr = match state.manager.lock() {
                         Ok(m) => m,
@@ -388,15 +390,21 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
                     match mgr.spawn_worker(req.worker_config.into(), state.app_handle.clone()) {
                         Ok(id) => id,
                         Err(e) => {
+                            let label = if is_resolver { "コンフリクト解消".to_string() } else { format!("Wave task {}", task_id) };
                             broadcast(&state.broadcast_tx, ServerMessage::Error {
-                                message: format!("Worker起動失敗 (Wave{}): {}", task_id, e),
+                                message: format!("Worker起動失敗 ({}): {}", label, e),
                             });
                             continue;
                         }
                     }
                 };
+
                 if let Ok(mut wo) = state.wave_orch.lock() {
-                    wo.assign_worker_id(task_id, new_id);
+                    if is_resolver {
+                        wo.assign_resolver_worker_id(new_id);
+                    } else {
+                        wo.assign_worker_id(task_id, new_id);
+                    }
                 }
             }
 

@@ -172,11 +172,17 @@ impl From<OrchestratorTaskConfig> for WorkerConfig {
 
         let completion_steps = if cfg.task.role == crate::swarm::subtask::TaskRole::Merger {
             format!(
-                "作業が完了したら必ず以下を順番に実行してください:\n\
+                "【重要】あなたのタスクは Pull Request を作成して初めて完了です。以下をすべて実行するまで作業を終了しないでください:\n\
+                \n\
                 1. git add -A && git commit -m 'feat: {commit_msg}'\n\
                 2. git push origin {branch}\n\
-                3. gh pr create --title 'feat: {commit_msg}' --body '## 変更概要\n\nSwarm Merger による統合・コンフリクト解消\n\n## 確認事項\n- [ ] コンフリクト解消済み\n- [ ] テスト通過確認済み' --head {branch} --base {base}\n\
-                ※ gh コマンドが使えない場合は `gh auth login` で認証してから再実行してください。",
+                3. 以下のコマンドで PR を作成し、表示された PR URL を確認する:\n\
+                   gh pr create --title 'feat: {commit_msg}' --body '## 変更概要\n\nSwarm Merger による統合・コンフリクト解消\n\n## 確認事項\n- [ ] コンフリクト解消済み\n- [ ] テスト通過確認済み' --head {branch} --base {base}\n\
+                \n\
+                PR URL が表示されたことを確認してから終了してください。\n\
+                ※ gh: command not found の場合は PATH を確認するか `which gh` で場所を特定してフルパスで実行してください。\n\
+                ※ gh auth status でログイン済みか確認し、未ログインなら `gh auth login` を実行してください。\n\
+                ※ PR 作成に失敗した場合でもエラーメッセージを出力し、理由を明記してから終了してください。",
                 commit_msg = commit_msg,
                 branch = branch,
                 base = base,

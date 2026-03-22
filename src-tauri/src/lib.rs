@@ -71,7 +71,7 @@ pub fn run() {
                 // Mobile WebSocket サーバー起動
                 let ws_handle = app_handle.clone();
                 let ws_bind_addr = std::env::var("WS_BIND_ADDR")
-                    .unwrap_or_else(|_| "127.0.0.1:7878".to_string());
+                    .unwrap_or_else(|_| "0.0.0.0:7878".to_string());
                 let (ws_tx, _) = tokio::sync::broadcast::channel::<mobile::message::ServerMessage>(64);
                 let ws_state = std::sync::Arc::new(mobile::ws_server::WsState {
                     broadcast_tx: ws_tx,

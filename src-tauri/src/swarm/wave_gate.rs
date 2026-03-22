@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
 
-use super::git_branch::merge_worker_branch;
+use super::git_branch::{merge_worker_branch, merge_worker_branch_theirs};
 use super::wave::{GateOverall, GateStepResult, WaveGateResult};
 
 /// WaveGate: Wave 完了後に実行するゲートチェック
@@ -24,12 +24,13 @@ impl WaveGate {
     pub async fn execute(&self, succeeded_branches: &[String]) -> WaveGateResult {
         let merge = self.step_merge(succeeded_branches).await;
 
+        // マージが全件失敗（Blocked）でなければ test/review を実行する
         let test = if merge.passed {
             self.step_test().await
         } else {
             GateStepResult {
                 passed: false,
-                summary: "マージ失敗のためスキップ".into(),
+                summary: "マージ全件失敗のためスキップ".into(),
                 details: vec![],
                 duration_secs: 0,
             }
@@ -40,15 +41,17 @@ impl WaveGate {
         } else {
             GateStepResult {
                 passed: false,
-                summary: "マージ失敗のためスキップ".into(),
+                summary: "マージ全件失敗のためスキップ".into(),
                 details: vec![],
                 duration_secs: 0,
             }
         };
 
+        // !merge.passed = 全件マージ失敗のみ Blocked
+        // 部分失敗（skip_count > 0 だが success_count > 0）は PassedWithWarnings
         let overall = if !merge.passed {
             GateOverall::Blocked
-        } else if !test.passed || !review.passed {
+        } else if merge.summary.contains("スキップ") || !test.passed || !review.passed {
             GateOverall::PassedWithWarnings
         } else {
             GateOverall::Passed
@@ -63,19 +66,37 @@ impl WaveGate {
     }
 
     /// Step 1: 各ワーカーブランチをベースにマージ
+    ///
+    /// コンフリクトが発生した場合は `-X theirs`（ワーカー優先）でリトライする。
+    /// それでも失敗した場合は警告扱いとしてスキップし、他のブランチのマージを継続する。
+    /// 全件失敗した場合のみ `passed = false`（Blocked）とする。
     async fn step_merge(&self, branches: &[String]) -> GateStepResult {
         let start = Instant::now();
         let repo = Path::new(&self.project_path);
         let mut details = Vec::new();
-        let mut all_success = true;
+        let mut success_count = 0usize;
+        let mut skip_count = 0usize;
 
         for branch in branches {
+            // 1st attempt: 通常マージ
             let outcome = merge_worker_branch(repo, branch, &self.base_branch);
             if outcome.success {
                 details.push(format!("[PASS] {} マージ成功", branch));
+                success_count += 1;
+                continue;
+            }
+
+            // コンフリクト発生 → ワーカー変更優先でリトライ
+            let retry = merge_worker_branch_theirs(repo, branch, &self.base_branch);
+            if retry.success {
+                details.push(format!(
+                    "[PASS] {} コンフリクト解消（ワーカー変更を優先）",
+                    branch
+                ));
+                success_count += 1;
             } else {
                 details.push(format!(
-                    "[FAIL] {} コンフリクト: {}",
+                    "[WARN] {} スキップ（解消不能なコンフリクト: {}）",
                     branch,
                     if outcome.conflict_files.is_empty() {
                         outcome.message.clone()
@@ -83,16 +104,22 @@ impl WaveGate {
                         outcome.conflict_files.join(", ")
                     }
                 ));
-                all_success = false;
+                skip_count += 1;
             }
         }
 
+        let all_failed = success_count == 0 && !branches.is_empty();
         GateStepResult {
-            passed: all_success,
-            summary: if all_success {
-                format!("{}件マージ成功", branches.len())
+            passed: !all_failed,
+            summary: if all_failed {
+                "全ブランチのマージに失敗".into()
+            } else if skip_count > 0 {
+                format!(
+                    "{}件成功 / {}件スキップ（コンフリクト）",
+                    success_count, skip_count
+                )
             } else {
-                "コンフリクトあり".into()
+                format!("{}件マージ成功", success_count)
             },
             details,
             duration_secs: start.elapsed().as_secs(),
