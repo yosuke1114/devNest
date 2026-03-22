@@ -59,6 +59,7 @@ const mockFile = {
 const conflictState = {
   managedFiles: [] as typeof mockFile[],
   unmanagedCount: 0,
+  unmanagedFiles: [] as string[],
   activeFileId: null as number | null,
   resolutions: {} as Record<number, Record<number, { resolution: string; manualContent?: string }>>,
   listStatus: "idle" as string,

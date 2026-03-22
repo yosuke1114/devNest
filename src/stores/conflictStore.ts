@@ -21,6 +21,7 @@ type FileResolutions = Record<number, BlockResolution>; // blockIndex → resolu
 interface ConflictState {
   managedFiles: ConflictFile[];
   unmanagedCount: number;
+  unmanagedFiles: string[];
   activeFileId: number | null;
   resolutions: Record<number, FileResolutions>; // fileId → FileResolutions
   listStatus: AsyncStatus;
@@ -48,6 +49,7 @@ interface ConflictState {
 export const useConflictStore = create<ConflictState>((set, get) => ({
   managedFiles: [],
   unmanagedCount: 0,
+  unmanagedFiles: [],
   activeFileId: null,
   resolutions: {},
   listStatus: "idle",
@@ -85,6 +87,7 @@ export const useConflictStore = create<ConflictState>((set, get) => ({
       set({
         managedFiles: result.managed,
         unmanagedCount: result.unmanaged_count,
+        unmanagedFiles: result.unmanaged_files,
         activeFileId: result.managed[0]?.id ?? null,
         listStatus: "success",
       });
@@ -100,6 +103,7 @@ export const useConflictStore = create<ConflictState>((set, get) => ({
       set({
         managedFiles: result.managed,
         unmanagedCount: result.unmanaged_count,
+        unmanagedFiles: result.unmanaged_files,
         activeFileId: result.managed[0]?.id ?? null,
         listStatus: "success",
       });
@@ -177,6 +181,7 @@ export const useConflictStore = create<ConflictState>((set, get) => ({
     set({
       managedFiles: [],
       unmanagedCount: 0,
+  unmanagedFiles: [],
       activeFileId: null,
       resolutions: {},
       listStatus: "idle",

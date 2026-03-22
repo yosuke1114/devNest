@@ -31,6 +31,7 @@ const mockProjectStore = {
 const mockConflictStore = {
   managedFiles: [] as ConflictFile[],
   unmanagedCount: 0,
+  unmanagedFiles: [] as string[],
   activeFileId: null as number | null,
   resolutions: {} as Record<number, Record<number, { resolution: string; manualContent?: string }>>,
   listStatus: "idle" as string,

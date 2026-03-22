@@ -1,10 +1,18 @@
-import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
+import { useState } from "react";
+import { IconAlertTriangle, IconCheck, IconSparkles } from "@tabler/icons-react";
+import { invoke } from "@tauri-apps/api/core";
 import type { ConflictBlock } from "../../types";
 
 type Resolution = "ours" | "theirs" | "manual";
 
+interface AiResolution {
+  merged: string;
+  explanation: string;
+}
+
 interface ConflictBlockItemProps {
   block: ConflictBlock;
+  filePath: string;
   resolution: Resolution | undefined;
   manualContent: string | undefined;
   onResolve: (r: Resolution, manual?: string) => void;
@@ -13,11 +21,34 @@ interface ConflictBlockItemProps {
 
 export function ConflictBlockItem({
   block,
+  filePath,
   resolution,
   manualContent,
   onResolve,
   onManualChange,
 }: ConflictBlockItemProps) {
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<AiResolution | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAiSuggest = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await invoke<AiResolution>("orchestrator_ai_resolve_conflict", {
+        filePath,
+        startLine: block.index,
+      });
+      setAiResult(result);
+      // AI提案をMANUALに適用
+      onResolve("manual", result.merged);
+    } catch (e) {
+      setAiError(String(e));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div data-testid="conflict-block-item" className="border border-white/10 rounded-lg overflow-hidden mb-3">
       {/* ブロックヘッダー */}
@@ -62,8 +93,33 @@ export function ConflictBlockItem({
           >
             MANUAL
           </button>
+          <button
+            onClick={handleAiSuggest}
+            disabled={aiLoading}
+            data-testid="ai-suggest-btn"
+            className={`px-2 py-0.5 rounded text-[10px] transition-colors flex items-center gap-1 ${
+              aiLoading
+                ? "bg-amber-900/50 text-amber-300 cursor-wait"
+                : "bg-amber-800/30 hover:bg-amber-700/50 text-amber-300"
+            }`}
+          >
+            <IconSparkles size={10} />
+            {aiLoading ? "..." : "AI"}
+          </button>
         </div>
       </div>
+
+      {/* AI提案の説明 */}
+      {aiResult && (
+        <div className="px-3 py-1.5 bg-amber-950/30 border-b border-amber-700/30 text-[10px] text-amber-300">
+          AI: {aiResult.explanation}
+        </div>
+      )}
+      {aiError && (
+        <div className="px-3 py-1.5 bg-red-950/30 border-b border-red-700/30 text-[10px] text-red-400">
+          AI エラー: {aiError}
+        </div>
+      )}
 
       {/* HEAD 側 */}
       <div

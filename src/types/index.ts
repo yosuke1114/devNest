@@ -364,6 +364,7 @@ export interface ConflictFile {
 export interface ConflictScanResult {
   managed: ConflictFile[];
   unmanaged_count: number;
+  unmanaged_files: string[];
 }
 
 export interface ResolveAllResult {
