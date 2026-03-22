@@ -264,11 +264,39 @@ cargo clippy -- -D warnings
 cd ..
 ```
 
+### E2E テスト（Playwright）
+
+```bash
+npx playwright test
+```
+
+> **注意**: `data-testid` を変更・追加・削除したときは同じコミットで E2E テストも更新すること。
+
 ### まとめて実行（push 前の一括チェック）
 
 ```bash
 npx tsc --noEmit && npx vitest run && npm run build && (cd src-tauri && cargo test && cargo clippy -- -D warnings)
 ```
+
+---
+
+## 実装ルール（過去の失敗から）
+
+### Rust DB テストは connect_for_test を使う
+
+```rust
+use crate::db::{connect_for_test as connect, migrations};
+```
+
+`connect`（`max_connections(5)`）は WAL モードで書き込みと読み取りが別接続になり、INSERT 直後の SELECT が NotFound になる。
+
+### data-testid を変更したら E2E も同時更新
+
+`data-testid` の追加・変更・削除は必ず `e2e/scenarios/` の対応テストを同一コミットで更新する。
+
+### props のデストラクチャリング漏れに注意
+
+TypeScript の props 型に新フィールドを追加したら、コンポーネント関数のデストラクチャリングにも必ず追加する（型エラーが出ないため見落としやすい）。
 
 ---
 
