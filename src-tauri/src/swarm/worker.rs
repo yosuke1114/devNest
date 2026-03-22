@@ -79,6 +79,7 @@ pub struct WorkerConfig {
     pub role: WorkerRole,
     pub label: String,
     pub working_dir: PathBuf,
+    #[serde(default)]
     pub assigned_files: Vec<PathBuf>,
     /// 将来の依存グラフ対応用（Step 11-A では未使用）
     pub depends_on: Vec<String>,

@@ -179,9 +179,11 @@ pub async fn list(pool: &SqlitePool, limit: i64) -> Result<Vec<SwarmRunRecord>> 
     Ok(records)
 }
 
+type RunRow = (i64, String, String, i64, i64, i64, String, String, String, String);
+
 /// 指定した run_id の履歴を1件取得する
 pub async fn get(pool: &SqlitePool, run_id: &str) -> Result<Option<SwarmRunRecord>> {
-    let row: Option<(i64, String, String, i64, i64, i64, String, String, String, String)> =
+    let row: Option<RunRow> =
         sqlx::query_as(
             r#"
             SELECT id, run_id, status, total_tasks, done_count, failed_count,

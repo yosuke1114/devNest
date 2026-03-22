@@ -89,12 +89,8 @@ export function useSwarmWS() {
   const handleMsg = useCallback((msg: ServerMessage) => {
     switch (msg.type) {
       case "SwarmStatus":
+        // A4: Toast は App.tsx の useEffect に統一（二重表示を防ぐ）
         setState((s) => ({ ...s, swarm: msg.payload }));
-        if (msg.payload.status === "done") {
-          showToast("Swarm 完了!", "success");
-        } else if (msg.payload.status === "blocked") {
-          showToast("Swarm がブロックされました", "error");
-        }
         break;
       case "WorkerStatus":
         setState((s) => ({

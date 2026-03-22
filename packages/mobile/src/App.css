@@ -62,6 +62,8 @@ body {
 .conn-badge.off {
   background: rgba(239, 68, 68, 0.15);
   color: var(--danger);
+  cursor: pointer;
+  user-select: none;
 }
 
 .header-right {
@@ -101,13 +103,13 @@ body {
   }
 }
 
-/* Card */
+/* Card — C4: 余白増加 */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .card h2 {
@@ -378,12 +380,30 @@ body {
   flex-shrink: 0;
 }
 
-.worker-label {
+/* B3: Worker item body（label + preview 縦並び） */
+.worker-item-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.worker-label {
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.worker-preview {
+  font-size: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "SF Mono", "Fira Code", monospace;
+  margin-top: 1px;
+  opacity: 0.8;
 }
 
 .worker-status {
@@ -535,6 +555,21 @@ body {
   gap: 8px;
 }
 
+/* A1: WS ホスト名 */
+.conn-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.ws-host {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: "SF Mono", monospace;
+  opacity: 0.7;
+}
+
 .settings-btn {
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -553,6 +588,45 @@ body {
 .settings-btn.active {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* B2: settings toolbar（Auto Gate トグル + Swarm 設定ボタン） */
+.settings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px 8px;
+  gap: 8px;
+}
+
+.auto-gate-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
+}
+
+/* C3: Pull to Refresh インジケーター */
+.pull-refresh-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  z-index: 50;
+  pointer-events: none;
+  transition: opacity 0.1s;
 }
 
 /* ── #1 Settings Panel ── */
@@ -743,6 +817,14 @@ body {
   border-color: var(--accent);
 }
 
+/* A3: + Task ボタン */
+.add-task-btn {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  padding: 8px 16px;
+}
+
 /* ── #4 Worker Modal ── */
 .worker-expand {
   font-size: 18px;
@@ -797,25 +879,12 @@ body {
   flex-shrink: 0;
 }
 
-.worker-modal-output {
+/* A2: xterm.js ターミナルコンテナ */
+.worker-modal-terminal {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  font-family: "SF Mono", "Fira Code", monospace;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  line-height: 1.6;
-}
-
-.modal-log-line {
-  padding: 1px 0;
-}
-
-.worker-modal-content .worker-input-row {
-  padding: 8px 12px 12px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
+  overflow: hidden;
+  padding: 8px;
+  min-height: 280px;
 }
 
 /* ── #5 Toasts ── */

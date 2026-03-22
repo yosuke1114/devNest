@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useSwarmStore } from "../../stores/swarmStore";
 import { XtermPane } from "./XtermPane";
 import { RoleSelector } from "./RoleSelector";
-import type { WorkerConfig, WorkerInfo, WorkerRole, WorkerStatus } from "./types";
+import type { WorkerInfo, WorkerRole, WorkerStatus } from "./types";
 
 const MAX_WORKERS = 8;
 
@@ -73,23 +73,29 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
     return () => { unlistenPromise.then((fn) => fn()); };
   }, [notifyWorkerDone]);
 
+  const [spawnError, setSpawnError] = useState<string | null>(null);
+
   // 手動 Worker 追加（spawn だけ行い、state 追加は worker-spawned イベント経由）
   const addWorker = async (kind: "shell" | "claudeCode") => {
     if (workers.length >= MAX_WORKERS) return;
     const n = workers.length + 1;
-    const config: WorkerConfig = {
+    const config = {
       kind,
       mode: "interactive",
       label: kind === "shell" ? `Shell ${n}` : `Worker ${n}`,
       workingDir,
+      assignedFiles: [],
       dependsOn: [],
       metadata: {},
       role: pendingRole,
     };
     try {
+      setSpawnError(null);
       await invoke("spawn_worker", { config });
     } catch (err) {
-      console.error("spawn_worker failed:", err);
+      const msg = String(err);
+      console.error("spawn_worker failed:", msg);
+      setSpawnError(msg);
     }
   };
 
@@ -151,6 +157,11 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
           {workers.length} / {MAX_WORKERS} ペイン
         </span>
       </div>
+      {spawnError && (
+        <div style={{ color: "#ef4444", fontSize: 11, padding: "4px 2px" }}>
+          ⚠ spawn error: {spawnError}
+        </div>
+      )}
 
       {/* 進捗バー（ClaudeCode Worker が1つ以上のときのみ表示） */}
       {showProgress && (
