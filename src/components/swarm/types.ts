@@ -10,6 +10,7 @@ export interface SubTask {
 export type ExecutionState =
   | "waiting"
   | "ready"
+  | "awaitingApproval"
   | "running"
   | "done"
   | "error"

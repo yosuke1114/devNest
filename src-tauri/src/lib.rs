@@ -48,6 +48,7 @@ pub fn run() {
                 app_handle.manage(swarm::create_manager());
                 app_handle.manage(swarm::create_orchestrator());
                 app_handle.manage(swarm::create_hook_registry());
+                app_handle.manage(swarm::create_pending_spawns());
                 // Swarm Stop フックをグローバル ~/.claude/settings.json に設定
                 if let Err(e) = swarm::hooks::install_global_stop_hook() {
                     eprintln!("[Swarm] Stop フック設定失敗（無視して続行）: {}", e);

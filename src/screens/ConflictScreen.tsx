@@ -57,6 +57,7 @@ function ConflictFileEditor({ file }: { file: ConflictFile }) {
             <ConflictBlockItem
               key={block.index}
               block={block}
+              filePath={file.file_path}
               resolution={res?.resolution}
               manualContent={res?.manualContent}
               onResolve={(r, manual) =>
@@ -138,6 +139,7 @@ export function ConflictScreen() {
   const {
     managedFiles,
     unmanagedCount,
+    unmanagedFiles,
     activeFileId,
     resolutions,
     listStatus,
@@ -274,6 +276,23 @@ export function ConflictScreen() {
             <div className="px-3 py-2 text-[10px] text-muted-foreground">
               解消済み: {resolved} / {total} ブロック
             </div>
+
+            {/* 未管理ファイル一覧 */}
+            {unmanagedFiles.length > 0 && (
+              <div className="border-t border-border px-3 py-2">
+                <div className="text-[10px] text-yellow-500 font-medium mb-1">
+                  docs/ 外のコンフリクト ({unmanagedCount})
+                </div>
+                {unmanagedFiles.map((fp) => (
+                  <div key={fp} className="text-[10px] text-muted-foreground truncate py-0.5 font-mono" title={fp}>
+                    {fp.split("/").pop()}
+                  </div>
+                ))}
+                <div className="text-[9px] text-muted-foreground mt-1">
+                  手動で解消してください
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ブロックエディタ */}
