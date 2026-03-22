@@ -88,12 +88,27 @@ export default function App() {
       {swarm.status === "idle" && !state.splitResult && (
         <div className="card">
           <h2>Task Input</h2>
-          <input
-            className="project-input"
-            placeholder="プロジェクトパス (/path/to/project)"
-            value={projectPath}
-            onChange={(e) => setProjectPath(e.target.value)}
-          />
+          {state.projects.length > 0 ? (
+            <select
+              className="project-input"
+              value={projectPath}
+              onChange={(e) => setProjectPath(e.target.value)}
+            >
+              <option value="">プロジェクトを選択...</option>
+              {state.projects.map((p) => (
+                <option key={p.id} value={p.localPath}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="project-input"
+              placeholder="プロジェクトパス (/path/to/project)"
+              value={projectPath}
+              onChange={(e) => setProjectPath(e.target.value)}
+            />
+          )}
           <textarea
             className="task-input"
             placeholder="実装したい機能を入力..."

@@ -78,6 +78,7 @@ export type ServerMessage =
   | { type: "GateResult"; payload: { wave_number: number; overall: string } }
   | { type: "GateReady"; payload: { wave_number: number } }
   | { type: "Error"; payload: { message: string } }
+  | { type: "Projects"; payload: { id: number; name: string; localPath: string }[] }
   | { type: "Pong" };
 
 export type ClientMessage =

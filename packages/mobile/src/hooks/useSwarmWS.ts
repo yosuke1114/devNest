@@ -17,6 +17,12 @@ export interface LogEntry {
   level: "info" | "warn" | "error" | "success";
 }
 
+export interface ProjectInfo {
+  id: number;
+  name: string;
+  localPath: string;
+}
+
 export interface SwarmState {
   swarm: SwarmSnapshot;
   workers: WorkerSnapshot[];
@@ -28,6 +34,7 @@ export interface SwarmState {
   splitting: boolean;
   gateReady: number | null;
   logs: LogEntry[];
+  projects: ProjectInfo[];
 }
 
 const INITIAL_SWARM: SwarmSnapshot = {
@@ -52,6 +59,7 @@ export function useSwarmWS() {
     splitting: false,
     gateReady: null,
     logs: [],
+    projects: [],
   });
 
   const send = useCallback((msg: ClientMessage) => {
@@ -119,6 +127,9 @@ export function useSwarmWS() {
         break;
       case "GateReady":
         setState((s) => ({ ...s, gateReady: msg.payload.wave_number }));
+        break;
+      case "Projects":
+        setState((s) => ({ ...s, projects: msg.payload }));
         break;
       case "Error":
         setState((s) => ({
