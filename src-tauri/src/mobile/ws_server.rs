@@ -20,7 +20,7 @@ use crate::swarm::SharedWorkerManager;
 use crate::swarm::subtask::{detect_file_conflicts, detect_circular_deps};
 use crate::swarm::task_splitter::TaskSplitter;
 
-use super::message::{ClientMessage, ServerMessage, SwarmSnapshot, WorkerSnapshot};
+use super::message::{ClientMessage, ServerMessage, SwarmSnapshot, TaskSnapshot, WorkerSnapshot};
 
 // ────────────────────────────────────────
 //  State
@@ -281,8 +281,9 @@ async fn cmd_swarm_start(
         }
     }
 
-    // スナップショットをブロードキャスト
+    // スナップショット・タスク一覧をブロードキャスト
     broadcast_snapshot(state);
+    broadcast_tasks(state);
 
     // デスクトップ UI に実行中を通知（currentRun を設定させる）
     use tauri::Emitter;
@@ -390,6 +391,7 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
             }
 
             broadcast_snapshot(state);
+            broadcast_tasks(state);
         }
         Err(e) => {
             broadcast(
@@ -408,6 +410,10 @@ async fn cmd_sync(state: &Arc<WsState>, socket: &mut WebSocket) {
 
     let workers = make_worker_list(state);
     send_direct(socket, ServerMessage::Workers(workers)).await;
+
+    // タスク一覧を送信
+    let tasks = make_tasks(state);
+    send_direct(socket, ServerMessage::TasksUpdate(tasks)).await;
 
     // プロジェクト一覧を送信
     use tauri::Manager;
@@ -518,6 +524,8 @@ pub fn setup_event_bridge(state: Arc<WsState>) {
                             }
                         }
                     }
+                    // wo ロック解放後にタスク一覧をブロードキャスト
+                    broadcast_tasks(&state_clone);
                 }
             }
         });
@@ -575,6 +583,44 @@ fn make_worker_list(state: &Arc<WsState>) -> Vec<WorkerSnapshot> {
 fn broadcast_snapshot(state: &Arc<WsState>) {
     let snapshot = make_snapshot(state);
     broadcast(&state.broadcast_tx, ServerMessage::SwarmStatus(snapshot));
+}
+
+fn broadcast_tasks(state: &Arc<WsState>) {
+    let tasks = make_tasks(state);
+    broadcast(&state.broadcast_tx, ServerMessage::TasksUpdate(tasks));
+}
+
+fn make_tasks(state: &Arc<WsState>) -> Vec<TaskSnapshot> {
+    let wo = match state.wave_orch.lock() {
+        Ok(w) => w,
+        Err(_) => return vec![],
+    };
+    let run = match &wo.orchestrator.current_run {
+        Some(r) => r,
+        None => return vec![],
+    };
+
+    // task_id → wave_number マップを構築
+    let mut task_wave: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    if let Some(waves) = &run.waves {
+        for wave in waves {
+            for &tid in &wave.task_ids {
+                task_wave.insert(tid, wave.wave_number);
+            }
+        }
+    }
+
+    run.assignments
+        .iter()
+        .map(|a| TaskSnapshot {
+            task_id: a.task.id,
+            title: a.task.title.clone(),
+            wave_number: *task_wave.get(&a.task.id).unwrap_or(&1),
+            execution_state: format!("{:?}", a.execution_state).to_lowercase(),
+            worker_id: if a.worker_id.is_empty() { None } else { Some(a.worker_id.clone()) },
+            depends_on: a.task.depends_on.clone(),
+        })
+        .collect()
 }
 
 fn parse_worker_status(s: &str) -> Option<WorkerStatus> {

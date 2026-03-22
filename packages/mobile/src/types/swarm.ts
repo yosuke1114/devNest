@@ -79,7 +79,17 @@ export type ServerMessage =
   | { type: "GateReady"; payload: { wave_number: number } }
   | { type: "Error"; payload: { message: string } }
   | { type: "Projects"; payload: { id: number; name: string; localPath: string }[] }
+  | { type: "TasksUpdate"; payload: TaskSnapshot[] }
   | { type: "Pong" };
+
+export interface TaskSnapshot {
+  taskId: number;
+  title: string;
+  waveNumber: number;
+  executionState: "waiting" | "ready" | "running" | "done" | "error" | "skipped";
+  workerId: string | null;
+  dependsOn: number[];
+}
 
 export type ClientMessage =
   | { type: "TaskSplit"; payload: { prompt: string; project_path: string } }

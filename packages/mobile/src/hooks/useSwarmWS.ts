@@ -5,6 +5,7 @@ import type {
   SwarmSnapshot,
   WorkerSnapshot,
   SubTask,
+  TaskSnapshot,
 } from "../types/swarm";
 
 const WS_URL = import.meta.env.VITE_WS_URL;
@@ -35,7 +36,10 @@ export interface SwarmState {
   gateReady: number | null;
   logs: LogEntry[];
   projects: ProjectInfo[];
+  tasks: TaskSnapshot[];
 }
+
+export type { TaskSnapshot };
 
 const INITIAL_SWARM: SwarmSnapshot = {
   status: "idle",
@@ -60,6 +64,7 @@ export function useSwarmWS() {
     gateReady: null,
     logs: [],
     projects: [],
+    tasks: [],
   });
 
   const send = useCallback((msg: ClientMessage) => {
@@ -130,6 +135,9 @@ export function useSwarmWS() {
         break;
       case "Projects":
         setState((s) => ({ ...s, projects: msg.payload }));
+        break;
+      case "TasksUpdate":
+        setState((s) => ({ ...s, tasks: msg.payload }));
         break;
       case "Error":
         setState((s) => ({
