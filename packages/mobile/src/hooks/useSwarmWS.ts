@@ -204,7 +204,7 @@ export function useSwarmWS() {
           const msg: ServerMessage = JSON.parse(e.data);
           handleMsg(msg);
         } catch (err) {
-          console.error("WSメッセージパース失敗", err);
+          addLog(`WSメッセージパース失敗: ${err}`, "error");
         }
       };
 

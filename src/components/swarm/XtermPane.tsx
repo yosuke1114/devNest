@@ -87,7 +87,9 @@ export function XtermPane({ worker, onKill, isActive, onClick }: XtermPaneProps)
         }
       }
     );
-    unlistenPromise.then((fn) => { unlistenFn = fn; });
+    unlistenPromise
+      .then((fn) => { unlistenFn = fn; })
+      .catch((e) => { term.writeln(`\r\n\x1b[31m[DevNest] 出力リスナー登録失敗: ${e}\x1b[0m`); });
 
     // キーボード入力をRustに転送（Shell の場合は入力でRunningに戻す）
     const onDataDisposable = term.onData((data) => {
