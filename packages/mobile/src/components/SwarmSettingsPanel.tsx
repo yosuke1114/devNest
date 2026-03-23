@@ -50,6 +50,14 @@ export function SwarmSettingsPanel({
           {text("baseBranch")}
         </div>
         <div className="setting-row">
+          <span>Branch Prefix</span>
+          {text("branchPrefix")}
+        </div>
+        <div className="setting-row">
+          <span>Default Shell</span>
+          {text("defaultShell")}
+        </div>
+        <div className="setting-row">
           <span>Timeout (min)</span>
           {num("timeoutMinutes", 5, 120)}
         </div>
@@ -60,6 +68,7 @@ export function SwarmSettingsPanel({
       </div>
       {toggle("claudeSkipPermissions", "Skip Permissions")}
       {toggle("claudeInteractive", "Interactive Mode")}
+      {toggle("claudeNoStream", "No Stream")}
     </div>
   );
 }

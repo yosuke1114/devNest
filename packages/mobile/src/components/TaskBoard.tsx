@@ -19,7 +19,7 @@ export function TaskBoard({ tasks }: { tasks: TaskSnapshot[] }) {
         const waveTasks = tasks.filter((t) => t.waveNumber === wn);
         const allDone = waveTasks.every((t) => t.executionState === "done");
         const anyRunning = waveTasks.some((t) => t.executionState === "running");
-        const waveColor = allDone ? "#10b981" : anyRunning ? "#f6ad55" : "#71717a";
+        const waveColor = allDone ? "var(--color-success)" : anyRunning ? "#f6ad55" : "var(--text-dim)";
         return (
           <div key={wn} className="wave-group">
             <div className="wave-label" style={{ color: waveColor }}>
@@ -33,7 +33,9 @@ export function TaskBoard({ tasks }: { tasks: TaskSnapshot[] }) {
                   <div className="task-row-body">
                     <span className="task-row-title">{task.title}</span>
                     {task.dependsOn.length > 0 && (
-                      <span className="task-deps-small">← #{task.dependsOn.join(", #")}</span>
+                      <span className="task-deps-arrow">
+                        ↳ depends on: {task.dependsOn.map((d) => `T${d}`).join("→")}
+                      </span>
                     )}
                   </div>
                   <span className="task-state-label" style={{ color: st.color }}>{st.label}</span>
