@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{AppError, Result};
+use crate::error::Result;
 use crate::services::anthropic::AnthropicClient;
 
 use super::context_engine::{ContextBudget, ContextEngine, PromptPurpose};

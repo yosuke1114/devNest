@@ -62,4 +62,39 @@ describe("PRCreateModal", () => {
     const [calledTitle] = onSubmit.mock.calls[0];
     expect(calledTitle).toBe("feat: feat/99-my-branch");
   });
+
+  it("description textarea を変更できる (line 67)", () => {
+    render(<PRCreateModal {...defaultProps} />);
+    // textarea は 2番目の textbox
+    const textareas = screen.getAllByRole("textbox");
+    const descTextarea = textareas.find((el) => el.tagName === "TEXTAREA")!;
+    expect(descTextarea).toBeTruthy();
+    fireEvent.change(descTextarea, { target: { value: "PR description text" } });
+    expect((descTextarea as HTMLTextAreaElement).value).toBe("PR description text");
+  });
+
+  it("description 入力後 Create PR で body が渡される", () => {
+    const onSubmit = vi.fn();
+    render(<PRCreateModal {...defaultProps} onSubmit={onSubmit} />);
+    const textareas = screen.getAllByRole("textbox");
+    const descTextarea = textareas.find((el) => el.tagName === "TEXTAREA")!;
+    fireEvent.change(descTextarea, { target: { value: "my body" } });
+    fireEvent.click(screen.getByRole("button", { name: /Create PR/i }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.any(String), "my body");
+  });
+
+  it("背景クリックで onClose が呼ばれる", () => {
+    const onClose = vi.fn();
+    const { container } = render(<PRCreateModal {...defaultProps} onClose={onClose} />);
+    const overlay = container.querySelector("[data-testid='pr-create-modal']")!;
+    fireEvent.click(overlay);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("Cancel ボタンクリックで onClose が呼ばれる", () => {
+    const onClose = vi.fn();
+    render(<PRCreateModal {...defaultProps} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(onClose).toHaveBeenCalled();
+  });
 });

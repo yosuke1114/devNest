@@ -33,21 +33,19 @@ export function SwarmScreen({ workingDir, projectPath }: SwarmScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>("split");
   const { currentRun } = useSwarmStore();
 
-  // 実行中タブのバッジ
-  const runningBadge =
-    currentRun &&
-    currentRun.status !== "done" &&
-    currentRun.status !== "partialDone" &&
-    currentRun.status !== "failed" &&
-    currentRun.status !== "cancelled"
-      ? currentRun.doneCount < currentRun.total
-        ? `${currentRun.doneCount}/${currentRun.total}`
-        : null
-      : null;
+  // 実行中タブのバッジ（実行中worker数 / 合計タスク数）
+  const runningBadge = (() => {
+    if (!currentRun) return null;
+    if (currentRun.status === "done" || currentRun.status === "partialDone" ||
+        currentRun.status === "failed" || currentRun.status === "cancelled") return null;
+    const runningCount = currentRun.assignments.filter(
+      (a) => a.executionState === "running"
+    ).length;
+    return `${runningCount}/${currentRun.total}`;
+  })();
 
   // コンフリクトタブのバッジ
-  const conflictCount =
-    currentRun?.mergeResults.filter((r) => !r.success && r.conflictFiles.length > 0).length ?? 0;
+  const conflictCount = useSwarmStore((s) => s.conflictOutcome?.conflictFiles.length ?? 0);
 
   const handleRunStarted = () => {
     setActiveTab("running");
@@ -118,9 +116,10 @@ export function SwarmScreen({ workingDir, projectPath }: SwarmScreenProps) {
         {activeTab === "split" && (
           <SwarmSplitTab workingDir={workingDir} onRunStarted={handleRunStarted} />
         )}
-        {activeTab === "running" && (
+        {/* SwarmRunningTab は常にマウント: PTY worker-output イベントを取り逃さないため */}
+        <div style={{ height: "100%", display: activeTab === "running" ? "flex" : "none", flexDirection: "column" }}>
           <SwarmRunningTab workingDir={workingDir} />
-        )}
+        </div>
         {activeTab === "conflicts" && (
           <SwarmConflictsTab />
         )}

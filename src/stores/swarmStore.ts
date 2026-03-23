@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { SubTask, SwarmSettings, WorkerStatus, ExecutionState } from "../components/swarm/types";
+import type { SubTask, SwarmSettings, WorkerStatus, ExecutionState, Wave } from "../components/swarm/types";
+import { useProjectStore } from "./projectStore";
 
 // ─── Rust 側と対応する型 ──────────────────────────────────────
 
@@ -54,9 +55,12 @@ export interface OrchestratorRun {
   assignments: WorkerAssignment[];
   baseBranch: string;
   projectPath: string;
-  mergeResults: MergeOutcome[];
   total: number;
   doneCount: number;
+  failed: number;
+  waves: Wave[] | null;
+  currentWave: number | null;
+  gateResults: import("../components/swarm/types").WaveGateResult[] | null;
 }
 
 // ─── Store ───────────────────────────────────────────────────
@@ -101,6 +105,12 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
           maxWorkers: settings.maxWorkers,
           timeoutMinutes: settings.timeoutMinutes,
           branchPrefix: settings.branchPrefix,
+          defaultShell: settings.defaultShell,
+          promptPatterns: settings.promptPatterns,
+          claudeSkipPermissions: settings.claudeSkipPermissions,
+          claudeNoStream: settings.claudeNoStream,
+          autoApproveHighConfidence: settings.autoApproveHighConfidence,
+          claudeInteractive: settings.claudeInteractive,
         },
         projectPath,
       });
@@ -134,9 +144,9 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
   notifyWorkerDone: async (workerId, status) => {
     const { currentRun } = get();
     if (!currentRun) return;
-    const isInRun = currentRun.assignments.some((a) => a.workerId === workerId);
-    if (!isInRun) return;
-
+    // isInRun チェックを削除: worker-status-changed と orchestrator-status-changed の
+    // レースコンディションで currentRun が古い状態のとき通知が飛ばないバグを防ぐ。
+    // Orchestrator 側で未知の workerId は無視するため安全。
     try {
       await invoke("orchestrator_notify_worker_done", { workerId, status });
     } catch {/* ベストエフォート */}
@@ -147,7 +157,34 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
 
     // Orchestrator ステータス変化
     listen<OrchestratorRun>("orchestrator-status-changed", (event) => {
-      set({ currentRun: event.payload });
+      const prev = get().currentRun;
+      const run = event.payload;
+      set({ currentRun: run });
+
+      // 完了時に通知を作成（初回遷移のみ）
+      const isNewlyDone =
+        (run.status === "done" || run.status === "partialDone") &&
+        prev?.status !== "done" &&
+        prev?.status !== "partialDone";
+      if (isNewlyDone) {
+        // DB に履歴保存
+        invoke("swarm_history_save", { run }).catch(() => {});
+
+        const projectId = useProjectStore.getState().currentProject?.id ?? 1;
+        const title =
+          run.status === "done"
+            ? `Swarm完了: ${run.doneCount}/${run.total} タスク成功`
+            : `Swarm部分完了: ${run.doneCount}/${run.total} タスク成功`;
+        const body = `ブランチ: ${run.baseBranch} | プロジェクト: ${run.projectPath}`;
+        invoke("notification_push", {
+          projectId,
+          eventType: "swarm_done",
+          title,
+          body,
+          destScreen: "swarm",
+          destResourceId: null,
+        }).catch(() => {});
+      }
     }).then((fn) => unlistens.push(fn))
       .catch((e) => set({ error: `イベント登録失敗 (status-changed): ${e}` }));
 

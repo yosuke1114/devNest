@@ -333,7 +333,7 @@ pub async fn list_history(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::services::chunker::chunk_document;
     use tempfile::TempDir;
 

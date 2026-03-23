@@ -347,7 +347,7 @@ impl GitHubClient {
 
     /// GET /repos/{owner}/{repo}/pulls
     pub async fn list_pull_requests(&self, state: Option<&str>) -> Result<Vec<GitHubPullRequest>> {
-        let state = state.unwrap_or("open");
+        let state = state.unwrap_or("all");
         let url = format!(
             "{}/repos/{}/{}/pulls?state={}&per_page=100",
             self.base_url, self.owner, self.repo, state
@@ -969,6 +969,6 @@ mod tests {
         let client = GitHubClient::new(&token, &owner, &repo);
         let issues = client.list_issues(Some("open")).await.unwrap();
         // Just ensure it doesn't error; the repo may have 0 issues
-        assert!(issues.len() >= 0);
+        assert!(issues.is_empty() || !issues.is_empty()); // always succeeds; just verify no error
     }
 }

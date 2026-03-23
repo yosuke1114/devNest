@@ -15,3 +15,5 @@ e2e/screenshots/
 .playwright-mcp/
 playwright-report/
 test-results/
+.claude/
+docs/devnest-mobile-claude-code-instructions.md

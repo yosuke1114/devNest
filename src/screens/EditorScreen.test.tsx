@@ -12,6 +12,7 @@ const mockDocumentStore = {
   saveStatus: "idle" as const,
   saveProgress: null,
   fetchDocuments: vi.fn().mockResolvedValue(undefined),
+  scanDocuments: vi.fn().mockResolvedValue(undefined),
   openDocument: vi.fn().mockResolvedValue(undefined),
   saveDocument: vi.fn().mockResolvedValue({ sha: null, push_status: "synced" }),
   retryPush: vi.fn().mockResolvedValue(undefined),

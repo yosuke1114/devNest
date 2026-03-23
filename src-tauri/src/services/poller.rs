@@ -91,7 +91,7 @@ async fn sync_project(app: &AppHandle, pool: &DbPool, project_id: i64) {
     let client = GitHubClient::new(&token, &project.repo_owner, &project.repo_name);
 
     // ── PR 同期 ───────────────────────────────────────────────────────────
-    let gh_prs = match client.list_pull_requests(Some("open")).await {
+    let gh_prs = match client.list_pull_requests(Some("all")).await {
         Ok(prs) => prs,
         Err(e) => {
             tracing::warn!("poller: pr_sync error project={}: {:?}", project_id, e);

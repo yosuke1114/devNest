@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useSwarmStore } from "../../stores/swarmStore";
 import { XtermPane } from "./XtermPane";
-import type { WorkerConfig, WorkerInfo, WorkerStatus } from "./types";
+import { RoleSelector } from "./RoleSelector";
+import type { WorkerInfo, WorkerRole, WorkerStatus } from "./types";
 
 const MAX_WORKERS = 8;
 
@@ -15,7 +16,32 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [spawnError, setSpawnError] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<WorkerRole>("builder");
   const notifyWorkerDone = useSwarmStore((s) => s.notifyWorkerDone);
+
+  // マウント時に既存 Worker を取得（タブ切り替えで遅れてマウントした場合の取り逃し対策）
+  useEffect(() => {
+    Promise.resolve(invoke<WorkerInfo[]>("list_workers"))
+      .then((existing) => {
+        if (!Array.isArray(existing) || existing.length === 0) return;
+        // replace ではなく merge（list_workers 呼び出し中に届いた worker-spawned を消さないため）
+        setWorkers((prev) => {
+          const merged = [...prev];
+          for (const w of existing) {
+            if (!merged.some((p) => p.id === w.id)) merged.push(w);
+          }
+          return merged;
+        });
+        setActiveId(existing[existing.length - 1].id);
+        // 既に完了しているワーカーをオーケストレーターに通知（タブ切り替えで通知漏れした分）
+        for (const w of existing) {
+          if (w.status === "done" || w.status === "error") {
+            notifyWorkerDone(w.id, w.status);
+          }
+        }
+      })
+      .catch(() => {/* list_workers 未実装環境ではスキップ */});
+  }, [notifyWorkerDone]);
 
   // worker-spawned: Rust 側で起動された Worker（手動・Orchestrator 問わず）を追加
   useEffect(() => {
@@ -52,19 +78,23 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const addWorker = async (kind: "shell" | "claudeCode") => {
     if (workers.length >= MAX_WORKERS) return;
     const n = workers.length + 1;
-    const config: WorkerConfig = {
+    const config = {
       kind,
       mode: "interactive",
       label: kind === "shell" ? `Shell ${n}` : `Worker ${n}`,
       workingDir,
+      assignedFiles: [],
       dependsOn: [],
       metadata: {},
+      role: pendingRole,
     };
     try {
       setSpawnError(null);
       await invoke("spawn_worker", { config });
     } catch (err) {
-      setSpawnError(String(err));
+      const msg = String(err);
+      console.error("spawn_worker failed:", msg);
+      setSpawnError(msg);
     }
   };
 
@@ -112,7 +142,8 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
           ⚠️ 起動エラー: {spawnError}
         </div>
       )}
-      <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+      <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+        <RoleSelector value={pendingRole} onChange={setPendingRole} />
         <button
           data-testid="add-shell-button"
           onClick={() => addWorker("shell")}
@@ -141,7 +172,6 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
           {workers.length} / {MAX_WORKERS} ペイン
         </span>
       </div>
-
       {/* 進捗バー（ClaudeCode Worker が1つ以上のときのみ表示） */}
       {showProgress && (
         <div data-testid="progress-bar-container" style={{ flexShrink: 0 }}>

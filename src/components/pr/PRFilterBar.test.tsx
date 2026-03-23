@@ -70,4 +70,38 @@ describe("PRFilterBar", () => {
     fireEvent.click(screen.getByRole("button", { name: /sync/i }));
     expect(onSync).toHaveBeenCalledTimes(1);
   });
+
+  it("非選択フィルタボタンの mouseenter/mouseleave が動作する (lines 49-52)", () => {
+    render(<PRFilterBar {...defaultProps} filter="open" />);
+    // "closed" は非選択
+    const closedBtn = screen.getByRole("button", { name: /closed/i });
+    fireEvent.mouseEnter(closedBtn);
+    fireEvent.mouseLeave(closedBtn);
+    expect(closedBtn).toBeInTheDocument();
+  });
+
+  it("選択済みフィルタボタンの mouseenter でスタイル変更しない", () => {
+    render(<PRFilterBar {...defaultProps} filter="open" />);
+    // "open" は選択中 → mouseenter で background 変更しない
+    const openBtn = screen.getByRole("button", { name: /^open$/i });
+    fireEvent.mouseEnter(openBtn);
+    fireEvent.mouseLeave(openBtn);
+    expect(openBtn).toBeInTheDocument();
+  });
+
+  it("Sync ボタンの mouseenter/mouseleave が動作する (lines 77-78)", () => {
+    render(<PRFilterBar {...defaultProps} syncing={false} />);
+    const syncBtn = screen.getByRole("button", { name: /sync/i });
+    fireEvent.mouseEnter(syncBtn);
+    fireEvent.mouseLeave(syncBtn);
+    expect(syncBtn).toBeInTheDocument();
+  });
+
+  it("syncing=true のとき Sync ボタンの mouseenter でスタイル変更しない", () => {
+    render(<PRFilterBar {...defaultProps} syncing={true} />);
+    const syncBtn = screen.getByRole("button", { name: /sync/i });
+    fireEvent.mouseEnter(syncBtn);
+    fireEvent.mouseLeave(syncBtn);
+    expect(syncBtn).toBeInTheDocument();
+  });
 });

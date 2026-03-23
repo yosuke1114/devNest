@@ -185,4 +185,77 @@ describe("SettingsScreen", () => {
       expect(mockSettingsStore.saveAnthropicKey).toHaveBeenCalled();
     });
   });
+
+  it("「接続」タブボタンをクリックすると setSettingsTab(connections) が呼ばれる (line 130)", () => {
+    // 別タブに移動してから戻ることで onClick を発火させる
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
+    fireEvent.click(screen.getByText("接続"));
+    expect(screen.getByText("GitHub で認証")).toBeInTheDocument();
+  });
+
+  it("Client ID input 変更で setClientId が呼ばれる (line 169)", () => {
+    render(<SettingsScreen />);
+    const inputs = screen.getAllByPlaceholderText("Ghid_...");
+    fireEvent.change(inputs[0], { target: { value: "new-client-id" } });
+    expect(mockSettingsStore.setClientId).toHaveBeenCalledWith("new-client-id");
+  });
+
+  it("Client Secret input 変更で setClientSecret が呼ばれる (line 179)", () => {
+    render(<SettingsScreen />);
+    const inputs = screen.getAllByPlaceholderText("...");
+    fireEvent.change(inputs[0], { target: { value: "new-secret" } });
+    expect(mockSettingsStore.setClientSecret).toHaveBeenCalledWith("new-secret");
+  });
+
+  // ── handleIndexReset (lines 102-116) ─────────────────────────────────────
+  it("インデックスリセット: confirm=true のとき ipc.indexReset が呼ばれる (lines 102-116)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { indexReset } = await import("../lib/ipc");
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
+    fireEvent.click(screen.getByText("インデックスをリセット"));
+    await waitFor(() => {
+      expect(indexReset).toHaveBeenCalledWith(1);
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("インデックスリセット: confirm=false のとき ipc.indexReset が呼ばれない (line 104)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { indexReset } = await import("../lib/ipc");
+    render(<SettingsScreen />);
+    fireEvent.click(screen.getByText("環境設定"));
+    fireEvent.click(screen.getByText("インデックスをリセット"));
+    expect(indexReset).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  // ── handleRevoke (lines 118-122) ─────────────────────────────────────────
+  it("解除ボタン: confirm=true のとき revokeAuth が呼ばれる (lines 118-122)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockSettingsStore.authStatus = { connected: true, user_login: "octocat" };
+    render(<SettingsScreen />);
+    // 解除ボタン（destructive variant）クリック
+    const revokeBtn = screen.getAllByRole("button").find(
+      (b) => b.className.includes("destructive")
+    )!;
+    fireEvent.click(revokeBtn);
+    await waitFor(() => {
+      expect(mockSettingsStore.revokeAuth).toHaveBeenCalledWith(1);
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("解除ボタン: confirm=false のとき revokeAuth が呼ばれない (line 120)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    mockSettingsStore.authStatus = { connected: true, user_login: "octocat" };
+    render(<SettingsScreen />);
+    const revokeBtn = screen.getAllByRole("button").find(
+      (b) => b.className.includes("destructive")
+    )!;
+    fireEvent.click(revokeBtn);
+    expect(mockSettingsStore.revokeAuth).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
 });

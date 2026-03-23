@@ -1,5 +1,6 @@
 pub mod agile;
 pub mod ai;
+pub mod approval;
 pub mod analytics;
 pub mod collaboration;
 pub mod conflict;
@@ -139,9 +140,6 @@ macro_rules! all_commands {
             commands::agile::kanban_delete_card,
             commands::agile::sprint_suggest_plan,
             commands::agile::sprint_generate_retro,
-            commands::agile::story_map_get,
-            commands::agile::story_map_save,
-            commands::agile::flow_analyze,
             // Phase 9: MCP
             commands::mcp::mcp_get_status,
             commands::mcp::mcp_add_server,
@@ -178,7 +176,32 @@ macro_rules! all_commands {
             commands::swarm::orchestrator_resolve_conflict,
             commands::swarm::orchestrator_commit_resolution,
             commands::swarm::orchestrator_ai_resolve_conflict,
+            commands::swarm::orchestrator_run_wave_gate,
+            commands::swarm::orchestrator_get_waves,
             commands::swarm::get_system_resources,
+            // Swarm Wave モード
+            commands::swarm::swarm_wave_start,
+            commands::swarm::swarm_wave_worker_update,
+            commands::swarm::swarm_wave_assign_worker,
+            commands::swarm::swarm_wave_run_gate,
+            commands::swarm::swarm_wave_get_status,
+            commands::swarm::swarm_wave_list,
+            commands::swarm::swarm_wave_cancel,
+            // ハイブリッド: Orchestrator Wave 直接アクセス
+            commands::swarm::orchestrator_wave_status,
+            commands::swarm::orchestrator_advance_wave,
+            // Swarm 履歴
+            commands::swarm::swarm_history_save,
+            commands::swarm::swarm_history_list,
+            commands::swarm::swarm_history_delete,
+            commands::swarm::swarm_history_resume,
+            // 承認キュー
+            commands::approval::approval_list,
+            commands::approval::approval_history,
+            commands::approval::approval_create,
+            commands::approval::approval_decide,
+            commands::approval::approval_cleanup,
+            commands::approval::approval_pending_count,
         ]
     };
 }

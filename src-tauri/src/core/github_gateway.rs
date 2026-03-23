@@ -2,7 +2,6 @@
 ///
 /// `services/github.rs` の直接 API 呼び出しをラップする薄いファサード層。
 /// Phase 7 以降で MCP 経由への切り替えを可能にする。
-
 pub enum GatewayMode {
     /// services/github.rs を使用（現在の実装）
     DirectApi,

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
-use crate::notification::ring::{emit_ring_event, AlertSeverity, RingEvent, RingUrgency};
+use crate::notification::ring::{emit_ring_event, RingEvent, RingUrgency};
 
 #[derive(Debug, Deserialize)]
 pub struct ApiRequest {
@@ -70,6 +70,7 @@ pub async fn handle_request(req: ApiRequest, app: &AppHandle) -> ApiResponse {
         "docs.affected" => handle_docs_affected(req.params, app, id).await,
         "kanban.create_card" => handle_create_card(req.params, app, id).await,
         "kanban.move_card" => handle_move_card(req.params, app, id).await,
+        "worker.done" => handle_worker_done(req.params, app, id).await,
         _ => ApiResponse::error(id, "Unknown method"),
     }
 }
@@ -190,6 +191,26 @@ async fn handle_create_card(params: serde_json::Value, app: &AppHandle, id: Opti
 async fn handle_move_card(params: serde_json::Value, app: &AppHandle, id: Option<u64>) -> ApiResponse {
     app.emit("api-kanban-move", &params).ok();
     ApiResponse::ok(id, serde_json::json!({ "success": true }))
+}
+
+/// Claude Code の PostTask/TaskError フックから呼ばれる完了通知。
+/// `devnest worker done --worker-id <id>` → Socket API → ここへ到達する。
+async fn handle_worker_done(params: serde_json::Value, app: &AppHandle, id: Option<u64>) -> ApiResponse {
+    let worker_id = match params["worker_id"].as_str() {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return ApiResponse::error(id, "worker_id is required"),
+    };
+
+    use crate::swarm::SharedHookRegistry;
+    if let Some(registry) = app.try_state::<SharedHookRegistry>() {
+        if let Ok(reg) = registry.inner().lock() {
+            if let Some(tx) = reg.get(&worker_id) {
+                let _ = tx.send(());
+            }
+        }
+    }
+
+    ApiResponse::ok(id, serde_json::json!({ "success": true, "worker_id": worker_id }))
 }
 
 #[cfg(test)]

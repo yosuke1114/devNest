@@ -15,6 +15,7 @@ function makeBlock(overrides: Partial<ConflictBlock> = {}): ConflictBlock {
 describe("ConflictBlockItem", () => {
   const defaultProps = {
     block: makeBlock(),
+    filePath: "docs/test.md",
     resolution: undefined,
     manualContent: undefined,
     onResolve: vi.fn(),
@@ -65,5 +66,13 @@ describe("ConflictBlockItem", () => {
   it("resolution=\"ours\" のとき「OURS を選択」が表示される（解消済みバッジ）", () => {
     render(<ConflictBlockItem {...defaultProps} resolution="ours" />);
     expect(screen.getByText(/OURS を選択/)).toBeInTheDocument();
+  });
+
+  it("manual textarea 変更で onManualChange が呼ばれる (line 98)", () => {
+    const onManualChange = vi.fn();
+    render(<ConflictBlockItem {...defaultProps} resolution="manual" onManualChange={onManualChange} />);
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "edited content" } });
+    expect(onManualChange).toHaveBeenCalledWith("edited content");
   });
 });

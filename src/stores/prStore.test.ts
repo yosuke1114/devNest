@@ -125,7 +125,7 @@ describe("prStore", () => {
   it("syncPrs() が prSync を呼ぶ", async () => {
     mockIpc.prSync.mockResolvedValueOnce({ synced_count: 3 });
     await usePrStore.getState().syncPrs(1);
-    expect(mockIpc.prSync).toHaveBeenCalledWith(1, "open");
+    expect(mockIpc.prSync).toHaveBeenCalledWith(1, undefined);
   });
 
   it("syncPrs() 成功時に syncStatus が 'success' になる", async () => {
@@ -421,7 +421,6 @@ describe("prStore", () => {
   // ─── loadDocDiff ─────────────────────────────────────────────────────────
 
   it("loadDocDiff() が prDocDiffGet を呼んで docDiffs をセットする", async () => {
-    const mockIpc = (await import("../lib/ipc")).default as ReturnType<typeof vi.mocked>;
     const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
     ipcM.prDocDiffGet.mockResolvedValueOnce("diff --git a/docs/x.md b/docs/x.md\n--- a/docs/x.md\n+++ b/docs/x.md\n@@ -1 +1 @@\n-old\n+new");
 
@@ -443,10 +442,10 @@ describe("prStore", () => {
   it("mergePr() マージ後 gitPull が conflict を返すと navigate('conflict') が呼ばれる", async () => {
     const { useUiStore } = await import("./uiStore");
     const navigateMock = vi.fn();
-    vi.mocked(useUiStore.getState).mockReturnValue({ navigate: navigateMock } as ReturnType<typeof useUiStore.getState>);
+    vi.mocked(useUiStore.getState).mockReturnValue({ navigate: navigateMock } as unknown as ReturnType<typeof useUiStore.getState>);
 
     const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
-    const pr = { id: 5, github_number: 44, title: "test", state: "open" as const, head_branch: "feat/x", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 9, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    const pr = { id: 5, github_number: 44, title: "test", state: "open" as const, head_branch: "feat/x", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 9, body: null, linked_issue_number: null, created_by: "user" as const, github_created_at: "", github_updated_at: "", synced_at: "" };
     usePrStore.setState({ prs: [pr] });
     ipcM.prMerge.mockResolvedValueOnce(undefined);
     ipcM.gitPull.mockResolvedValueOnce("conflict" as never);
@@ -470,7 +469,7 @@ describe("prStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
     const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
     ipcM.prList.mockResolvedValueOnce([]);
@@ -487,7 +486,7 @@ describe("prStore", () => {
 
   it("openPrByGithubNumber() が prs から一致する PR を見つけて selectPr を呼ぶ", async () => {
     const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
-    const pr = { id: 7, github_number: 99, title: "test", state: "open" as const, head_branch: "feat/x", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 9, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    const pr = { id: 7, github_number: 99, title: "test", state: "open" as const, head_branch: "feat/x", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 9, body: null, linked_issue_number: null, created_by: "user" as const, github_created_at: "", github_updated_at: "", synced_at: "" };
     usePrStore.setState({ prs: [pr] });
     ipcM.prGetDetail.mockResolvedValueOnce({ pr, reviews: [], comments: [] });
 
@@ -498,7 +497,7 @@ describe("prStore", () => {
 
   it("openPrByGithubNumber() prs が空のとき fetchPrs してから探す", async () => {
     const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
-    const pr = { id: 8, github_number: 55, title: "test", state: "open" as const, head_branch: "feat/y", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 10, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
+    const pr = { id: 8, github_number: 55, title: "test", state: "open" as const, head_branch: "feat/y", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 10, body: null, linked_issue_number: null, created_by: "user" as const, github_created_at: "", github_updated_at: "", synced_at: "" };
     usePrStore.setState({ prs: [] });
     ipcM.prList.mockResolvedValueOnce([pr]);
     ipcM.prGetDetail.mockResolvedValueOnce({ pr, reviews: [], comments: [] });
@@ -522,9 +521,9 @@ describe("prStore", () => {
   // ─── commentsForLine ──────────────────────────────────────────────────────
 
   it("commentsForLine() が path と line で comments をフィルタする", async () => {
-    const pr = { id: 1, github_number: 1, title: "t", state: "open" as const, head_branch: "b", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 1, body: null, linked_issue_number: null, github_created_at: "", github_updated_at: "", synced_at: "" };
-    const comment = { id: 1, pr_id: 1, author_login: "u", body: "LGTM", path: "src/foo.ts", line: 10, created_at: "" };
-    const other = { id: 2, pr_id: 1, author_login: "u", body: "other", path: "src/bar.ts", line: 20, created_at: "" };
+    const pr = { id: 1, github_number: 1, title: "t", state: "open" as const, head_branch: "b", base_branch: "main", author_login: "u", checks_status: "passing" as const, draft: false, merged_at: null, project_id: 1, github_id: 1, body: null, linked_issue_number: null, created_by: "user" as const, github_created_at: "", github_updated_at: "", synced_at: "" };
+    const comment = { id: 1, pr_id: 1, github_id: null, author_login: "u", body: "LGTM", path: "src/foo.ts", line: 10, comment_type: "inline" as const, diff_hunk: null, resolved: false, in_reply_to_id: null, is_pending: false, synced_at: null, created_at: "" };
+    const other = { id: 2, pr_id: 1, github_id: null, author_login: "u", body: "other", path: "src/bar.ts", line: 20, comment_type: "inline" as const, diff_hunk: null, resolved: false, in_reply_to_id: null, is_pending: false, synced_at: null, created_at: "" };
     usePrStore.setState({ detail: { pr, reviews: [], comments: [comment, other] } });
 
     const result = usePrStore.getState().commentsForLine("src/foo.ts", 10);

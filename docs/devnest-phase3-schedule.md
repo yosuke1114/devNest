@@ -56,9 +56,9 @@
 
 ### D — DB / マイグレーション（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| D-06 | `migrations/0003_document_chunks.sql` 作成（`document_chunks` テーブル + sqlite-vec の `chunk_embeddings` virtual table + インデックス） | Phase 2 完了 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| D-06 | `migrations/0003_document_chunks.sql` 作成（`document_chunks` テーブル + sqlite-vec の `chunk_embeddings` virtual table + インデックス） | Phase 2 完了 | 1.0d | 完了 |
 
 **マイグレーション内容（抜粋）**
 
@@ -89,11 +89,11 @@ CREATE VIRTUAL TABLE chunk_embeddings USING vec0(
 
 #### R-H: インデックス・検索（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-H01 | `services/embedding.rs` 作成（Anthropic Embeddings API `text-embedding-3-small` 呼び出し・チャンク分割ロジック・レート制限対応） | D-06 | 2.0d |
-| R-H02 | `index_build` 実装（`embedding_status = 'pending' \| 'stale'` の chunk を対象・`index_progress` / `index_done` イベント発火）/ `index_reset` 実装（全 chunk DELETE → `document_scan` 相当の再スキャン → `index_build`） | R-H01 | 1.5d |
-| R-H03 | `search_documents` 実装（keyword: SQLite FTS5 / semantic: sqlite-vec ANN 検索 / both: スコア統合）/ `search_context_for_issue` 実装（semantic のみ・上位 5 件） | R-H02 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-H01 | `services/embedding.rs` 作成（Anthropic Embeddings API `text-embedding-3-small` 呼び出し・チャンク分割ロジック・レート制限対応） | D-06 | 2.0d | 完了 |
+| R-H02 | `index_build` 実装（`embedding_status = 'pending' \| 'stale'` の chunk を対象・`index_progress` / `index_done` イベント発火）/ `index_reset` 実装（全 chunk DELETE → `document_scan` 相当の再スキャン → `index_build`） | R-H01 | 1.5d | 完了 |
+| R-H03 | `search_documents` 実装（keyword: SQLite FTS5 / semantic: sqlite-vec ANN 検索 / both: スコア統合）/ `search_context_for_issue` 実装（semantic のみ・上位 5 件） | R-H02 | 1.5d | 完了 |
 
 ---
 
@@ -101,34 +101,34 @@ CREATE VIRTUAL TABLE chunk_embeddings USING vec0(
 
 #### F-H: searchStore（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-H01 | `search.store.ts` 実装（`SearchState` 型・`search` / `setQuery` debounce / `setSearchType` / `setActiveResult` / `loadHistory` / `openInEditor` / `reset`） | R-H03 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-H01 | `search.store.ts` 実装（`SearchState` 型・`search` / `setQuery` debounce / `setSearchType` / `setActiveResult` / `loadHistory` / `openInEditor` / `reset`） | R-H03 | 1.0d | 完了 |
 
 #### F-I: SearchScreen（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-I01 | `SearchScreen.tsx` / `SearchBar.tsx` / `SearchModeToggle.tsx` 実装（query 入力・keyword / semantic / both 切替・300ms debounce） | F-H01 | 1.0d |
-| F-I02 | `SearchResultList.tsx` / `SearchResultItem.tsx` 実装（スコア表示・クリックで右ペイン表示） | F-I01 | 1.0d |
-| F-I03 | `SearchResultDetail.tsx` 実装（マッチ行ハイライト・コンテキスト行表示・`OPEN IN EDITOR →` ボタン → `searchStore.openInEditor`）/ `SearchHistory.tsx`（履歴一覧・クリックで再検索） | F-I02 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-I01 | `SearchScreen.tsx` / `SearchBar.tsx` / `SearchModeToggle.tsx` 実装（query 入力・keyword / semantic / both 切替・300ms debounce） | F-H01 | 1.0d | 完了 |
+| F-I02 | `SearchResultList.tsx` / `SearchResultItem.tsx` 実装（スコア表示・クリックで右ペイン表示） | F-I01 | 1.0d | 完了 |
+| F-I03 | `SearchResultDetail.tsx` 実装（マッチ行ハイライト・コンテキスト行表示・`OPEN IN EDITOR →` ボタン → `searchStore.openInEditor`）/ `SearchHistory.tsx`（履歴一覧・クリックで再検索） | F-I02 | 1.0d | 完了 |
 
 #### F-J: SetupScreen Index タブ・AI Wizard 強化（3 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-J01 | `SetupScreen` の Index タブを本実装（`index_build` 呼び出し → `IndexProgressBar` で進捗表示 → 完了後に `index_done` で完了表示）| R-H02 | 1.0d |
-| F-J02 | AI Wizard Step 2（`IssuesScreen`）を本実装（`search_context_for_issue` の結果をスコア付きで表示・Phase 1 のスタブを置換）/ `issue_draft_chunk` / `issue_draft_done` イベントリスナーを `initListeners` に追加 | R-H03, Phase 1 R-D06 | 1.0d |
-| F-J03 | `SettingsScreen` にインデックス管理セクション追加（`index_build` ボタン・`index_reset` ボタン・インデックス済み件数表示） | R-H02 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-J01 | `SetupScreen` の Index タブを本実装（`index_build` 呼び出し → `IndexProgressBar` で進捗表示 → 完了後に `index_done` で完了表示）| R-H02 | 1.0d | 完了 |
+| F-J02 | AI Wizard Step 2（`IssuesScreen`）を本実装（`search_context_for_issue` の結果をスコア付きで表示・Phase 1 のスタブを置換）/ `issue_draft_chunk` / `issue_draft_done` イベントリスナーを `initListeners` に追加 | R-H03, Phase 1 R-D06 | 1.0d | 完了 |
+| F-J03 | `SettingsScreen` にインデックス管理セクション追加（`index_build` ボタン・`index_reset` ボタン・インデックス済み件数表示） | R-H02 | 0.5d | 完了 |
 
 ---
 
 ### E — 結合・動作確認（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| E-06 | S-06 シナリオ通し確認（検索 → 結果クリック → OPEN IN EDITOR）| F-I03 | 0.5d |
-| E-07 | S-03 強化確認（Wizard Step 2 でセマンティック候補が表示される） | F-J02 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| E-06 | S-06 シナリオ通し確認（検索 → 結果クリック → OPEN IN EDITOR）| F-I03 | 0.5d | 完了 |
+| E-07 | S-03 強化確認（Wizard Step 2 でセマンティック候補が表示される） | F-J02 | 0.5d | 完了 |
 
 ---
 

@@ -12,12 +12,8 @@ import { buildMockIpcScript } from "../setup/mock-ipc";
 // ─── ヘルパー ──────────────────────────────────────────────────────────────────
 
 async function navigateToSwarm(page: Parameters<typeof test.beforeEach>[0]["page"]) {
-  // アプリが初期化されてサイドバーが表示されるまで待つ
-  // uiStore.navigate を window 経由で呼ぶ（Zustand はグローバルに公開されていないため
-  // sidebar の nav-swarm ボタンをクリックする。ボタンが見つからない場合は scroll して探す）
   await page.waitForTimeout(800);
 
-  // nav-swarm ボタンをスクロールして探す
   const navBtn = page.locator('[data-testid="nav-swarm"]');
   await navBtn.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
   if (await navBtn.isVisible({ timeout: 3000 })) {
@@ -26,12 +22,17 @@ async function navigateToSwarm(page: Parameters<typeof test.beforeEach>[0]["page
     return;
   }
 
-  // フォールバック: テキスト "Swarm" を探す
   const swarmLink = page.getByText("Swarm").first();
   if (await swarmLink.isVisible({ timeout: 2000 })) {
     await swarmLink.click();
     await page.waitForTimeout(400);
   }
+}
+
+/** running タブへ切り替える */
+async function navigateToRunningTab(page: Parameters<typeof test.beforeEach>[0]["page"]) {
+  await page.locator('[data-testid="tab-running"]').click();
+  await page.waitForTimeout(300);
 }
 
 /** worker-spawned イベントをフロントエンドへ発火する */
@@ -84,8 +85,11 @@ test.describe("S-13 Swarm — OrchestratorPanel", () => {
   // ST-01: Swarm 画面表示
   test("ST-01: Swarm 画面が表示される", async ({ page }) => {
     await expect(page.locator('[data-testid="swarm-page"]')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('[data-testid="orchestrator-panel"]')).toBeVisible();
-    await expect(page.locator('[data-testid="terminal-grid"]')).toBeVisible();
+    // split タブ（デフォルト）が表示されている
+    await expect(page.locator('[data-testid="swarm-split-tab"]')).toBeVisible();
+    // running タブに切り替えると TerminalGrid が表示される
+    await navigateToRunningTab(page);
+    await expect(page.locator('[data-testid="terminal-grid"]')).toBeVisible({ timeout: 5000 });
   });
 
   // ST-02: タスク入力 → 分解
@@ -93,63 +97,69 @@ test.describe("S-13 Swarm — OrchestratorPanel", () => {
     const splitBtn = page.locator('[data-testid="split-button"]');
     await expect(splitBtn).toBeDisabled();
 
-    const textarea = page.locator('[data-testid="task-input"]');
+    const textarea = page.locator('[data-testid="split-prompt-input"]');
     await textarea.fill("ユーザー認証機能を実装してテストを書いてください");
 
     await expect(splitBtn).toBeEnabled();
     await splitBtn.click();
 
     // split_task モックが tasks を返す
-    const subtaskList = page.locator('[data-testid="subtask-list"]');
-    await expect(subtaskList).toBeVisible({ timeout: 5000 });
+    const resultSection = page.locator('[data-testid="split-result-section"]');
+    await expect(resultSection).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Task A: ユーザー認証実装")).toBeVisible();
     await expect(page.getByText("Task B: テスト追加")).toBeVisible();
   });
 
-  // ST-03: 設定モーダル
-  test("ST-03: 設定ボタンで Settings Modal が開く", async ({ page }) => {
-    await page.locator('[data-testid="settings-button"]').click();
-    await expect(page.locator('[data-testid="settings-modal"]')).toBeVisible();
+  // ST-03: 設定パネル展開
+  test("ST-03: 設定ボタンで Settings パネルが開く", async ({ page }) => {
+    // 設定セクションのヘッダーをクリックして展開
+    await page.getByText("⚙️ 設定").click();
+    await expect(page.locator('[data-testid="settings-panel"]')).toBeVisible();
   });
 
-  // ST-04: 設定保存
-  test("ST-04: Worker 上限を 8 に変更して保存できる", async ({ page }) => {
-    await page.locator('[data-testid="settings-button"]').click();
-    await page.locator('[data-testid="worker-limit-8"]').click();
-    await page.locator('[data-testid="settings-save"]').click();
-    await expect(page.locator('[data-testid="settings-modal"]')).not.toBeVisible();
+  // ST-04: 設定保存（Worker 上限変更）
+  test("ST-04: Worker 上限を 8 に変更できる", async ({ page }) => {
+    await page.getByText("⚙️ 設定").click();
+    await expect(page.locator('[data-testid="settings-panel"]')).toBeVisible();
+    await page.locator('[data-testid="max-workers-8"]').click();
+    await expect(page.locator('[data-testid="max-workers-8"]')).toHaveAttribute("aria-pressed", "true");
+    // 設定を閉じる
+    await page.getByText("⚙️ 設定").click();
+    await expect(page.locator('[data-testid="settings-panel"]')).not.toBeVisible();
   });
 
-  // ST-05: 設定キャンセル
-  test("ST-05: キャンセルボタンで Settings Modal が閉じる", async ({ page }) => {
-    await page.locator('[data-testid="settings-button"]').click();
-    await page.locator('[data-testid="settings-cancel"]').click();
-    await expect(page.locator('[data-testid="settings-modal"]')).not.toBeVisible();
+  // ST-05: 設定パネルを閉じる
+  test("ST-05: 設定ヘッダー再クリックで Settings パネルが閉じる", async ({ page }) => {
+    await page.getByText("⚙️ 設定").click();
+    await expect(page.locator('[data-testid="settings-panel"]')).toBeVisible();
+    await page.getByText("⚙️ 設定").click();
+    await expect(page.locator('[data-testid="settings-panel"]')).not.toBeVisible();
   });
 
-  // ST-06: Shell 設定オプション
-  test("ST-06: Shell オプションで bash を選択できる", async ({ page }) => {
-    await page.locator('[data-testid="settings-button"]').click();
-    await page.locator('[data-testid="shell-option-bash"]').click();
-    const bashBtn = page.locator('[data-testid="shell-option-bash"]');
-    await expect(bashBtn).toHaveAttribute("aria-pressed", "true");
+  // ST-06: skip-permissions チェックボックスを確認
+  test("ST-06: skip-permissions チェックボックスが操作できる", async ({ page }) => {
+    await page.getByText("⚙️ 設定").click();
+    const checkbox = page.locator('[data-testid="skip-permissions-checkbox"]');
+    await expect(checkbox).toBeVisible();
+    await checkbox.check();
+    await expect(checkbox).toBeChecked();
   });
 
-  // ST-07: リソースインジケーター
-  test("ST-07: リソースインジケーターが表示される", async ({ page }) => {
-    // get_system_resources モックは CPU 25% / 8GB free を返す
-    const indicator = page.locator('[data-testid="resource-indicator"]');
-    await expect(indicator).toBeVisible({ timeout: 5000 });
-    await expect(indicator).toContainText("25%");
+  // ST-07: running タブ内の TerminalGrid が表示される
+  test("ST-07: running タブに TerminalGrid と空スタテが表示される", async ({ page }) => {
+    await navigateToRunningTab(page);
+    await expect(page.locator('[data-testid="terminal-grid"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="running-tab-empty"]')).toBeVisible();
   });
 });
 
 test.describe("S-13 Swarm — TerminalGrid", () => {
   test.beforeEach(async ({ page }) => {
-    // buildMockIpcScript に含まれる __fireEvent / transformCallback を使う
     await page.addInitScript(buildMockIpcScript());
     await page.goto("/");
     await navigateToSwarm(page);
+    // TerminalGrid は running タブに表示される
+    await navigateToRunningTab(page);
   });
 
   // ST-08: エンプティステート
@@ -160,7 +170,6 @@ test.describe("S-13 Swarm — TerminalGrid", () => {
 
   // ST-09: Shell 追加
   test("ST-09: Shell 追加ボタンで spawn_worker が呼ばれる", async ({ page }) => {
-    const logs: string[] = [];
     await page.evaluate(() => {
       const orig = (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ as { invoke: (cmd: string) => unknown };
       const origInvoke = orig.invoke.bind(orig);
@@ -180,7 +189,6 @@ test.describe("S-13 Swarm — TerminalGrid", () => {
   // ST-10: Worker イベント経由でペインが追加される
   test("ST-10: worker-spawned イベントでペインが追加される", async ({ page }) => {
     await expect(page.locator('[data-testid="empty-state"]')).toBeVisible({ timeout: 5000 });
-    // リスナーが登録されるまで少し待つ
     await page.waitForTimeout(500);
 
     await emitWorkerSpawned(page, { id: "w-e2e-001", kind: "claudeCode", label: "Worker 1" });

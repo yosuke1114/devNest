@@ -402,13 +402,6 @@ export const sprintSuggestPlan = (projectPath: string, sprintInfo: import("../ty
   invoke<import("../types").SprintPlan>("sprint_suggest_plan", { projectPath, sprintInfo });
 export const sprintGenerateRetro = (projectPath: string, sprintInfo: import("../types").SprintInfo) =>
   invoke<import("../types").Retrospective>("sprint_generate_retro", { projectPath, sprintInfo });
-export const storyMapGet = (projectPath: string, productId: string) =>
-  invoke<import("../types").StoryMap>("story_map_get", { projectPath, productId });
-export const storyMapSave = (projectPath: string, map: import("../types").StoryMap) =>
-  invoke<void>("story_map_save", { projectPath, map });
-export const flowAnalyze = (projectPath: string, productId: string) =>
-  invoke<import("../types").FlowAnalysis>("flow_analyze", { projectPath, productId });
-
 // Phase 9: MCP
 export const mcpGetStatus = (projectPath: string) =>
   invoke<import("../types").McpHubStatus>("mcp_get_status", { projectPath });
@@ -434,3 +427,17 @@ export const knowledgeAdd = (projectPath: string, title: string, content: string
   invoke<import("../types").KnowledgeEntry>("knowledge_add", { projectPath, title, content, entryType, tags, linkedDocs, author });
 export const knowledgeAddComment = (projectPath: string, entryId: string, author: string, content: string) =>
   invoke<import("../types").KnowledgeEntry>("knowledge_add_comment", { projectPath, entryId, author, content });
+
+// 承認キュー
+export const approvalList = () =>
+  invoke<import("../types").ApprovalRequest[]>("approval_list");
+export const approvalHistory = () =>
+  invoke<import("../types").ApprovalRequest[]>("approval_history");
+export const approvalCreate = (requestId: string, toolName: string, toolInput: string, riskLevel: string, workerId?: string) =>
+  invoke<import("../types").ApprovalRequest>("approval_create", { requestId, workerId: workerId ?? null, toolName, toolInput, riskLevel });
+export const approvalDecide = (decision: import("../types").ApprovalDecision) =>
+  invoke<void>("approval_decide", { decision });
+export const approvalCleanup = () =>
+  invoke<number>("approval_cleanup");
+export const approvalPendingCount = () =>
+  invoke<number>("approval_pending_count");

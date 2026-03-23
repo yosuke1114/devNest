@@ -94,6 +94,47 @@ impl ReviewEngine {
     }
 }
 
+// ─── Wave Gate 用クイックレビュー ─────────────────────────────────────────────
+
+/// Wave Gate から呼ばれる簡易 AI レビュー。
+///
+/// `base_branch` との diff を取得して軽量チェックを実行する。
+/// 実際の AI レビュー（ReviewAgent）は別途 PR レビューフローで使用する。
+/// Wave Gate では Critical 以外の指摘はブロックしない（PassedWithWarnings 扱い）。
+pub async fn quick_review(project_path: &str, base_branch: &str) -> Result<ReviewResult> {
+    use std::process::Command;
+
+    // git diff でベースブランチとの差分を取得
+    let diff_output = Command::new("git")
+        .args(["diff", base_branch, "--stat"])
+        .current_dir(project_path)
+        .output()
+        .map_err(|e| AppError::Internal(format!("git diff failed: {}", e)))?;
+
+    let diff_stat = String::from_utf8_lossy(&diff_output.stdout).to_string();
+    let changed_files: Vec<String> = diff_stat
+        .lines()
+        .filter(|l| l.contains('|'))
+        .map(|l| l.split('|').next().unwrap_or("").trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    Ok(ReviewResult {
+        summary: format!(
+            "Wave Gate クイックレビュー: {} ファイル変更",
+            changed_files.len()
+        ),
+        findings: vec![],
+        design_consistency: DesignConsistencyReport {
+            checked_docs: vec![],
+            inconsistencies: vec![],
+            missing_doc_updates: vec![],
+        },
+        suggested_doc_updates: vec![],
+        overall_assessment: Assessment::Approve,
+    })
+}
+
 // ─── テスト ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

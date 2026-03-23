@@ -34,6 +34,7 @@ pub async fn knowledge_search(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn knowledge_add(
     project_path: String,
     title: String,

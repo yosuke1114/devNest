@@ -118,6 +118,30 @@ describe("SetupScreen — リストモード", () => {
     fireEvent.click(screen.getByText("新規プロジェクトを追加"));
     expect(screen.getByText("新規プロジェクト")).toBeInTheDocument();
   });
+
+  it("削除ボタンクリック → confirm=true → deleteProject が呼ばれる (lines 553-555, 592)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<SetupScreen />);
+    // アイコンのみのボタン (テキストなし) = 削除ボタン
+    const allBtns = screen.getAllByRole("button");
+    const deleteBtn = allBtns.find(b => !(b.textContent?.trim()))!;
+    expect(deleteBtn).toBeTruthy();
+    fireEvent.click(deleteBtn);
+    await waitFor(() => {
+      expect(projectState.deleteProject).toHaveBeenCalledWith(mockProject.id);
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("削除ボタンクリック → confirm=false → deleteProject が呼ばれない (line 554)", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<SetupScreen />);
+    const allBtns = screen.getAllByRole("button");
+    const deleteBtn = allBtns.find(b => !(b.textContent?.trim()))!;
+    fireEvent.click(deleteBtn);
+    expect(projectState.deleteProject).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
 });
 
 describe("SetupScreen — ウィザードモード (projects=[])", () => {
@@ -229,6 +253,21 @@ describe("SetupScreen — ウィザードモード (projects=[])", () => {
   it("ステップ 0 BACK は存在しない (最初のステップ)", () => {
     render(<SetupScreen />);
     expect(screen.queryByTestId("setup-back")).not.toBeInTheDocument();
+  });
+
+  it("ステップ 2 → BACK でステップ 1 に戻る (line 504)", async () => {
+    render(<SetupScreen />);
+    fireEvent.change(screen.getByTestId("setup-project-name"), { target: { value: "App" } });
+    fireEvent.change(screen.getByTestId("setup-local-dir"), { target: { value: "/tmp/app" } });
+    fireEvent.click(screen.getByTestId("setup-next"));
+    await waitFor(() => screen.getByText("CONNECT WITH GITHUB"));
+    const skipBtns = screen.getAllByRole("button").filter(b => b.textContent?.includes("SKIP"));
+    fireEvent.click(skipBtns[0]);
+    await waitFor(() => screen.getByText("保存時の同期モード"));
+    // BACK ボタンをクリック
+    const backBtns = screen.getAllByRole("button").filter(b => b.textContent?.includes("BACK"));
+    fireEvent.click(backBtns[0]);
+    await waitFor(() => screen.getByText("CONNECT WITH GITHUB"));
   });
 });
 

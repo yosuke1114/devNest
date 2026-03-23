@@ -191,7 +191,7 @@ pub async fn get_status(pool: &DbPool, project_id: i64) -> Result<ProjectStatus>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use tempfile::TempDir;
 
     async fn setup_pool() -> (DbPool, TempDir) {

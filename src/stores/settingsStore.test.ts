@@ -194,7 +194,7 @@ describe("settingsStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     const onError = vi.fn();
@@ -211,7 +211,7 @@ describe("settingsStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     await useSettingsStore.getState().listenAuthDone(1);
@@ -283,7 +283,7 @@ describe("settingsStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
     const { mockIpc: ipcM } = await import("../lib/ipc").then((m) => ({ mockIpc: vi.mocked(m) }));
     ipcM.githubAuthStatus.mockResolvedValueOnce({ connected: true, user_login: "alice", avatar_url: null });

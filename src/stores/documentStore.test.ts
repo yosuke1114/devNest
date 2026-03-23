@@ -347,7 +347,7 @@ describe("documentStore", () => {
   // ─── fetchFileTree ────────────────────────────────────────────────────────
 
   it("fetchFileTree() が fileTree を呼んで fileTreeNodes をセットする", async () => {
-    const nodes = [{ id: "n1", name: "src", path: "src", kind: "dir" as const, children: [] }];
+    const nodes = [{ name: "src", path: "src", is_dir: true, children: [] }];
     mockIpc.fileTree.mockResolvedValueOnce(nodes);
 
     await useDocumentStore.getState().fetchFileTree(1);
@@ -398,7 +398,7 @@ describe("documentStore", () => {
   // ─── saveCodeFile ─────────────────────────────────────────────────────────
 
   it("saveCodeFile() 成功時に codeSaveStatus が success になる", async () => {
-    mockIpc.fileSave.mockResolvedValueOnce(undefined);
+    mockIpc.fileSave.mockResolvedValueOnce({ sha: "abc123", push_status: "synced" });
 
     await useDocumentStore.getState().saveCodeFile(1, "src/foo.ts", "content");
 
@@ -446,5 +446,51 @@ describe("documentStore", () => {
     expect(s.fileTreeNodes).toEqual([]);
     expect(s.fileTreeLoading).toBe(false);
     expect(s.codeSaveStatus).toBe("idle");
+  });
+
+  // ─── 未カバーブランチ補完 ─────────────────────────────────────────────────
+
+  // fetchLinkedIssues: currentDoc.project_id が存在するパス (lines 161-162)
+  it("fetchLinkedIssues() currentDoc に project_id があると projectId を使って呼ぶ", async () => {
+    useDocumentStore.setState({
+      currentDoc: makeDocWithContent({ project_id: 5 }),
+    });
+    mockIpc.documentLinkedIssues.mockResolvedValueOnce([]);
+
+    await useDocumentStore.getState().fetchLinkedIssues(10);
+
+    expect(mockIpc.documentLinkedIssues).toHaveBeenCalledWith(5, 10);
+  });
+
+  // renameDocument: currentDoc?.id !== documentId のとき currentDoc は変わらない (line 210/213)
+  it("renameDocument() currentDoc が別の id なら currentDoc は更新されない", async () => {
+    const original = makeDocument({ id: 1, path: "docs/old.md" });
+    const renamed = makeDocument({ id: 1, path: "docs/new.md" });
+    const other = makeDocWithContent({ id: 99, path: "docs/other.md" });
+    useDocumentStore.setState({ documents: [original], currentDoc: other });
+    mockIpc.documentRename.mockResolvedValueOnce(renamed);
+
+    await useDocumentStore.getState().renameDocument(1, 1, "docs/new.md");
+
+    // currentDoc は id=99 のまま変わらない
+    expect(useDocumentStore.getState().currentDoc?.id).toBe(99);
+  });
+
+  // listenCodeSaveProgress のコールバックが codeSaveProgress を更新する (line 233)
+  it("listenCodeSaveProgress() コールバックが codeSaveProgress をセットする", async () => {
+    const { listen } = await import("@tauri-apps/api/event");
+    const mockListen = listen as unknown as ReturnType<typeof vi.fn>;
+    let capturedCb: ((e: { payload: unknown }) => void) | null = null;
+    mockListen.mockImplementationOnce((_evt: unknown, cb: (e: { payload: unknown }) => void) => {
+      capturedCb = cb;
+      return Promise.resolve(() => {});
+    });
+
+    await useDocumentStore.getState().listenCodeSaveProgress();
+
+    const payload = { file: "docs/spec.md", progress: 50, total: 100 };
+    if (capturedCb) (capturedCb as (e: { payload: unknown }) => void)({ payload });
+
+    expect(useDocumentStore.getState().codeSaveProgress).toEqual(payload);
   });
 });

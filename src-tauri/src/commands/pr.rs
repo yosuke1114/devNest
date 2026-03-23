@@ -26,7 +26,7 @@ pub async fn pr_sync(
     let token = keychain::require_token(project_id)?;
     let client = GitHubClient::new(&token, &project.repo_owner, &project.repo_name);
 
-    let filter = state_filter.as_deref().unwrap_or("open");
+    let filter = state_filter.as_deref().unwrap_or("all");
     let gh_prs = client.list_pull_requests(Some(filter)).await?;
 
     let now = Utc::now().to_rfc3339();
@@ -354,7 +354,7 @@ pub async fn git_pull(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::state::AppState;
     use tempfile::TempDir;
 

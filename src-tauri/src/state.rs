@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
 use tokio::sync::RwLock;
+use tokio::sync::watch;
 use crate::db::DbPool;
 
 /// Box<dyn MasterPty> を Send にするラッパー（ネイティブ実装は fd ベースでスレッドセーフ）
@@ -35,6 +36,8 @@ pub struct AppState {
     pub pty_session: Arc<Mutex<Option<PtySessionHandle>>>,
     /// バックグラウンドポーリングの有効／無効フラグ（デフォルト: 有効）
     pub polling_active: Arc<AtomicBool>,
+    /// 承認キュー: request_id → watch::Sender<bool>（ワーカーが承認を待機するためのチャネル）
+    pub approval_channels: Arc<Mutex<HashMap<String, watch::Sender<bool>>>>,
 }
 
 impl AppState {
@@ -46,6 +49,7 @@ impl AppState {
             oauth_task: Arc::new(Mutex::new(None)),
             pty_session: Arc::new(Mutex::new(None)),
             polling_active: Arc::new(AtomicBool::new(true)),
+            approval_channels: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

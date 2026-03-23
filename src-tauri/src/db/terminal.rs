@@ -89,7 +89,7 @@ pub async fn list_sessions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use tempfile::TempDir;
 
     async fn setup() -> (DbPool, TempDir) {

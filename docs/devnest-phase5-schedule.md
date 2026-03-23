@@ -60,9 +60,9 @@
 
 ### D — DB / マイグレーション（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| D-08 | `migrations/0005_notifications_search.sql` 作成（`notifications` + `search_history` テーブル + インデックス） | Phase 4 完了 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| D-08 | `migrations/0005_notifications_search.sql` 作成（`notifications` + `search_history` テーブル + インデックス） | Phase 4 完了 | 0.5d | 完了 |
 
 **マイグレーション内容（抜粋）**
 
@@ -101,16 +101,16 @@ CREATE INDEX idx_notifications_project_read
 
 #### R-L: ポーリング（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-L01 | `services/polling.rs` 作成（GitHub Notifications API `GET /notifications?participating=true` の定期取得・`subject.type` + `reason` から `event_type` を判定・`notifications` テーブルに INSERT）/ `polling_start` 実装（Tokio `spawn` + interval タスク管理）/ `polling_stop` 実装（タスク abort） | D-08 | 2.0d |
-| R-L02 | CI ポーリング追加（`GET /repos/{owner}/{repo}/commits/{sha}/check-runs` で最新 PR の CI ステータスを監視・変化時に `notifications` INSERT + `pull_requests.checks_status` 更新）+ `notification_new` イベント発火（`polling_start` 内から） | R-L01 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-L01 | `services/polling.rs` 作成（GitHub Notifications API `GET /notifications?participating=true` の定期取得・`subject.type` + `reason` から `event_type` を判定・`notifications` テーブルに INSERT）/ `polling_start` 実装（Tokio `spawn` + interval タスク管理）/ `polling_stop` 実装（タスク abort） | D-08 | 2.0d | 完了 |
+| R-L02 | CI ポーリング追加（`GET /repos/{owner}/{repo}/commits/{sha}/check-runs` で最新 PR の CI ステータスを監視・変化時に `notifications` INSERT + `pull_requests.checks_status` 更新）+ `notification_new` イベント発火（`polling_start` 内から） | R-L01 | 1.5d | 完了 |
 
 #### R-M: 通知コマンド（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-M01 | `notification_list` 実装（`notifications` テーブルから取得）/ `notification_mark_read` 実装（全件 or 個別既読・`unread_count` 返却）/ `notification_navigate` 実装（`dest_screen` / `dest_resource_id` から `NavigationTarget` 構築・`dest_resource_id=NULL` なら `ResourceDeleted` エラー） | D-08 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-M01 | `notification_list` 実装（`notifications` テーブルから取得）/ `notification_mark_read` 実装（全件 or 個別既読・`unread_count` 返却）/ `notification_navigate` 実装（`dest_screen` / `dest_resource_id` から `NavigationTarget` 構築・`dest_resource_id=NULL` なら `ResourceDeleted` エラー） | D-08 | 1.0d | 完了 |
 
 ---
 
@@ -118,33 +118,33 @@ CREATE INDEX idx_notifications_project_read
 
 #### F-P: notificationStore（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-P01 | `notification.store.ts` 実装（`NotificationState` 型・`loadNotifications` / `markRead` / `navigate` / `requestPermission` / `onNotificationNew`） | R-M01 | 1.0d |
-| F-P02 | `notificationStore.onNotificationNew` の OS 通知発火実装（`tauri-plugin-notification` の `sendNotification` 呼び出し）/ `notification_new` イベントリスナーを `initListeners` に追加 / `polling_start` を `projectStore.setActiveProject` 完了時に自動呼び出し | F-P01, R-L02 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-P01 | `notification.store.ts` 実装（`NotificationState` 型・`loadNotifications` / `markRead` / `navigate` / `requestPermission` / `onNotificationNew`） | R-M01 | 1.0d | 完了 |
+| F-P02 | `notificationStore.onNotificationNew` の OS 通知発火実装（`tauri-plugin-notification` の `sendNotification` 呼び出し）/ `notification_new` イベントリスナーを `initListeners` に追加 / `polling_start` を `projectStore.setActiveProject` 完了時に自動呼び出し | F-P01, R-L02 | 1.0d | 完了 |
 
 #### F-Q: NotificationsScreen（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-Q01 | `NotificationsScreen.tsx` / `NotificationList.tsx` / `NotificationItem.tsx` 実装（未読バッジ・既読/未読スタイル・クリックで `navigate`）/ `NotificationPermissionBanner.tsx`（権限未付与時のバナー） | F-P01 | 1.0d |
-| F-Q02 | `GlobalNav` に未読バッジを追加（`notificationStore.unreadCount > 0` 時に赤バッジ表示）/ `SettingsScreen` に通知設定セクション追加（通知権限状態表示・`ALLOW NOTIFICATIONS` ボタン） | F-Q01 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-Q01 | `NotificationsScreen.tsx` / `NotificationList.tsx` / `NotificationItem.tsx` 実装（未読バッジ・既読/未読スタイル・クリックで `navigate`）/ `NotificationPermissionBanner.tsx`（権限未付与時のバナー） | F-P01 | 1.0d | 完了 |
+| F-Q02 | `GlobalNav` に未読バッジを追加（`notificationStore.unreadCount > 0` 時に赤バッジ表示）/ `SettingsScreen` に通知設定セクション追加（通知権限状態表示・`ALLOW NOTIFICATIONS` ボタン） | F-Q01 | 0.5d | 完了 |
 
 #### F-R: 通知からの画面遷移（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-R01 | `notificationStore.navigate` のフロント遷移実装（`NavigationTarget` → `uiStore.navigate` への変換・`screen='pr'` 時は `prStore.openPrByGithubNumber` 経由で解決）| F-P01, Phase 2 F-E01 | 1.0d |
-| F-R02 | Tauri のウィンドウフォーカス処理（OS 通知クリック → DevNest フォアグラウンド浮上 → 該当画面に遷移）/ `tauri::window::Window::set_focus()` を `notification_navigate` 呼び出し前後に実装 | R-M01 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-R01 | `notificationStore.navigate` のフロント遷移実装（`NavigationTarget` → `uiStore.navigate` への変換・`screen='pr'` 時は `prStore.openPrByGithubNumber` 経由で解決）| F-P01, Phase 2 F-E01 | 1.0d | 完了 |
+| F-R02 | Tauri のウィンドウフォーカス処理（OS 通知クリック → DevNest フォアグラウンド浮上 → 該当画面に遷移）/ `tauri::window::Window::set_focus()` を `notification_navigate` 呼び出し前後に実装 | R-M01 | 0.5d | 完了 |
 
 ---
 
 ### E — 結合・動作確認（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| E-11 | S-11 シナリオ通し確認（ポーリング → CI passed 通知 → OS バナー → クリック → PRScreen に遷移） | F-R02 | 1.0d |
-| E-12 | 全シナリオ通し確認（S-01〜S-11）・リグレッションテスト | E-11 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| E-11 | S-11 シナリオ通し確認（ポーリング → CI passed 通知 → OS バナー → クリック → PRScreen に遷移） | F-R02 | 1.0d | 完了 |
+| E-12 | 全シナリオ通し確認（S-01〜S-11）・リグレッションテスト | E-11 | 1.0d | 完了 |
 
 ---
 

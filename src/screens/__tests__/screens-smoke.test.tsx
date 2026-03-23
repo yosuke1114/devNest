@@ -4,7 +4,7 @@
  * 各スクリーンが「プロジェクト未選択」と「プロジェクト選択済み」の両状態で
  * クラッシュせずにレンダリングできることを確認する最低限のテスト。
  */
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── ストアモック ──────────────────────────────────────────────────

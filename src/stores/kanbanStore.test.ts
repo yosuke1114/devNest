@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { useKanbanStore } from "./kanbanStore";
-import type { KanbanBoard, KanbanCard, NewCard } from "../types";
+import type { KanbanBoard, KanbanCard, KanbanColumn, NewCard } from "../types";
 
 const mockIpc = vi.hoisted(() => ({
   kanbanGetBoard: vi.fn(),
@@ -16,29 +16,34 @@ vi.mock("../lib/ipc", () => mockIpc);
 const projectPath = "/tmp/proj";
 const productId = "prod-001";
 
+const mockColumns: KanbanColumn[] = [
+  { id: "todo", name: "Todo", order: 0 },
+  { id: "in_progress", name: "In Progress", order: 1 },
+  { id: "done", name: "Done", order: 2 },
+];
+
 const mockCard: KanbanCard = {
   id: "card-1",
-  column: "todo",
+  column_id: "todo",
   title: "タスク A",
   description: "説明",
   priority: "medium",
-  assignee: null,
   labels: [],
-  issueNumber: null,
-  createdAt: "2026-01-01",
-  updatedAt: "2026-01-01",
+  created_at: "2026-01-01",
+  moved_at: "2026-01-01",
 };
 
 const mockCard2: KanbanCard = {
   ...mockCard,
   id: "card-2",
   title: "タスク B",
-  column: "in_progress",
+  column_id: "in_progress",
 };
 
 const mockBoard: KanbanBoard = {
-  productId,
-  columns: ["todo", "in_progress", "done"],
+  id: "board-1",
+  product_id: productId,
+  columns: mockColumns,
   cards: [mockCard, mockCard2],
 };
 
@@ -107,7 +112,7 @@ describe("kanbanStore", () => {
   describe("moveCard", () => {
     const movedBoard: KanbanBoard = {
       ...mockBoard,
-      cards: [{ ...mockCard, column: "in_progress" }, mockCard2],
+      cards: [{ ...mockCard, column_id: "in_progress" }, mockCard2],
     };
 
     it("成功時に board が更新される", async () => {
@@ -135,13 +140,10 @@ describe("kanbanStore", () => {
 
   describe("createCard", () => {
     const newCardInput: NewCard = {
-      column: "todo",
+      column_id: "todo",
       title: "新しいカード",
-      description: null,
       priority: "low",
-      assignee: null,
       labels: [],
-      issueNumber: null,
     };
 
     const createdCard: KanbanCard = {

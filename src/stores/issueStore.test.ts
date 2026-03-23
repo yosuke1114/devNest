@@ -464,7 +464,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
     mockIpc.issueList.mockResolvedValue([]);
 
@@ -480,7 +480,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     await useIssueStore.getState().listenSyncDone(1);
@@ -494,7 +494,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     await useIssueStore.getState().listenDraftChunk();
@@ -509,7 +509,7 @@ describe("issueStore", () => {
     let capturedCb: ((ev: unknown) => void) | undefined;
     vi.mocked(listen).mockImplementationOnce(async (_event, cb) => {
       capturedCb = cb as (ev: unknown) => void;
-      return vi.fn();
+      return vi.fn() as unknown as () => void;
     });
 
     const draft = makeDraft({ id: 3, draft_body: null });
@@ -522,6 +522,20 @@ describe("issueStore", () => {
     expect(s.drafts[0].draft_body).toBe("Generated body");
     expect(s.currentDraft?.draft_body).toBe("Generated body");
     expect(s.generateStatus).toBe("success");
+  });
+
+  // ─── fetchIssueLinks / fetchLabels error (lines 103, 198) ───────────────
+
+  it("fetchIssueLinks() 失敗時に error がセットされる (line 103)", async () => {
+    mockIpc.issueDocLinkList.mockRejectedValueOnce({ code: "DB", message: "link error" });
+    await useIssueStore.getState().fetchIssueLinks(1);
+    expect(useIssueStore.getState().error).toBeTruthy();
+  });
+
+  it("fetchLabels() 失敗時に error がセットされる (line 198)", async () => {
+    mockIpc.githubLabelsList.mockRejectedValueOnce({ code: "GitHub", message: "no labels" });
+    await useIssueStore.getState().fetchLabels(1);
+    expect(useIssueStore.getState().error).toBeTruthy();
   });
 
   // ─── reset ────────────────────────────────────────────────────────────────

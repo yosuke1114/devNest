@@ -108,7 +108,7 @@ pub async fn notification_permission_request(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use crate::db::{project, notifications};
     use crate::models::notifications::NewNotification;
     use crate::state::AppState;

@@ -15,34 +15,35 @@ vi.mock("../lib/ipc", () => mockIpc);
 const projectPath = "/tmp/proj";
 
 const mockReviewRequest: ReviewRequest = {
-  filePaths: ["src/foo.ts"],
-  instruction: "セキュリティの観点でレビューしてください",
+  diff: "--- a/src/foo.ts\n+++ b/src/foo.ts",
+  changed_files: ["src/foo.ts"],
+  review_scope: "full",
 };
 
 const mockReviewResult: ReviewResult = {
   summary: "問題なし",
-  issues: [],
-  suggestions: ["変数名をより明確に"],
-  generatedAt: "2026-03-01",
+  findings: [],
+  design_consistency: { checked_docs: [], inconsistencies: [], missing_doc_updates: [] },
+  suggested_doc_updates: [],
+  overall_assessment: "approve",
 };
 
 const mockCodegenRequest: CodegenRequest = {
-  instruction: "TypeScript で UUID を生成する関数を書いて",
-  context: null,
-  targetFile: "src/utils.ts",
+  doc_path: "docs/spec.md",
+  generation_mode: "scaffold",
 };
 
 const mockCodegenResult: CodegenResult = {
-  code: "import { v4 as uuidv4 } from 'uuid';\nexport const generateId = () => uuidv4();",
-  explanation: "uuid パッケージを使用しています",
-  generatedAt: "2026-03-01",
+  generated_files: [],
+  mapping_updates: [],
+  warnings: [],
 };
 
 const mockAiContext: AiContext = {
-  projectSummary: "DevNest — Tauri v2 アプリ",
-  recentFiles: ["src/foo.ts"],
-  openIssues: 5,
-  currentBranch: "main",
+  doc_context: [],
+  maintenance_context: { outdated_deps_count: 0, stale_docs_count: 0 },
+  git_context: { current_branch: "main", recent_commits: [], recent_changed_files: [] },
+  product_context: { name: "DevNest", repo_owner: "yo", repo_name: "devnest", default_branch: "main", docs_root: "docs/" },
 };
 
 function resetStore() {

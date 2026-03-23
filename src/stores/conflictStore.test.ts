@@ -29,7 +29,7 @@ function makeConflictFile(overrides: Partial<ConflictFile> = {}): ConflictFile {
 }
 
 function makeScanResult(files: ConflictFile[] = [], unmanagedCount = 0): ConflictScanResult {
-  return { managed: files, unmanaged_count: unmanagedCount };
+  return { managed: files, unmanaged_count: unmanagedCount, unmanaged_files: [] };
 }
 
 describe("conflictStore", () => {
@@ -272,6 +272,27 @@ describe("conflictStore", () => {
   });
 
   // ─── reset ─────────────────────────────────────────────────────────────────
+
+  // saveResolutions 失敗時 (lines 160-161)
+  it("saveResolutions() 失敗時に resolveStatus が error になりリスローされる", async () => {
+    const file = makeConflictFile({ id: 1 });
+    useConflictStore.setState({
+      managedFiles: [file],
+      resolutions: { 1: { 0: { resolution: "ours" } } },
+    });
+    mockIpc.conflictResolve.mockRejectedValueOnce(new Error("merge failed"));
+
+    await expect(useConflictStore.getState().saveResolutions(1, 1)).rejects.toBeTruthy();
+    expect(useConflictStore.getState().resolveStatus).toBe("error");
+  });
+
+  // resolveAll 失敗時 (lines 171-172)
+  it("resolveAll() 失敗時に resolveAllStatus が error になりリスローされる", async () => {
+    mockIpc.conflictResolveAll.mockRejectedValueOnce(new Error("resolve all failed"));
+
+    await expect(useConflictStore.getState().resolveAll(1)).rejects.toBeTruthy();
+    expect(useConflictStore.getState().resolveAllStatus).toBe("error");
+  });
 
   it("reset() で全状態が初期値に戻る", () => {
     const file = makeConflictFile();

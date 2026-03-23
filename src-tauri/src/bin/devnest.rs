@@ -46,6 +46,9 @@ enum Commands {
     /// 設計書操作
     #[command(subcommand)]
     Docs(DocsAction),
+    /// Worker 操作（Swarm フックから呼ばれる）
+    #[command(subcommand)]
+    Worker(WorkerAction),
     /// ヘルスチェック
     Health,
 }
@@ -84,6 +87,16 @@ enum ProductAction {
     Current,
     /// アクティブプロダクトを切り替える
     Switch { product_id: i64 },
+}
+
+#[derive(Subcommand)]
+enum WorkerAction {
+    /// Swarm ワーカーのタスク完了を DevNest に通知する（Claude Code フックから呼ばれる）
+    Done {
+        /// 完了した Worker の ID
+        #[arg(long)]
+        worker_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -135,11 +148,71 @@ fn send_request(method: &str, params: serde_json::Value) -> Result<serde_json::V
 fn print_result(value: &serde_json::Value, json_mode: bool) {
     if json_mode {
         println!("{}", serde_json::to_string_pretty(value).unwrap_or_default());
-    } else {
-        if let Some(result) = value.get("result") {
-            println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
-        } else if let Some(error) = value.get("error") {
-            eprintln!("エラー: {}", error["message"].as_str().unwrap_or("Unknown error"));
+    } else if let Some(result) = value.get("result") {
+        println!("{}", serde_json::to_string_pretty(result).unwrap_or_default());
+    } else if let Some(error) = value.get("error") {
+        eprintln!("エラー: {}", error["message"].as_str().unwrap_or("Unknown error"));
+        std::process::exit(1);
+    }
+}
+
+fn main() {
+    let cli = Cli::parse();
+    let json_mode = cli.json;
+
+    let result = match cli.command {
+        Commands::Notify { title, body, urgency } => {
+            send_request("notify", json!({ "title": title, "body": body, "urgency": urgency }))
+        }
+        Commands::Scan { product } => {
+            send_request("scan.trigger", json!({ "product": product }))
+        }
+        Commands::Task(action) => match action {
+            TaskAction::List => send_request("task.list", json!({})),
+            TaskAction::Submit { r#type, doc } => {
+                send_request("task.submit", json!({ "type": r#type, "doc": doc }))
+            }
+            TaskAction::Status { task_id } => {
+                send_request("task.status", json!({ "task_id": task_id }))
+            }
+            TaskAction::Approve { task_id } => {
+                send_request("task.approve", json!({ "task_id": task_id }))
+            }
+        },
+        Commands::Browser(action) => match action {
+            BrowserAction::Open { url } => {
+                send_request("browser.open", json!({ "url": url }))
+            }
+            BrowserAction::Navigate { panel_id, url } => {
+                send_request("browser.navigate", json!({ "panel_id": panel_id, "url": url }))
+            }
+        },
+        Commands::Product(action) => match action {
+            ProductAction::Current => send_request("product.current", json!({})),
+            ProductAction::Switch { product_id } => {
+                send_request("product.switch", json!({ "product_id": product_id }))
+            }
+        },
+        Commands::Docs(action) => match action {
+            DocsAction::Staleness { product } => {
+                send_request("docs.staleness", json!({ "product": product }))
+            }
+            DocsAction::Affected { doc } => {
+                send_request("docs.affected", json!({ "doc": doc }))
+            }
+        },
+        Commands::Worker(action) => match action {
+            WorkerAction::Done { worker_id } => {
+                send_request("worker.done", json!({ "worker_id": worker_id }))
+            }
+        },
+        Commands::Health => send_request("health.status", json!({})),
+    };
+
+    match result {
+        Ok(value) => print_result(&value, json_mode),
+        Err(e) => {
+            eprintln!("{}", e);
             std::process::exit(1);
         }
     }
@@ -198,62 +271,5 @@ mod tests {
         // テスト環境では DevNest サーバーが動いていないので Err が期待値
         let result = send_request("health.status", serde_json::json!({}));
         assert!(result.is_err(), "サーバー未起動のとき send_request はエラーを返すべき");
-    }
-}
-
-fn main() {
-    let cli = Cli::parse();
-    let json_mode = cli.json;
-
-    let result = match cli.command {
-        Commands::Notify { title, body, urgency } => {
-            send_request("notify", json!({ "title": title, "body": body, "urgency": urgency }))
-        }
-        Commands::Scan { product } => {
-            send_request("scan.trigger", json!({ "product": product }))
-        }
-        Commands::Task(action) => match action {
-            TaskAction::List => send_request("task.list", json!({})),
-            TaskAction::Submit { r#type, doc } => {
-                send_request("task.submit", json!({ "type": r#type, "doc": doc }))
-            }
-            TaskAction::Status { task_id } => {
-                send_request("task.status", json!({ "task_id": task_id }))
-            }
-            TaskAction::Approve { task_id } => {
-                send_request("task.approve", json!({ "task_id": task_id }))
-            }
-        },
-        Commands::Browser(action) => match action {
-            BrowserAction::Open { url } => {
-                send_request("browser.open", json!({ "url": url }))
-            }
-            BrowserAction::Navigate { panel_id, url } => {
-                send_request("browser.navigate", json!({ "panel_id": panel_id, "url": url }))
-            }
-        },
-        Commands::Product(action) => match action {
-            ProductAction::Current => send_request("product.current", json!({})),
-            ProductAction::Switch { product_id } => {
-                send_request("product.switch", json!({ "product_id": product_id }))
-            }
-        },
-        Commands::Docs(action) => match action {
-            DocsAction::Staleness { product } => {
-                send_request("docs.staleness", json!({ "product": product }))
-            }
-            DocsAction::Affected { doc } => {
-                send_request("docs.affected", json!({ "doc": doc }))
-            }
-        },
-        Commands::Health => send_request("health.status", json!({})),
-    };
-
-    match result {
-        Ok(value) => print_result(&value, json_mode),
-        Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
-        }
     }
 }

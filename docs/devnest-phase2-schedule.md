@@ -69,9 +69,9 @@
 
 ### D — DB / マイグレーション（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| D-05 | `migrations/0002_pull_requests.sql` 作成・`sqlx migrate run` 確認（`pull_requests` / `pr_reviews` / `pr_comments` + インデックス） | Phase 1 完了 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| D-05 | `migrations/0002_pull_requests.sql` 作成・`sqlx migrate run` 確認（`pull_requests` / `pr_reviews` / `pr_comments` + インデックス） | Phase 1 完了 | 1.0d | 完了 |
 
 **マイグレーション内容**
 
@@ -105,19 +105,19 @@ CREATE TABLE pull_requests (
 
 #### R-F: PR 管理（5 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-F01 | `models/pr.rs` 追加（`PullRequest`, `PrReview`, `PrComment`, `FileDiff`, `DiffHunk`, `DiffLine`, `PrDetail`, `SyncStats`, `MergeResult` 型定義） | D-05 | 1.0d |
-| R-F02 | `pr_list` / `pr_sync` 実装（GitHub API `GET /repos/{owner}/{repo}/pulls` → DB upsert）+ `pr_sync_done` イベント | R-F01, Phase 1 R-C02 | 1.5d |
-| R-F03 | `pr_get_detail` 実装（PR 詳細・`pr_reviews`・`pr_comments`・linked Issue）/ `pr_diff_get` 実装（GitHub API `GET /pulls/{n}/files` → unified diff パース） | R-F02 | 1.5d |
-| R-F04 | `pr_comment_add` 実装（inline / review / issue_comment・`is_pending` フォールバック）/ `pr_review_submit` 実装（approved / changes_requested） | R-F03 | 1.0d |
-| R-F05 | `pr_merge` 実装（merge/squash/rebase・マージ後 git pull・Issue クローズ更新・`startup_cleanup` 連携）/ `pr_create_from_branch` 実装（`branch_name: String`・PR 本文に `closes #N` を追記） | R-F03 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-F01 | `models/pr.rs` 追加（`PullRequest`, `PrReview`, `PrComment`, `FileDiff`, `DiffHunk`, `DiffLine`, `PrDetail`, `SyncStats`, `MergeResult` 型定義） | D-05 | 1.0d | 完了 |
+| R-F02 | `pr_list` / `pr_sync` 実装（GitHub API `GET /repos/{owner}/{repo}/pulls` → DB upsert）+ `pr_sync_done` イベント | R-F01, Phase 1 R-C02 | 1.5d | 完了 |
+| R-F03 | `pr_get_detail` 実装（PR 詳細・`pr_reviews`・`pr_comments`・linked Issue）/ `pr_diff_get` 実装（GitHub API `GET /pulls/{n}/files` → unified diff パース） | R-F02 | 1.5d | 完了 |
+| R-F04 | `pr_comment_add` 実装（inline / review / issue_comment・`is_pending` フォールバック）/ `pr_review_submit` 実装（approved / changes_requested） | R-F03 | 1.0d | 完了 |
+| R-F05 | `pr_merge` 実装（merge/squash/rebase・マージ後 git pull・Issue クローズ更新・`startup_cleanup` 連携）/ `pr_create_from_branch` 実装（`branch_name: String`・PR 本文に `closes #N` を追記） | R-F03 | 1.5d | 完了 |
 
 #### R-G: git pull（1 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| R-G01 | `git_pull` 実装（git2-rs pull・コンフリクト検知 → `conflict_files` DB 登録 → `ConflictDetected` エラー返却）+ `git_pull_done` イベント | Phase 1 R-B01（git2-rs 基盤）| 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| R-G01 | `git_pull` 実装（git2-rs pull・コンフリクト検知 → `conflict_files` DB 登録 → `ConflictDetected` エラー返却）+ `git_pull_done` イベント | Phase 1 R-B01（git2-rs 基盤）| 1.5d | 完了 |
 
 > `UnresolvedConflictExists` の先行チェック（`conflict_files` テーブル参照）も含む。
 > ConflictScreen の実装は Phase 4 スコープだが、エラー返却とイベント発火はここで完結させる。
@@ -128,35 +128,35 @@ CREATE TABLE pull_requests (
 
 #### F-E: prStore（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-E01 | `pr.store.ts` 実装（`PrState` 型・`loadPrs` / `syncPrs` / `openPr` / `setActiveTab` / `loadCodeDiff` / `canMerge` / `commentsForLine` / `openPrByGithubNumber` / `createPrFromBranch` / `_optimisticAddPr`）| R-F02 | 1.5d |
-| F-E02 | `pr.store.ts` に `addComment` / `submitReview` / `mergePr` 追加（`issueStore._updateIssueStatus` 連携）+ `pr_sync_done` イベントリスナー登録（`initListeners` に追記） | R-F04, R-F05 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-E01 | `pr.store.ts` 実装（`PrState` 型・`loadPrs` / `syncPrs` / `openPr` / `setActiveTab` / `loadCodeDiff` / `canMerge` / `commentsForLine` / `openPrByGithubNumber` / `createPrFromBranch` / `_optimisticAddPr`）| R-F02 | 1.5d | 完了 |
+| F-E02 | `pr.store.ts` に `addComment` / `submitReview` / `mergePr` 追加（`issueStore._updateIssueStatus` 連携）+ `pr_sync_done` イベントリスナー登録（`initListeners` に追記） | R-F04, R-F05 | 1.0d | 完了 |
 
 #### F-F: PRScreen 基盤・一覧（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-F01 | `PRScreen.tsx` / `PRFilterBar.tsx` / `PRList.tsx` / `PRListItem.tsx` 実装（ステータスフィルタ・一覧表示・選択時 `openPr` 呼び出し）| F-E01 | 1.5d |
-| F-F02 | `PRDetail.tsx` / `PRDetailHeader.tsx` / `PRDetailTabs.tsx` 実装（タブ切替・Design Docs タブは `disabled` 表示）| F-F01 | 1.0d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-F01 | `PRScreen.tsx` / `PRFilterBar.tsx` / `PRList.tsx` / `PRListItem.tsx` 実装（ステータスフィルタ・一覧表示・選択時 `openPr` 呼び出し）| F-E01 | 1.5d | 完了 |
+| F-F02 | `PRDetail.tsx` / `PRDetailHeader.tsx` / `PRDetailTabs.tsx` 実装（タブ切替・Design Docs タブは `disabled` 表示）| F-F01 | 1.0d | 完了 |
 
 #### F-G: PRScreen 詳細タブ（4 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| F-G01 | `TabOverview.tsx` 実装（`PRMetaGrid` / `PRDescriptionPanel` / `PRChecklist` / `ReviewList` / `ReviewItem`） | F-F02 | 1.0d |
-| F-G02 | `ReviewPanel.tsx` / `MergePanel.tsx` 実装（Approve ボタン・merge method 選択・`canMerge()` によるアクティブ制御・マージ完了後メッセージ） | F-G01, F-E02 | 1.0d |
-| F-G03 | `TabCodeDiff.tsx` / `CodeDiffViewer.tsx` / `FileDiff.tsx` / `FileDiffHeader.tsx` 実装（`.md` ファイルを除外して表示）| F-F02, R-F03 | 2.0d |
-| F-G04 | `DiffHunkWithComments.tsx` / `DiffLine.tsx` / `InlineComment.tsx` 実装（行クリック → コメント入力欄・`addComment` 呼び出し）+ `src/lib/diffParser.ts`（unified diff パーサー）| F-G03, F-E02 | 1.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| F-G01 | `TabOverview.tsx` 実装（`PRMetaGrid` / `PRDescriptionPanel` / `PRChecklist` / `ReviewList` / `ReviewItem`） | F-F02 | 1.0d | 完了 |
+| F-G02 | `ReviewPanel.tsx` / `MergePanel.tsx` 実装（Approve ボタン・merge method 選択・`canMerge()` によるアクティブ制御・マージ完了後メッセージ） | F-G01, F-E02 | 1.0d | 完了 |
+| F-G03 | `TabCodeDiff.tsx` / `CodeDiffViewer.tsx` / `FileDiff.tsx` / `FileDiffHeader.tsx` 実装（`.md` ファイルを除外して表示）| F-F02, R-F03 | 2.0d | 完了 |
+| F-G04 | `DiffHunkWithComments.tsx` / `DiffLine.tsx` / `InlineComment.tsx` 実装（行クリック → コメント入力欄・`addComment` 呼び出し）+ `src/lib/diffParser.ts`（unified diff パーサー）| F-G03, F-E02 | 1.5d | 完了 |
 
 ---
 
 ### E — 結合・動作確認（2 タスク）
 
-| ID | タスク | 依存 | 見積 |
-|----|--------|------|------|
-| E-04 | PR 一覧・詳細・diff 表示の動作確認（`pr_sync` → 一覧 → PR 選択 → Code Diff タブ → インラインコメント） | F-G04 |0.5d |
-| E-05 | S-09 シナリオ通し確認（インラインコメント → APPROVE → MERGE PR → Issue が closed に変わる） | E-04 | 0.5d |
+| ID | タスク | 依存 | 見積 | 状態 |
+|----|--------|------|------|-----|
+| E-04 | PR 一覧・詳細・diff 表示の動作確認（`pr_sync` → 一覧 → PR 選択 → Code Diff タブ → インラインコメント） | F-G04 |0.5d | 完了 |
+| E-05 | S-09 シナリオ通し確認（インラインコメント → APPROVE → MERGE PR → Issue が closed に変わる） | E-04 | 0.5d | 完了 |
 
 ---
 

@@ -21,10 +21,9 @@ export function SwarmConflictsTab() {
     );
   }
 
-  // コンフリクト一覧
-  const conflictOutcomes = currentRun?.mergeResults.filter(
-    (r) => !r.success && r.conflictFiles.length > 0
-  ) ?? [];
+  // コンフリクト一覧（conflictOutcome はストアからすでに取得済みの変数を使う）
+  const conflictOutcomes: MergeOutcome[] =
+    conflictOutcome && !conflictOutcome.success ? [conflictOutcome] : [];
 
   if (!currentRun) {
     return (
@@ -36,7 +35,7 @@ export function SwarmConflictsTab() {
   }
 
   if (conflictOutcomes.length === 0) {
-    const hasMergeResults = currentRun.mergeResults.length > 0;
+    const hasMergeResults = currentRun.status === "done" || currentRun.status === "partialDone";
     return (
       <div style={emptyStyle} data-testid="swarm-conflicts-tab">
         {hasMergeResults ? (

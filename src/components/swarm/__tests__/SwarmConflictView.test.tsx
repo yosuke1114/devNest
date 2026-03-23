@@ -191,6 +191,115 @@ describe("SwarmConflictView", () => {
     }));
   });
 
+  // 複数ブロックがあるとき次ブロックに進む (line 128)
+  it("複数ブロックがあるとき TakeOurs で次ブロックへ進む (line 128)", async () => {
+    // 2ブロック返す
+    mockInvoke
+      .mockResolvedValueOnce([
+        { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 1 },
+        { filePath: "src/foo.ts", ours: "c", theirs: "d", contextBefore: "", startLine: 20 },
+      ])
+      .mockResolvedValueOnce(undefined); // orchestrator_resolve_conflict (block 0)
+
+    render(
+      <SwarmConflictView
+        outcome={outcome}
+        projectPath="/tmp/proj"
+        onResolved={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => screen.getByTestId("take-ours-button"));
+    fireEvent.click(screen.getByTestId("take-ours-button"));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("orchestrator_resolve_conflict", expect.objectContaining({
+        resolution: { TakeOurs: null },
+      }));
+    });
+    // onResolved はまだ呼ばれない（次ブロックがある）
+    // currentIdx が 1 に進んだことを確認（2個目のブロックがある状態）
+    expect(mockInvoke).not.toHaveBeenCalledWith("orchestrator_commit_resolution", expect.anything());
+  });
+
+  // handleResolve のエラーケース (line 141)
+  it("handleResolve が失敗しても crash しない (line 141)", async () => {
+    mockInvoke
+      .mockResolvedValueOnce([
+        { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 1 },
+      ])
+      .mockRejectedValueOnce(new Error("resolve failed")); // orchestrator_resolve_conflict
+
+    render(
+      <SwarmConflictView
+        outcome={outcome}
+        projectPath="/tmp/proj"
+        onResolved={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => screen.getByTestId("take-ours-button"));
+    fireEvent.click(screen.getByTestId("take-ours-button"));
+
+    // エラーが発生してもコンポーネントはクラッシュしない
+    await waitFor(() => {
+      expect(screen.getByTestId("take-ours-button")).toBeTruthy();
+    });
+  });
+
+  // TakeTheirs, TakeBoth ボタンが動作する (lines 214-225)
+  it("TakeTheirs ボタンでresolutionが TakeTheirs になる (line 214)", async () => {
+    mockInvoke
+      .mockResolvedValueOnce([
+        { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 1 },
+      ])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    render(
+      <SwarmConflictView
+        outcome={outcome}
+        projectPath="/tmp/proj"
+        onResolved={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => screen.getByTestId("take-theirs-button"));
+    fireEvent.click(screen.getByTestId("take-theirs-button"));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("orchestrator_resolve_conflict", expect.objectContaining({
+        resolution: { TakeTheirs: null },
+      }));
+    });
+  });
+
+  it("TakeBoth ボタンでresolutionが TakeBoth になる (line 220)", async () => {
+    mockInvoke
+      .mockResolvedValueOnce([
+        { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 1 },
+      ])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    render(
+      <SwarmConflictView
+        outcome={outcome}
+        projectPath="/tmp/proj"
+        onResolved={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => screen.getByTestId("take-both-button"));
+    fireEvent.click(screen.getByTestId("take-both-button"));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith("orchestrator_resolve_conflict", expect.objectContaining({
+        resolution: { TakeBoth: null },
+      }));
+    });
+  });
+
   it("×ボタンでonCloseが呼ばれる", async () => {
     mockInvoke.mockResolvedValue([
       { filePath: "src/foo.ts", ours: "a", theirs: "b", contextBefore: "", startLine: 10 },

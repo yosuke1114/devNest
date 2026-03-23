@@ -247,16 +247,16 @@ pub async fn file_save(
         if let Some(tok) = token {
             let local_path2 = project.local_path.clone();
             let branch2 = branch.clone();
-            let sha2 = commit_sha.clone();
-            let path2 = path.clone();
-            let app2 = app_handle.clone();
+            let _sha2 = commit_sha.clone();
+            let _path2 = path.clone();
+            let _app2 = app_handle.clone();
             let push_result = tokio::task::spawn_blocking(move || {
                 let svc = GitService::open(&local_path2)?;
                 let mut attempt = 0u32;
                 loop {
                     match svc.push(&tok, "origin", &branch2) {
                         Ok(()) => return Ok(()),
-                        Err(e) if attempt < 3 => {
+                        Err(_e) if attempt < 3 => {
                             attempt += 1;
                             std::thread::sleep(std::time::Duration::from_secs(2u64.pow(attempt - 1)));
                         }
@@ -276,7 +276,7 @@ pub async fn file_save(
                     });
                     return Ok(CodeSaveResult { sha: commit_sha, push_status: "synced".to_string() });
                 }
-                Err(e) => {
+                Err(_e) => {
                     let _ = app_handle.emit("code_save_progress", CodeSaveProgressPayload {
                         path: path.clone(),
                         status: "push_failed".to_string(),

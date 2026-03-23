@@ -40,7 +40,7 @@ pub async fn run(pool: &DbPool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{connect, migrations};
+    use crate::db::{connect_for_test as connect, migrations};
     use tempfile::NamedTempFile;
 
     async fn setup() -> DbPool {
