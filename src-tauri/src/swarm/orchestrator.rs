@@ -523,10 +523,8 @@ fn make_worker_config(
     WorkerConfig {
         kind: WorkerKind::ClaudeCode,
         mode: WorkerMode::Batch,
-        role: crate::swarm::worker::WorkerRole::Builder,
         label: assign.task.title.clone(),
         working_dir: repo.clone(),
-        assigned_files: vec![],
         depends_on: vec![],
         metadata,
     }
