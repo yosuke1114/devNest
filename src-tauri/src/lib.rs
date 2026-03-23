@@ -36,9 +36,11 @@ pub fn run() {
                 let db_url = format!("sqlite:{}", db_path.display());
 
                 let pool = db::connect(&db_url).await.map_err(|e| {
+                    eprintln!("[DevNest] DB 接続失敗: {}", e);
                     std::io::Error::other(e.to_string())
                 })?;
                 db::migrations::run(&pool).await.map_err(|e| {
+                    eprintln!("[DevNest] マイグレーション失敗: {}", e);
                     std::io::Error::other(e.to_string())
                 })?;
 
