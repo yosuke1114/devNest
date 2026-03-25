@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::swarm::history::SwarmRunRecord;
 use crate::swarm::settings::SwarmSettings;
 use crate::swarm::subtask::SubTask;
 
@@ -29,6 +30,13 @@ pub enum ClientMessage {
     },
     /// Wave Gate 実行
     RunGate,
+    /// Swarm を Idle にリセット（新規タスク入力を可能にする）
+    SwarmReset,
+    /// 部分完了した Swarm を履歴から再実行
+    HistoryResume {
+        run_id: String,
+        settings: SwarmSettings,
+    },
     /// 現在の状態取得
     Sync,
     Ping,
@@ -74,7 +82,22 @@ pub enum ServerMessage {
     Error {
         message: String,
     },
+    /// プロジェクト一覧
+    Projects(Vec<ProjectInfo>),
+    /// タスク実行状態一覧
+    TasksUpdate(Vec<TaskSnapshot>),
+    /// Swarm 実行履歴一覧
+    HistoryList(Vec<SwarmRunRecord>),
     Pong,
+}
+
+/// プロジェクト情報
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectInfo {
+    pub id: i64,
+    pub name: String,
+    pub local_path: String,
 }
 
 /// Swarm 全体のスナップショット
@@ -86,6 +109,18 @@ pub struct SwarmSnapshot {
     pub total_tasks: u32,
     pub completed_tasks: u32,
     pub failed_tasks: u32,
+}
+
+/// タスク単体の実行状態スナップショット
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskSnapshot {
+    pub task_id: u32,
+    pub title: String,
+    pub wave_number: u32,
+    pub execution_state: String,
+    pub worker_id: Option<String>,
+    pub depends_on: Vec<u32>,
 }
 
 /// Worker 単体のスナップショット

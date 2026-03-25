@@ -12,6 +12,9 @@ interface TaskResult {
   role: string;
   executionState: string;
   branchName: string;
+  instruction: string;
+  files: string[];
+  dependsOn: number[];
 }
 
 interface SwarmRunRecord {
@@ -25,6 +28,19 @@ interface SwarmRunRecord {
   projectPath: string;
   tasks: TaskResult[];
   completedAt: string;
+}
+
+interface ResumePayload {
+  tasks: Array<{
+    id: number;
+    title: string;
+    role: string;
+    files: string[];
+    instruction: string;
+    dependsOn: number[];
+  }>;
+  projectPath: string;
+  baseBranch: string;
 }
 
 // ─── Component ────────────────────────────────────────────────
@@ -65,6 +81,17 @@ export function SwarmHistoryTab() {
     setHistory((prev) => prev.filter((r) => r.runId !== runId));
   };
 
+  const handleResume = async (runId: string) => {
+    try {
+      const payload = await invoke<ResumePayload>("swarm_history_resume", { runId });
+      // swarmStore 経由で SwarmStart を発行（タブを Swarm に戻す）
+      const event = new CustomEvent("swarm:resume", { detail: payload });
+      window.dispatchEvent(event);
+    } catch (e) {
+      alert(`再実行失敗: ${e}`);
+    }
+  };
+
   if (loading) {
     return (
       <div style={emptyStyle}>
@@ -100,7 +127,7 @@ export function SwarmHistoryTab() {
       </div>
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px" }}>
         {history.map((record) => (
-          <HistoryCard key={record.runId} record={record} onDelete={handleDelete} />
+          <HistoryCard key={record.runId} record={record} onDelete={handleDelete} onResume={handleResume} />
         ))}
       </div>
     </div>
@@ -112,9 +139,11 @@ export function SwarmHistoryTab() {
 function HistoryCard({
   record,
   onDelete,
+  onResume,
 }: {
   record: SwarmRunRecord;
   onDelete: (runId: string) => void;
+  onResume: (runId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -173,6 +202,24 @@ function HistoryCard({
           )}
         </span>
         <span style={{ fontSize: 11, color: "#484f58" }}>{dateStr}</span>
+        {record.status !== "done" && (
+          <button
+            onClick={() => onResume(record.runId)}
+            style={{
+              background: "#f59e0b",
+              border: "none",
+              color: "#0d1117",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "2px 8px",
+              borderRadius: 4,
+            }}
+            title="未完了タスクを再実行"
+          >
+            ▶ 再実行
+          </button>
+        )}
         <button
           onClick={() => onDelete(record.runId)}
           style={{ background: "none", border: "none", color: "#484f58", cursor: "pointer", fontSize: 11, padding: "0 2px" }}

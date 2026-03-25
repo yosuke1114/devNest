@@ -68,6 +68,33 @@ export interface WorkerSnapshot {
 // ────────────────────────────────────────
 //  WebSocket メッセージ
 // ────────────────────────────────────────
+// ────────────────────────────────────────
+//  履歴
+// ────────────────────────────────────────
+export interface HistoryTaskResult {
+  id: number;
+  title: string;
+  role: string;
+  executionState: string;
+  branchName: string;
+  instruction: string;
+  files: string[];
+  dependsOn: number[];
+}
+
+export interface SwarmRunRecord {
+  id: number;
+  runId: string;
+  status: string;
+  totalTasks: number;
+  doneCount: number;
+  failedCount: number;
+  baseBranch: string;
+  projectPath: string;
+  tasks: HistoryTaskResult[];
+  completedAt: string;
+}
+
 export type ServerMessage =
   | { type: "SwarmStatus"; payload: SwarmSnapshot }
   | { type: "WorkerStatus"; payload: { worker_id: string; status: string } }
@@ -78,7 +105,19 @@ export type ServerMessage =
   | { type: "GateResult"; payload: { wave_number: number; overall: string } }
   | { type: "GateReady"; payload: { wave_number: number } }
   | { type: "Error"; payload: { message: string } }
+  | { type: "Projects"; payload: { id: number; name: string; localPath: string }[] }
+  | { type: "TasksUpdate"; payload: TaskSnapshot[] }
+  | { type: "HistoryList"; payload: SwarmRunRecord[] }
   | { type: "Pong" };
+
+export interface TaskSnapshot {
+  taskId: number;
+  title: string;
+  waveNumber: number;
+  executionState: "waiting" | "ready" | "running" | "done" | "error" | "skipped";
+  workerId: string | null;
+  dependsOn: number[];
+}
 
 export type ClientMessage =
   | { type: "TaskSplit"; payload: { prompt: string; project_path: string } }
@@ -86,5 +125,7 @@ export type ClientMessage =
   | { type: "SwarmStop" }
   | { type: "WorkerInput"; payload: { worker_id: string; data: string } }
   | { type: "RunGate" }
+  | { type: "HistoryResume"; payload: { run_id: string; settings: SwarmSettings } }
+  | { type: "SwarmReset" }
   | { type: "Sync" }
   | { type: "Ping" };

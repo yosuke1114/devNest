@@ -185,12 +185,14 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
           destResourceId: null,
         }).catch(() => {});
       }
-    }).then((fn) => unlistens.push(fn));
+    }).then((fn) => unlistens.push(fn))
+      .catch((e) => set({ error: `イベント登録失敗 (status-changed): ${e}` }));
 
     // マージ準備完了
     listen<OrchestratorRun>("orchestrator-merge-ready", (event) => {
       set({ currentRun: event.payload, mergeReady: true });
-    }).then((fn) => unlistens.push(fn));
+    }).then((fn) => unlistens.push(fn))
+      .catch((e) => set({ error: `イベント登録失敗 (merge-ready): ${e}` }));
 
     // マージ完了 → 集約結果を取得
     listen<OrchestratorRun>("orchestrator-merge-done", (event) => {
@@ -198,7 +200,8 @@ export const useSwarmStore = create<SwarmState>((set, get) => ({
       invoke<AggregatedResult | null>("orchestrator_get_result")
         .then((r) => set({ aggregatedResult: r }))
         .catch(() => {/* ベストエフォート */});
-    }).then((fn) => unlistens.push(fn));
+    }).then((fn) => unlistens.push(fn))
+      .catch((e) => set({ error: `イベント登録失敗 (merge-done): ${e}` }));
 
     return () => unlistens.forEach((fn) => fn());
   },

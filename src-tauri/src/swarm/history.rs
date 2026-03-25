@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 
 use crate::error::{AppError, Result};
 use super::orchestrator::OrchestratorRun;
+use super::subtask::SubTask;
 use super::worker::ExecutionState;
 
 // ─── 型 ──────────────────────────────────────────────────────
@@ -17,6 +18,15 @@ pub struct TaskResult {
     pub role: String,
     pub execution_state: String,
     pub branch_name: String,
+    /// Worker に渡した具体的な指示（再実行時に使用）
+    #[serde(default)]
+    pub instruction: String,
+    /// 操作対象ファイル一覧（再実行時に使用）
+    #[serde(default)]
+    pub files: Vec<String>,
+    /// 依存タスク ID 一覧（再実行時に使用）
+    #[serde(default)]
+    pub depends_on: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +42,15 @@ pub struct SwarmRunRecord {
     pub project_path: String,
     pub tasks: Vec<TaskResult>,
     pub completed_at: String,
+}
+
+/// `swarm_history_resume` コマンドの返却型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResumePayload {
+    pub tasks: Vec<SubTask>,
+    pub project_path: String,
+    pub base_branch: String,
 }
 
 fn execution_state_str(s: &ExecutionState) -> &'static str {
@@ -69,6 +88,9 @@ pub async fn save(pool: &SqlitePool, run: &OrchestratorRun) -> Result<i64> {
             role: a.task.role.as_str().to_string(),
             execution_state: execution_state_str(&a.execution_state).to_string(),
             branch_name: a.branch_name.clone(),
+            instruction: a.task.instruction.clone(),
+            files: a.task.files.clone(),
+            depends_on: a.task.depends_on.clone(),
         })
         .collect();
 
@@ -155,6 +177,35 @@ pub async fn list(pool: &SqlitePool, limit: i64) -> Result<Vec<SwarmRunRecord>> 
         .collect();
 
     Ok(records)
+}
+
+type RunRow = (i64, String, String, i64, i64, i64, String, String, String, String);
+
+/// 指定した run_id の履歴を1件取得する
+pub async fn get(pool: &SqlitePool, run_id: &str) -> Result<Option<SwarmRunRecord>> {
+    let row: Option<RunRow> =
+        sqlx::query_as(
+            r#"
+            SELECT id, run_id, status, total_tasks, done_count, failed_count,
+                   base_branch, project_path, tasks_json, completed_at
+            FROM swarm_runs
+            WHERE run_id = ?1
+            "#,
+        )
+        .bind(run_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| AppError::Db(e.to_string()))?;
+
+    Ok(row.map(|(id, run_id, status, total_tasks, done_count, failed_count,
+                 base_branch, project_path, tasks_json, completed_at)| {
+        let tasks: Vec<TaskResult> =
+            serde_json::from_str(&tasks_json).unwrap_or_default();
+        SwarmRunRecord {
+            id, run_id, status, total_tasks, done_count, failed_count,
+            base_branch, project_path, tasks, completed_at,
+        }
+    }))
 }
 
 /// 指定した run_id の履歴を削除する

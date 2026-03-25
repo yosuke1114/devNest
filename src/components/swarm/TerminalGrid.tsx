@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useSwarmStore } from "../../stores/swarmStore";
 import { XtermPane } from "./XtermPane";
 import { RoleSelector } from "./RoleSelector";
-import type { WorkerConfig, WorkerInfo, WorkerRole, WorkerStatus } from "./types";
+import type { WorkerInfo, WorkerRole, WorkerStatus } from "./types";
 
 const MAX_WORKERS = 8;
 
@@ -15,6 +15,7 @@ interface TerminalGridProps {
 export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const [workers, setWorkers] = useState<WorkerInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [spawnError, setSpawnError] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<WorkerRole>("builder");
   const notifyWorkerDone = useSwarmStore((s) => s.notifyWorkerDone);
 
@@ -77,19 +78,23 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   const addWorker = async (kind: "shell" | "claudeCode") => {
     if (workers.length >= MAX_WORKERS) return;
     const n = workers.length + 1;
-    const config: WorkerConfig = {
+    const config = {
       kind,
       mode: "interactive",
       label: kind === "shell" ? `Shell ${n}` : `Worker ${n}`,
       workingDir,
+      assignedFiles: [],
       dependsOn: [],
       metadata: {},
       role: pendingRole,
     };
     try {
+      setSpawnError(null);
       await invoke("spawn_worker", { config });
     } catch (err) {
-      console.error("spawn_worker failed:", err);
+      const msg = String(err);
+      console.error("spawn_worker failed:", msg);
+      setSpawnError(msg);
     }
   };
 
@@ -121,6 +126,22 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
   return (
     <div data-testid="terminal-grid" style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
       {/* ツールバー */}
+      {spawnError && (
+        <div
+          data-testid="spawn-error"
+          style={{
+            padding: "5px 10px",
+            background: "#2d0a0a",
+            border: "1px solid #fc8181",
+            borderRadius: 4,
+            fontSize: 11,
+            color: "#fc8181",
+            flexShrink: 0,
+          }}
+        >
+          ⚠️ 起動エラー: {spawnError}
+        </div>
+      )}
       <div data-testid="grid-toolbar" style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
         <RoleSelector value={pendingRole} onChange={setPendingRole} />
         <button
@@ -151,7 +172,6 @@ export function TerminalGrid({ workingDir = "/" }: TerminalGridProps) {
           {workers.length} / {MAX_WORKERS} ペイン
         </span>
       </div>
-
       {/* 進捗バー（ClaudeCode Worker が1つ以上のときのみ表示） */}
       {showProgress && (
         <div data-testid="progress-bar-container" style={{ flexShrink: 0 }}>

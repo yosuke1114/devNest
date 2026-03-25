@@ -4,9 +4,13 @@ use std::sync::{Arc, Mutex};
 use super::orchestrator::Orchestrator;
 use super::settings::SwarmSettings;
 use super::subtask::SubTask;
-use super::wave::{compute_waves, Wave, WaveGateResult, WaveStatus};
+use super::wave::{compute_waves, GateOverall, Wave, WaveGateResult, WaveStatus};
 use super::wave_gate::WaveGate;
-use super::worker::{RunStatus, SpawnRequest, WorkerStatus};
+use super::subtask::TaskRole;
+use super::worker::{OrchestratorTaskConfig, RunStatus, SpawnRequest, WorkerStatus};
+
+/// コンフリクト解消 Worker に割り当てる仮 task_id（通常のタスク ID と衝突しない）
+pub const RESOLVER_TASK_ID: u32 = u32::MAX;
 
 pub type SharedWaveOrchestrator = Arc<Mutex<WaveOrchestrator>>;
 
@@ -44,6 +48,8 @@ pub struct WaveOrchestrator {
     pub(crate) orchestrator: Orchestrator,
     /// 全体ステータス
     pub(crate) status: WaveOrchestratorStatus,
+    /// コンフリクト解消 Worker の ID（Resolving 中のみ Some）
+    pub(crate) resolver_worker_id: Option<String>,
 }
 
 /// WaveOrchestrator 全体のステータス
@@ -58,8 +64,10 @@ pub enum WaveOrchestratorStatus {
     Gating,
     /// 全 Wave 完了
     Done,
-    /// Gate 失敗で停止
+    /// Gate 失敗で停止（コンフリクト解消 Worker が未起動）
     Blocked,
+    /// コンフリクト解消 Worker が実行中
+    Resolving,
     /// キャンセル済み
     Cancelled,
 }
@@ -88,6 +96,7 @@ impl WaveOrchestrator {
             project_path,
             orchestrator: Orchestrator::new(),
             status: WaveOrchestratorStatus::Idle,
+            resolver_worker_id: None,
         }
     }
 
@@ -122,6 +131,22 @@ impl WaveOrchestrator {
         worker_id: &str,
         new_status: WorkerStatus,
     ) -> WorkerUpdateResult {
+        // コンフリクト解消 Worker の完了を検出
+        if self.resolver_worker_id.as_deref() == Some(worker_id) {
+            if matches!(new_status, WorkerStatus::Done | WorkerStatus::Error) {
+                self.resolver_worker_id = None;
+                // Resolving → Gating に戻して Gate リトライを自動トリガー
+                if self.status == WaveOrchestratorStatus::Resolving {
+                    self.status = WaveOrchestratorStatus::Gating;
+                }
+                return WorkerUpdateResult {
+                    new_spawns: vec![],
+                    wave_gate_ready: true,
+                };
+            }
+            return WorkerUpdateResult { new_spawns: vec![], wave_gate_ready: false };
+        }
+
         let new_spawns = self
             .orchestrator
             .update_worker_status(worker_id, new_status);
@@ -179,15 +204,99 @@ impl WaveOrchestrator {
         Ok(result)
     }
 
+    /// コンフリクト解消 Worker の ID を登録する
+    pub fn assign_resolver_worker_id(&mut self, worker_id: String) {
+        self.resolver_worker_id = Some(worker_id);
+    }
+
+    /// コンフリクト解消 Worker の OrchestratorTaskConfig を生成する
+    fn make_resolver_config(&self, gate_result: &WaveGateResult) -> OrchestratorTaskConfig {
+        let current_wave = self
+            .orchestrator
+            .current_run
+            .as_ref()
+            .and_then(|r| r.current_wave)
+            .unwrap_or(1);
+        let base = &self.settings.base_branch;
+        let run_id = self
+            .orchestrator
+            .current_run
+            .as_ref()
+            .map(|r| r.run_id.clone())
+            .unwrap_or_default();
+
+        // 失敗・スキップしたブランチ名を抽出
+        let failed_branches: Vec<String> = gate_result
+            .merge
+            .details
+            .iter()
+            .filter(|d| d.starts_with("[WARN]") || d.starts_with("[FAIL]"))
+            .filter_map(|d| d.split_whitespace().nth(1).map(|s| s.to_string()))
+            .collect();
+
+        let branches_merge_steps = failed_branches
+            .iter()
+            .map(|b| format!("   git merge -X theirs {b} || (git add -A && git commit -m 'fix: resolve conflicts with {b}')"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let conflict_details = gate_result.merge.details.join("\n");
+
+        let instruction = format!(
+            "【コンフリクト解消 Worker】Wave {current_wave} の Gate でマージコンフリクトが発生し、次の Wave に進めません。\n\
+            ベースブランチ ({base}) に Worker ブランチをマージしてコンフリクトを解消してください。\n\n\
+            ## コンフリクト詳細\n\
+            {conflict_details}\n\n\
+            ## 手順（必ずこの順番で実行してください）\n\
+            1. git checkout {base}\n\
+            2. 以下の各ブランチをマージし、コンフリクトを解消する:\n\
+            {branches_merge_steps}\n\
+            3. コンフリクトが残っている場合は内容を確認し、両方の変更を統合して git add && git commit\n\
+            4. git push origin {base}\n\n\
+            ## 完了条件（全て確認してから終了すること）\n\
+            - git status がクリーンであること\n\
+            - git push origin {base} が成功していること\n\
+            - git log {base} --oneline -3 でコミットが確認できること",
+        );
+
+        OrchestratorTaskConfig {
+            task: SubTask {
+                id: RESOLVER_TASK_ID,
+                title: format!("Wave {} コンフリクト解消", current_wave),
+                role: TaskRole::Builder, // Builder ロールを使用（完了ステップが simple commit+push になる）
+                files: vec![],
+                instruction,
+                depends_on: vec![],
+            },
+            branch_name: base.clone(), // ベースブランチ上で直接作業
+            base_branch: base.clone(),
+            project_path: self.project_path.clone(),
+            run_id,
+            default_shell: self.settings.default_shell.clone(),
+            claude_skip_permissions: self.settings.claude_skip_permissions,
+            claude_no_stream: self.settings.claude_no_stream,
+            claude_interactive: false,
+        }
+    }
+
     /// Gate 結果を適用し、次の Wave に進むか判定する。
-    /// Orchestrator.advance_wave() に委譲して Wave 遷移を行う。
+    /// Blocked の場合はコンフリクト解消 Worker の SpawnRequest を返す。
     pub fn apply_gate_result(&mut self, result: WaveGateResult) -> Vec<SpawnRequest> {
         // Orchestrator に Gate 結果を渡して次 Wave に進む
         let spawns = self.orchestrator.advance_wave(result.clone());
 
         // WaveOrchestrator のステータスを更新
-        if result.overall == super::wave::GateOverall::Blocked {
-            self.status = WaveOrchestratorStatus::Blocked;
+        if result.overall == GateOverall::Blocked {
+            // Blocked → コンフリクト解消 Worker をスポーンして Resolving 状態へ
+            self.status = WaveOrchestratorStatus::Resolving;
+            let resolver_config = self.make_resolver_config(&result);
+            self.sync_waves_from_orchestrator();
+            return vec![SpawnRequest {
+                task_id: RESOLVER_TASK_ID,
+                worker_config: resolver_config,
+                is_retry: false,
+                old_worker_id: None,
+            }];
         } else {
             // 次 Wave があるか確認
             let has_next_wave = !spawns.is_empty();
@@ -216,6 +325,15 @@ impl WaveOrchestrator {
         self.orchestrator.cancel();
         self.status = WaveOrchestratorStatus::Cancelled;
         self.sync_waves_from_orchestrator();
+    }
+
+    /// 完了・ブロック後に Idle へリセットする（新規 Swarm 開始を可能にする）
+    pub fn reset(&mut self) {
+        self.orchestrator = crate::swarm::orchestrator::Orchestrator::new();
+        self.all_tasks.clear();
+        self.waves.clear();
+        self.status = WaveOrchestratorStatus::Idle;
+        self.resolver_worker_id = None;
     }
 
     /// 状態スナップショットを生成する
@@ -388,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn gate_blocked_stops_execution() {
+    fn gate_blocked_spawns_resolver() {
         let tasks = vec![task(1, vec![]), task(2, vec![1])];
         let mut wo = WaveOrchestrator::new(tasks, settings(), "/tmp".into());
 
@@ -396,10 +514,18 @@ mod tests {
         wo.assign_worker_id(spawns[0].task_id, "w0".into());
         wo.update_worker_status("w0", WorkerStatus::Done);
 
-        // Gate ブロック
-        let next_spawns = wo.apply_gate_result(make_blocked_result());
-        assert!(next_spawns.is_empty());
-        assert_eq!(wo.status, WaveOrchestratorStatus::Blocked);
+        // Gate ブロック → コンフリクト解消 Worker がスポーンされる
+        let resolver_spawns = wo.apply_gate_result(make_blocked_result());
+        assert_eq!(resolver_spawns.len(), 1);
+        assert_eq!(resolver_spawns[0].task_id, RESOLVER_TASK_ID);
+        assert_eq!(wo.status, WaveOrchestratorStatus::Resolving);
+
+        // コンフリクト解消 Worker を登録して完了させる
+        wo.assign_resolver_worker_id("resolver-w".into());
+        let result = wo.update_worker_status("resolver-w", WorkerStatus::Done);
+        assert!(result.wave_gate_ready); // Gate リトライが自動トリガーされる
+        assert_eq!(wo.status, WaveOrchestratorStatus::Gating);
+        assert!(wo.resolver_worker_id.is_none());
     }
 
     #[test]

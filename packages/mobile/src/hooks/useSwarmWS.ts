@@ -5,6 +5,8 @@ import type {
   SwarmSnapshot,
   WorkerSnapshot,
   SubTask,
+  TaskSnapshot,
+  SwarmRunRecord,
 } from "../types/swarm";
 import { showToast } from "../components/Toast";
 import { loadSettings } from "../components/SettingsPanel";
@@ -13,6 +15,12 @@ export interface LogEntry {
   ts: string;
   text: string;
   level: "info" | "warn" | "error" | "success";
+}
+
+export interface ProjectInfo {
+  id: number;
+  name: string;
+  localPath: string;
 }
 
 export interface SwarmState {
@@ -26,7 +34,12 @@ export interface SwarmState {
   splitting: boolean;
   gateReady: number | null;
   logs: LogEntry[];
+  projects: ProjectInfo[];
+  tasks: TaskSnapshot[];
+  history: SwarmRunRecord[];
 }
+
+export type { TaskSnapshot };
 
 const INITIAL_SWARM: SwarmSnapshot = {
   status: "idle",
@@ -55,6 +68,9 @@ export function useSwarmWS() {
     splitting: false,
     gateReady: null,
     logs: [],
+    projects: [],
+    tasks: [],
+    history: [],
   });
 
   const send = useCallback((msg: ClientMessage) => {
@@ -73,12 +89,8 @@ export function useSwarmWS() {
   const handleMsg = useCallback((msg: ServerMessage) => {
     switch (msg.type) {
       case "SwarmStatus":
+        // A4: Toast は App.tsx の useEffect に統一（二重表示を防ぐ）
         setState((s) => ({ ...s, swarm: msg.payload }));
-        if (msg.payload.status === "done") {
-          showToast("Swarm 完了!", "success");
-        } else if (msg.payload.status === "blocked") {
-          showToast("Swarm がブロックされました", "error");
-        }
         break;
       case "WorkerStatus":
         setState((s) => ({
@@ -146,6 +158,15 @@ export function useSwarmWS() {
         setState((s) => ({ ...s, gateReady: msg.payload.wave_number }));
         showToast(`Wave ${msg.payload.wave_number} Gate準備完了`, "warn");
         break;
+      case "Projects":
+        setState((s) => ({ ...s, projects: msg.payload }));
+        break;
+      case "TasksUpdate":
+        setState((s) => ({ ...s, tasks: msg.payload }));
+        break;
+      case "HistoryList":
+        setState((s) => ({ ...s, history: msg.payload }));
+        break;
       case "Error":
         setState((s) => ({
           ...s,
@@ -183,7 +204,7 @@ export function useSwarmWS() {
           const msg: ServerMessage = JSON.parse(e.data);
           handleMsg(msg);
         } catch (err) {
-          console.error("WSメッセージパース失敗", err);
+          addLog(`WSメッセージパース失敗: ${err}`, "error");
         }
       };
 

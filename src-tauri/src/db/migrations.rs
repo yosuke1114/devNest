@@ -3,7 +3,12 @@ use super::DbPool;
 
 /// マイグレーションを実行する
 pub async fn run(pool: &DbPool) -> Result<()> {
-    sqlx::migrate!("./migrations").run(pool).await?;
+    // set_ignore_missing: DB に適用済みだがソースに存在しないマイグレーションを無視する
+    // （migration ファイルが削除された場合の後方互換性のため）
+    sqlx::migrate!("./migrations")
+        .set_ignore_missing(true)
+        .run(pool)
+        .await?;
     Ok(())
 }
 

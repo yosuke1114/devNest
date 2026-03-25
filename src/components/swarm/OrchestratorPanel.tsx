@@ -30,6 +30,7 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
     mergeReady,
     isStarting,
     isMerging,
+    error: storeError,
     aggregatedResult,
     conflictOutcome,
     startRun,
@@ -219,6 +220,25 @@ export function OrchestratorPanel({ workingDir }: OrchestratorPanelProps) {
           ))
         )}
       </div>
+
+      {/* startRun / mergeAll エラー */}
+      {storeError && (
+        <div
+          data-testid="store-error"
+          style={{
+            margin: "0 12px",
+            padding: "6px 10px",
+            background: "#2d0a0a",
+            border: "1px solid #fc8181",
+            borderRadius: 4,
+            fontSize: 11,
+            color: "#fc8181",
+            flexShrink: 0,
+          }}
+        >
+          ⚠️ {storeError}
+        </div>
+      )}
 
       {/* 実行ボタン / 実行中ステータス */}
       {tasks.length > 0 && !currentRun && (

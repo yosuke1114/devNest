@@ -14,13 +14,13 @@ use tower_http::services::{ServeDir, ServeFile};
 use tauri::AppHandle;
 
 use crate::state::AppState;
-use crate::swarm::wave_orchestrator::{SharedWaveOrchestrator, WaveOrchestratorStatus};
+use crate::swarm::wave_orchestrator::{SharedWaveOrchestrator, WaveOrchestratorStatus, RESOLVER_TASK_ID};
 use crate::swarm::worker::WorkerStatus;
 use crate::swarm::SharedWorkerManager;
 use crate::swarm::subtask::{detect_file_conflicts, detect_circular_deps};
 use crate::swarm::task_splitter::TaskSplitter;
 
-use super::message::{ClientMessage, ServerMessage, SwarmSnapshot, WorkerSnapshot};
+use super::message::{ClientMessage, ServerMessage, SwarmSnapshot, TaskSnapshot, WorkerSnapshot};
 
 // ────────────────────────────────────────
 //  State
@@ -36,8 +36,29 @@ pub struct WsState {
 //  サーバー起動
 // ────────────────────────────────────────
 pub async fn start(state: Arc<WsState>, bind_addr: String) {
-    let dist_path = std::env::var("MOBILE_DIST_PATH")
-        .unwrap_or_else(|_| "./packages/mobile/dist".to_string());
+    // MOBILE_DIST_PATH 環境変数があればそれを使う。
+    // なければ実行ファイルの場所から ../packages/mobile/dist を探し、
+    // それも存在しなければ ./packages/mobile/dist にフォールバック。
+    let dist_path = std::env::var("MOBILE_DIST_PATH").unwrap_or_else(|_| {
+        // dev: プロジェクトルート/packages/mobile/dist
+        // prod: DevNest.app/Contents/MacOS/../Resources/packages/mobile/dist など
+        let candidates = [
+            // 実行ファイルの2階層上（src-tauri/target/debug/ → プロジェクトルート）
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent()?.parent()?.parent()?.parent().map(|p| p.join("packages/mobile/dist"))),
+            // カレントディレクトリ基準
+            std::env::current_dir()
+                .ok()
+                .map(|p| p.join("packages/mobile/dist")),
+        ];
+        for candidate in candidates.into_iter().flatten() {
+            if candidate.exists() {
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+        "./packages/mobile/dist".to_string()
+    });
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
@@ -151,6 +172,12 @@ async fn handle_client_message(
         }
         ClientMessage::RunGate => {
             cmd_run_gate(state).await;
+        }
+        ClientMessage::SwarmReset => {
+            cmd_swarm_reset(state);
+        }
+        ClientMessage::HistoryResume { run_id, settings } => {
+            cmd_history_resume(run_id, settings, state).await;
         }
         ClientMessage::Sync => {
             cmd_sync(state, socket).await;
@@ -281,8 +308,17 @@ async fn cmd_swarm_start(
         }
     }
 
-    // スナップショットをブロードキャスト
+    // スナップショット・タスク一覧をブロードキャスト
     broadcast_snapshot(state);
+    broadcast_tasks(state);
+
+    // デスクトップ UI に実行中を通知（currentRun を設定させる）
+    use tauri::Emitter;
+    if let Ok(wo) = state.wave_orch.lock() {
+        if let Some(run) = &wo.orchestrator.current_run {
+            let _ = state.app_handle.emit("orchestrator-status-changed", run);
+        }
+    }
 }
 
 async fn cmd_swarm_stop(state: &Arc<WsState>) {
@@ -309,6 +345,13 @@ async fn cmd_swarm_stop(state: &Arc<WsState>) {
         }
     }
 
+    broadcast_snapshot(state);
+}
+
+fn cmd_swarm_reset(state: &Arc<WsState>) {
+    if let Ok(mut wo) = state.wave_orch.lock() {
+        wo.reset();
+    }
     broadcast_snapshot(state);
 }
 
@@ -363,25 +406,52 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
                 },
             );
 
-            // 次 Wave のワーカーを起動
+            // 次 Wave のワーカーを起動（コンフリクト解消 Worker を含む）
             for req in next_spawns {
                 let task_id = req.task_id;
+                let is_resolver = task_id == RESOLVER_TASK_ID;
+
                 let new_id = {
                     let mut mgr = match state.manager.lock() {
                         Ok(m) => m,
-                        Err(_) => continue,
+                        Err(e) => {
+                            broadcast(&state.broadcast_tx, ServerMessage::Error {
+                                message: format!("Manager ロック失敗 (Gate後): {}", e),
+                            });
+                            continue;
+                        }
                     };
                     match mgr.spawn_worker(req.worker_config.into(), state.app_handle.clone()) {
                         Ok(id) => id,
-                        Err(_) => continue,
+                        Err(e) => {
+                            let label = if is_resolver { "コンフリクト解消".to_string() } else { format!("Wave task {}", task_id) };
+                            broadcast(&state.broadcast_tx, ServerMessage::Error {
+                                message: format!("Worker起動失敗 ({}): {}", label, e),
+                            });
+                            continue;
+                        }
                     }
                 };
+
                 if let Ok(mut wo) = state.wave_orch.lock() {
-                    wo.assign_worker_id(task_id, new_id);
+                    if is_resolver {
+                        wo.assign_resolver_worker_id(new_id);
+                    } else {
+                        wo.assign_worker_id(task_id, new_id);
+                    }
                 }
             }
 
             broadcast_snapshot(state);
+            broadcast_tasks(state);
+
+            // デスクトップ UI に Gate 後の状態を通知
+            use tauri::Emitter;
+            if let Ok(wo) = state.wave_orch.lock() {
+                if let Some(run) = &wo.orchestrator.current_run {
+                    let _ = state.app_handle.emit("orchestrator-status-changed", run);
+                }
+            }
         }
         Err(e) => {
             broadcast(
@@ -394,12 +464,90 @@ async fn cmd_run_gate(state: &Arc<WsState>) {
     }
 }
 
+async fn cmd_history_resume(
+    run_id: String,
+    settings: crate::swarm::settings::SwarmSettings,
+    state: &Arc<WsState>,
+) {
+    use tauri::Manager;
+    use crate::swarm::history::get as history_get;
+
+    let app_state = state.app_handle.state::<AppState>();
+    let record = match history_get(&app_state.db, &run_id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            broadcast(
+                &state.broadcast_tx,
+                ServerMessage::Error { message: format!("履歴が見つかりません: {run_id}") },
+            );
+            return;
+        }
+        Err(e) => {
+            broadcast(
+                &state.broadcast_tx,
+                ServerMessage::Error { message: format!("履歴取得失敗: {e}") },
+            );
+            return;
+        }
+    };
+
+    // done/skipped 以外のタスクを再実行対象に
+    let resume_tasks: Vec<crate::swarm::subtask::SubTask> = record
+        .tasks
+        .iter()
+        .filter(|t| t.execution_state != "done" && t.execution_state != "skipped")
+        .map(|t| crate::swarm::subtask::SubTask {
+            id: t.id,
+            title: t.title.clone(),
+            role: crate::swarm::subtask::TaskRole::from(t.role.as_str()),
+            files: t.files.clone(),
+            instruction: t.instruction.clone(),
+            depends_on: t.depends_on.clone(),
+        })
+        .collect();
+
+    if resume_tasks.is_empty() {
+        broadcast(
+            &state.broadcast_tx,
+            ServerMessage::Error { message: "再実行対象のタスクがありません（すべて完了済みです）".to_string() },
+        );
+        return;
+    }
+
+    cmd_swarm_start(resume_tasks, settings, record.project_path, state).await;
+}
+
 async fn cmd_sync(state: &Arc<WsState>, socket: &mut WebSocket) {
     let snapshot = make_snapshot(state);
     send_direct(socket, ServerMessage::SwarmStatus(snapshot)).await;
 
     let workers = make_worker_list(state);
     send_direct(socket, ServerMessage::Workers(workers)).await;
+
+    // タスク一覧を送信
+    let tasks = make_tasks(state);
+    send_direct(socket, ServerMessage::TasksUpdate(tasks)).await;
+
+    // プロジェクト一覧を送信
+    use tauri::Manager;
+    let app_state = state.app_handle.state::<AppState>();
+    if let Ok(projects) = sqlx::query_as::<_, (i64, String, String)>(
+        "SELECT id, name, local_path FROM projects ORDER BY name"
+    )
+    .fetch_all(&app_state.db)
+    .await
+    {
+        let project_list = projects
+            .into_iter()
+            .map(|(id, name, local_path)| crate::mobile::message::ProjectInfo { id, name, local_path })
+            .collect();
+        send_direct(socket, ServerMessage::Projects(project_list)).await;
+    }
+
+    // 履歴を送信
+    if let Ok(history) = crate::swarm::history::list(&app_state.db, 20).await {
+        send_direct(socket, ServerMessage::HistoryList(history)).await;
+    }
 }
 
 // ────────────────────────────────────────
@@ -446,10 +594,15 @@ pub fn setup_event_bridge(state: Arc<WsState>) {
                     if let Ok(mut wo) = state_clone.wave_orch.lock() {
                         let result = wo.update_worker_status(&worker_id, ws);
 
-                        // Gate Ready 通知
+                        // Gate Ready → デスクトップと同様に自動実行
                         if result.wave_gate_ready {
                             let wave_number = wo.snapshot().current_wave;
                             let _ = tx.send(ServerMessage::GateReady { wave_number });
+                            // ロックを解放してから spawn（WaveOrchestrator ロック競合を避ける）
+                            let state_gate = Arc::clone(&state_clone);
+                            tauri::async_runtime::spawn(async move {
+                                cmd_run_gate(&state_gate).await;
+                            });
                         }
 
                         // スナップショット更新
@@ -461,6 +614,12 @@ pub fn setup_event_bridge(state: Arc<WsState>) {
                             completed_tasks: snap.completed_tasks,
                             failed_tasks: snap.failed_tasks,
                         }));
+
+                        // デスクトップ UI に worker 状態変化を通知
+                        use tauri::Emitter;
+                        if let Some(run) = &wo.orchestrator.current_run {
+                            let _ = state_clone.app_handle.emit("orchestrator-status-changed", run);
+                        }
 
                         // 新 Spawn がある場合（依存解決で Ready になったタスク）
                         if !result.new_spawns.is_empty() {
@@ -483,6 +642,8 @@ pub fn setup_event_bridge(state: Arc<WsState>) {
                             }
                         }
                     }
+                    // wo ロック解放後にタスク一覧をブロードキャスト
+                    broadcast_tasks(&state_clone);
                 }
             }
         });
@@ -540,6 +701,44 @@ fn make_worker_list(state: &Arc<WsState>) -> Vec<WorkerSnapshot> {
 fn broadcast_snapshot(state: &Arc<WsState>) {
     let snapshot = make_snapshot(state);
     broadcast(&state.broadcast_tx, ServerMessage::SwarmStatus(snapshot));
+}
+
+fn broadcast_tasks(state: &Arc<WsState>) {
+    let tasks = make_tasks(state);
+    broadcast(&state.broadcast_tx, ServerMessage::TasksUpdate(tasks));
+}
+
+fn make_tasks(state: &Arc<WsState>) -> Vec<TaskSnapshot> {
+    let wo = match state.wave_orch.lock() {
+        Ok(w) => w,
+        Err(_) => return vec![],
+    };
+    let run = match &wo.orchestrator.current_run {
+        Some(r) => r,
+        None => return vec![],
+    };
+
+    // task_id → wave_number マップを構築
+    let mut task_wave: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    if let Some(waves) = &run.waves {
+        for wave in waves {
+            for &tid in &wave.task_ids {
+                task_wave.insert(tid, wave.wave_number);
+            }
+        }
+    }
+
+    run.assignments
+        .iter()
+        .map(|a| TaskSnapshot {
+            task_id: a.task.id,
+            title: a.task.title.clone(),
+            wave_number: *task_wave.get(&a.task.id).unwrap_or(&1),
+            execution_state: format!("{:?}", a.execution_state).to_lowercase(),
+            worker_id: if a.worker_id.is_empty() { None } else { Some(a.worker_id.clone()) },
+            depends_on: a.task.depends_on.clone(),
+        })
+        .collect()
 }
 
 fn parse_worker_status(s: &str) -> Option<WorkerStatus> {

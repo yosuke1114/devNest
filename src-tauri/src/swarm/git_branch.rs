@@ -1,6 +1,7 @@
 use git2::{BranchType, MergeOptions, Repository};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::process::Command;
 
 /// ブランチマージの結果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,10 +197,90 @@ pub fn merge_worker_branch(
 
     let _ = repo.cleanup_state();
 
+    // マージ成功後: ローカルブランチを削除
+    if let Ok(mut branch) = repo.find_branch(worker_branch, BranchType::Local) {
+        let _ = branch.delete();
+    }
+
+    // マージ成功後: リモートブランチを削除（origin が存在する場合のみ、失敗は無視）
+    if let Ok(mut remote) = repo.find_remote("origin") {
+        let refspec = format!(":refs/heads/{}", worker_branch);
+        let _ = remote.push(&[refspec.as_str()], None);
+    }
+
     MergeOutcome {
         success: true,
-        message: format!("マージ成功: {}", worker_branch),
+        message: format!("マージ成功・ブランチ削除: {}", worker_branch),
         conflict_files: vec![],
+    }
+}
+
+/// ワーカーブランチをベースブランチにマージする（ワーカーの変更を優先して自動解消）
+///
+/// コンフリクトが発生した場合、`git merge -X theirs` でワーカーブランチの変更を優先する。
+/// これにより Wave 内の複数ワーカーが同一ファイルを編集した場合でもマージを完了できる。
+pub fn merge_worker_branch_theirs(
+    repo_path: &Path,
+    worker_branch: &str,
+    base_branch: &str,
+) -> MergeOutcome {
+    // まず base ブランチにチェックアウト
+    let checkout = Command::new("git")
+        .args(["-C", repo_path.to_str().unwrap_or("."), "checkout", base_branch])
+        .output();
+
+    if let Err(e) = checkout {
+        return MergeOutcome {
+            success: false,
+            message: format!("checkout 失敗: {}", e),
+            conflict_files: vec![],
+        };
+    }
+
+    // git merge -X theirs <worker_branch>
+    let output = Command::new("git")
+        .args([
+            "-C",
+            repo_path.to_str().unwrap_or("."),
+            "merge",
+            "-X",
+            "theirs",
+            "--no-edit",
+            "-m",
+            &format!("swarm: merge {} into {} (theirs)", worker_branch, base_branch),
+            worker_branch,
+        ])
+        .output();
+
+    match output {
+        Ok(o) if o.status.success() => {
+            // マージ成功 → ローカルブランチを削除
+            let _ = Command::new("git")
+                .args(["-C", repo_path.to_str().unwrap_or("."), "branch", "-d", worker_branch])
+                .output();
+            MergeOutcome {
+                success: true,
+                message: format!("theirs マージ成功・ブランチ削除: {}", worker_branch),
+                conflict_files: vec![],
+            }
+        }
+        Ok(o) => {
+            // マージ失敗 → マージ状態をリセット
+            let _ = Command::new("git")
+                .args(["-C", repo_path.to_str().unwrap_or("."), "merge", "--abort"])
+                .output();
+            let stderr = String::from_utf8_lossy(&o.stderr).to_string();
+            MergeOutcome {
+                success: false,
+                message: format!("theirs マージ失敗: {}", stderr.lines().next().unwrap_or("")),
+                conflict_files: vec![],
+            }
+        }
+        Err(e) => MergeOutcome {
+            success: false,
+            message: format!("git コマンド実行失敗: {}", e),
+            conflict_files: vec![],
+        },
     }
 }
 
