@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>detail-conflict</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:800px;margin:40px auto;padding:0 24px;background:#0d1117;color:#c9d1d9;line-height:1.7;font-size:14px}
+h1,h2,h3,h4,h5,h6{color:#e6edf3;margin:20px 0 8px}
+a{color:#7c6cf2}
+code{background:#2a2a42;padding:2px 6px;border-radius:4px;font-size:.9em}
+pre{background:#161b22;padding:16px;border-radius:8px;overflow-x:auto}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #30363d;padding:6px 12px}
+th{background:#161b22}
+blockquote{border-left:4px solid #30363d;margin:0;padding:0 16px;color:#8b949e}
+img{max-width:100%}
+</style>
+</head>
+<body>
+<div class="frontmatter-meta"><span class="frontmatter-item"><span class="frontmatter-key">title</span><span class="frontmatter-value">ConflictScreen 詳細設計</span></span><span class="frontmatter-item"><span class="frontmatter-key">doc_type</span><span class="frontmatter-value">screen_design</span></span><span class="frontmatter-item"><span class="frontmatter-key">version</span><span class="frontmatter-value">1.0.0</span></span><span class="frontmatter-item"><span class="frontmatter-key">last_synced_commit</span><span class="frontmatter-value">null</span></span><span class="frontmatter-item"><span class="frontmatter-key">status</span><span class="frontmatter-value">current</span></span><span class="frontmatter-item"><span class="frontmatter-key">scope</span><span class="frontmatter-value">file</span></span><span class="frontmatter-item"><span class="frontmatter-key">tags</span><span class="frontmatter-value">[screen, conflict, frontend]</span></span></div><h1>ConflictScreen 詳細設計書</h1>
+<p><strong>バージョン</strong>: 1.0<br>
+<strong>作成日</strong>: 2026-03-08<br>
+<strong>対象画面</strong>: ConflictScreen（git コンフリクト解消）<br>
+<strong>対応シナリオ</strong>: S-07<br>
+<strong>対応タスク</strong>: F-H01</p>
+<hr>
+<h2>1. 画面概要</h2>
+<p><code>git pull</code> 後にコンフリクトが発生した際、設計書ファイル（<code>docs/</code> 配下）のブロック単位解消 UI を提供する。全ブロック解消後に <code>SAVE &amp; MERGE</code> でコミット・プッシュまで一括実行する。</p>
+<table><thead><tr><th>項目</th><th>内容</th></tr></thead><tbody><tr><td>ルート</td><td><code>currentScreen === 'conflict'</code>（uiStore）</td></tr><tr><td>Props</td><td>なし</td></tr><tr><td>遷移元</td><td><code>git_pull_done</code> イベント（コンフリクト発生時）/ GlobalNav の ⚠ バッジ</td></tr><tr><td>レイアウト</td><td>GlobalNav 表示・ヘッダー + 左ファイルリスト + 右ブロックエディタ</td></tr></tbody></table>
+<hr>
+<h2>2. レイアウト仕様</h2>
+<pre><code>┌──────┬──────────────────────────────────────────────────────┐
+│      │  ConflictHeader（件数 / 進捗バー / SAVE &amp; MERGE）      │
+│ Nav  ├────────────────┬─────────────────────────────────────┤
+│      │ConflictFileList│  ConflictBlockEditor                 │
+│      │  (200px)       │  ├ ConflictToolbar                  │
+│      │ ファイル × N   │  └ ConflictBlock × N               │
+│      │ + 進捗         │    ├ OursSide (赤)                  │
+│      │                │    ├ TheirsSide (青)                │
+│      │                │    └ ResolutionButtons              │
+│      │                ├─────────────────────────────────────┤
+│      │                │  ResolvedOverlay（全解消完了後）      │
+└──────┴────────────────┴─────────────────────────────────────┘
+</code></pre>
+<hr>
+<h2>3. コンポーネントツリー</h2>
+<pre><code>ConflictScreen
+  ├── ConflictHeader
+  │     ├── ConflictProgressBar        # {resolvedBlocks}/{totalBlocks} ブロック解消済み
+  │     ├── UnmanagedFileNote          # docs/ 外ファイルの件数注記
+  │     └── SaveAndMergeButton         # allResolved=true 時に活性化
+  ├── ConflictFileList
+  │     └── ConflictFileItem × N
+  └── ConflictBlockEditor
+        ├── ConflictToolbar            # USE ALL MINE / USE ALL THEIRS
+        ├── ConflictBlock × N
+        │     ├── BlockHeader          # "Conflict {N+1}/{total}"
+        │     ├── OursSide            # HEAD 側（赤背景）
+        │     ├── TheirsSide          # THEIRS 側（青背景）
+        │     └── ResolutionButtons   # USE MINE / USE THEIRS / MANUAL
+        └── ResolvedOverlay            # allResolved=true 時に全面表示
+</code></pre>
+<hr>
+<h2>4. 状態設計</h2>
+<h3>4.1 ストア参照</h3>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">const</span> managedFiles = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">managedFiles</span>)
+<span class="hljs-keyword">const</span> unmanagedCount = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">unmanagedCount</span>)
+<span class="hljs-keyword">const</span> listStatus = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">listStatus</span>)
+<span class="hljs-keyword">const</span> activeFileId = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">activeFileId</span>)
+<span class="hljs-keyword">const</span> totalBlocks = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-title function_">totalBlocks</span>())
+<span class="hljs-keyword">const</span> resolvedBlocks = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-title function_">resolvedBlocks</span>())
+<span class="hljs-keyword">const</span> allResolved = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-title function_">allResolved</span>())
+<span class="hljs-keyword">const</span> resolveAllStatus = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">resolveAllStatus</span>)
+<span class="hljs-keyword">const</span> resolveAllError = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">resolveAllError</span>)
+<span class="hljs-keyword">const</span> activeFile = <span class="hljs-title function_">useConflictStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-title function_">activeFile</span>())
+
+<span class="hljs-keyword">const</span> activeProjectId = <span class="hljs-title function_">useProjectStore</span>(<span class="hljs-function"><span class="hljs-params">s</span> =&gt;</span> s.<span class="hljs-property">activeProjectId</span>)
+</code></pre>
+<h3>4.2 ローカル state</h3>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// MANUAL 編集モード（ConflictBlock ごと）</span>
+<span class="hljs-keyword">const</span> [manualContents, setManualContents] = useState&lt;<span class="hljs-title class_">Record</span>&lt;<span class="hljs-built_in">number</span>, <span class="hljs-built_in">string</span>&gt;&gt;({})
+<span class="hljs-comment">// blockIndex → 編集中テキスト</span>
+</code></pre>
+<hr>
+<h2>5. 各コンポーネントの詳細仕様</h2>
+<h3>5.1 ConflictHeader</h3>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">interface</span> <span class="hljs-title class_">ConflictHeaderProps</span> {
+  <span class="hljs-attr">totalBlocks</span>: <span class="hljs-built_in">number</span>
+  <span class="hljs-attr">resolvedBlocks</span>: <span class="hljs-built_in">number</span>
+  <span class="hljs-attr">allResolved</span>: <span class="hljs-built_in">boolean</span>
+  <span class="hljs-attr">resolveAllStatus</span>: <span class="hljs-title class_">AsyncStatus</span>
+  <span class="hljs-attr">resolveAllError</span>: <span class="hljs-built_in">string</span> | <span class="hljs-literal">null</span>
+  <span class="hljs-attr">unmanagedCount</span>: <span class="hljs-built_in">number</span>
+  <span class="hljs-attr">onSaveAndMerge</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-built_in">void</span>
+}
+</code></pre>
+<p><strong>表示内容</strong></p>
+<pre><code>⚠ CONFLICT RESOLUTION    [2 / 4 ブロック解消済み]  [████░░░░]
+  docs/ 外に 1 ファイルのコンフリクトがあります（手動で解消してください）
+                                              [SAVE &amp; MERGE]（allResolved 時に活性化）
+</code></pre>
+<p><strong>ConflictProgressBar</strong></p>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// width: (resolvedBlocks / totalBlocks) * 100 + '%'</span>
+<span class="hljs-comment">// allResolved=true → 緑・SAVE &amp; MERGE ボタンが活性化</span>
+</code></pre>
+<p><strong>UnmanagedFileNote</strong></p>
+<p><code>unmanagedCount &gt; 0</code> の場合のみ表示。「docs/ 外の {N} ファイルは手動で解消してください。完了後に SAVE &amp; MERGE を押してください。」</p>
+<p><strong>SAVE &amp; MERGE 押下時の処理</strong></p>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">const</span> <span class="hljs-title function_">handleSaveAndMerge</span> = <span class="hljs-keyword">async</span> (<span class="hljs-params"></span>) =&gt; {
+  <span class="hljs-keyword">if</span> (!activeProjectId) <span class="hljs-keyword">return</span>
+
+  <span class="hljs-comment">// 全ファイルの resolutions を一括送信</span>
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> file <span class="hljs-keyword">of</span> managedFiles) {
+    <span class="hljs-keyword">await</span> conflictStore.<span class="hljs-title function_">saveResolutions</span>(activeProjectId, file.<span class="hljs-property">id</span>)
+  }
+  <span class="hljs-comment">// conflict_resolve_all でコミット・プッシュ</span>
+  <span class="hljs-keyword">await</span> conflictStore.<span class="hljs-title function_">resolveAll</span>(activeProjectId)
+  <span class="hljs-comment">// 成功 → ResolvedOverlay を表示（ストアの resolveAllStatus='success' で制御）</span>
+}
+</code></pre>
+<hr>
+<h3>5.2 ConflictFileList</h3>
+<h4>ConflictFileItem</h4>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">interface</span> <span class="hljs-title class_">ConflictFileItemProps</span> {
+  <span class="hljs-attr">file</span>: <span class="hljs-title class_">ConflictFile</span>
+  <span class="hljs-attr">isActive</span>: <span class="hljs-built_in">boolean</span>
+  <span class="hljs-attr">resolvedCount</span>: <span class="hljs-built_in">number</span>    <span class="hljs-comment">// Object.values(file.resolutions).length</span>
+  <span class="hljs-attr">totalCount</span>: <span class="hljs-built_in">number</span>       <span class="hljs-comment">// file.conflictBlocks.length</span>
+  <span class="hljs-attr">onClick</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">fileId</span>: <span class="hljs-built_in">number</span></span>) =&gt;</span> <span class="hljs-built_in">void</span>
+}
+</code></pre>
+<p><strong>表示内容</strong></p>
+<pre><code>architecture.md
+⚠ 2 conflicts                ← 未解消
+    ready（緑）               ← 全解消時
+</code></pre>
+<table><thead><tr><th>状態</th><th>左ボーダー色</th><th>バッジ</th></tr></thead><tbody><tr><td>アクティブ</td><td>黄色</td><td>—</td></tr><tr><td>全解消済み</td><td>緑</td><td><code>ready</code></td></tr><tr><td>未解消あり</td><td>黄色</td><td><code>{N} conflicts</code></td></tr></tbody></table>
+<p><strong>ファイルリスト下部：進捗サマリー</strong></p>
+<pre><code>解消済み: {resolvedBlocks} / {totalBlocks} ブロック
+</code></pre>
+<hr>
+<h3>5.3 ConflictBlockEditor</h3>
+<h4>ConflictToolbar</h4>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">interface</span> <span class="hljs-title class_">ConflictToolbarProps</span> {
+  <span class="hljs-attr">fileId</span>: <span class="hljs-built_in">number</span>
+  <span class="hljs-attr">onUseAllMine</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-built_in">void</span>
+  <span class="hljs-attr">onUseAllTheirs</span>: <span class="hljs-function">() =&gt;</span> <span class="hljs-built_in">void</span>
+}
+</code></pre>
+<pre><code>[USE ALL MINE]  [USE ALL THEIRS]       ← アクティブファイルの全ブロックを一括選択
+</code></pre>
+<p><strong>USE ALL MINE 押下時</strong></p>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">const</span> <span class="hljs-title function_">handleUseAllMine</span> = (<span class="hljs-params"></span>) =&gt; {
+  conflictStore.<span class="hljs-title function_">resolveAllBlocks</span>(activeFileId!, <span class="hljs-string">'ours'</span>)
+  <span class="hljs-comment">// → 全 blockIndex に { resolution: 'ours' } をセット（ローカル state のみ）</span>
+}
+</code></pre>
+<h4>ConflictBlock</h4>
+<pre><code class="hljs language-typescript"><span class="hljs-keyword">interface</span> <span class="hljs-title class_">ConflictBlockProps</span> {
+  <span class="hljs-attr">block</span>: <span class="hljs-title class_">ConflictBlock</span>
+  <span class="hljs-attr">resolution</span>: <span class="hljs-title class_">BlockResolution</span> | <span class="hljs-literal">undefined</span>
+  <span class="hljs-attr">fileId</span>: <span class="hljs-built_in">number</span>
+  <span class="hljs-attr">onResolve</span>: <span class="hljs-function">(<span class="hljs-params"><span class="hljs-attr">blockIndex</span>: <span class="hljs-built_in">number</span>, <span class="hljs-attr">resolution</span>: <span class="hljs-title class_">BlockResolution</span></span>) =&gt;</span> <span class="hljs-built_in">void</span>
+}
+</code></pre>
+<p><strong>表示レイアウト</strong></p>
+<pre><code>Conflict 1/2                           [USE MINE] [USE THEIRS] [MANUAL]
+
+  ┌── HEAD ─────────────────────────────────────────────────────┐  ← 赤背景
+  │  debounce: 1 second after last keystroke.                   │
+  │  Retry: up to 3 times with exponential backoff.             │
+  └─────────────────────────────────────────────────────────────┘
+
+  ┌── THEIRS ───────────────────────────────────────────────────┐  ← 青背景
+  │  debounce: 500ms after last keystroke.                      │
+  │  Retry: not implemented.                                    │
+  └─────────────────────────────────────────────────────────────┘
+</code></pre>
+<p><strong>選択後の表示変化</strong></p>
+<table><thead><tr><th>resolution</th><th>OursSide</th><th>TheirsSide</th><th>表示</th></tr></thead><tbody><tr><td><code>ours</code></td><td>緑ボーダー・✓</td><td>薄い</td><td><code>✓ MINE を選択</code></td></tr><tr><td><code>theirs</code></td><td>薄い</td><td>緑ボーダー・✓</td><td><code>✓ THEIRS を選択</code></td></tr><tr><td><code>manual</code></td><td>—</td><td>—</td><td>MANUAL エディタを展開</td></tr><tr><td>未選択</td><td>通常</td><td>通常</td><td>—</td></tr></tbody></table>
+<p><strong>MANUAL ボタン押下時</strong></p>
+<p>OursSide / TheirsSide の下に手動編集テキストエリアを展開する。</p>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// MANUAL 選択時</span>
+<span class="hljs-keyword">const</span> <span class="hljs-title function_">handleManual</span> = (<span class="hljs-params"><span class="hljs-attr">blockIndex</span>: <span class="hljs-built_in">number</span></span>) =&gt; {
+  <span class="hljs-comment">// 初期値: OursSide の内容</span>
+  <span class="hljs-title function_">setManualContents</span>(<span class="hljs-function"><span class="hljs-params">prev</span> =&gt;</span> ({
+    ...prev,
+    [blockIndex]: block.<span class="hljs-property">ours</span>,
+  }))
+  conflictStore.<span class="hljs-title function_">setBlockResolution</span>(fileId, blockIndex, {
+    blockIndex,
+    <span class="hljs-attr">resolution</span>: <span class="hljs-string">'manual'</span>,
+    <span class="hljs-attr">manualContent</span>: block.<span class="hljs-property">ours</span>,
+  })
+}
+
+<span class="hljs-comment">// テキストエリア onChange</span>
+<span class="hljs-keyword">const</span> <span class="hljs-title function_">handleManualChange</span> = (<span class="hljs-params"><span class="hljs-attr">blockIndex</span>: <span class="hljs-built_in">number</span>, <span class="hljs-attr">content</span>: <span class="hljs-built_in">string</span></span>) =&gt; {
+  <span class="hljs-title function_">setManualContents</span>(<span class="hljs-function"><span class="hljs-params">prev</span> =&gt;</span> ({ ...prev, [blockIndex]: content }))
+  conflictStore.<span class="hljs-title function_">setBlockResolution</span>(fileId, blockIndex, {
+    blockIndex,
+    <span class="hljs-attr">resolution</span>: <span class="hljs-string">'manual'</span>,
+    <span class="hljs-attr">manualContent</span>: content,
+  })
+}
+</code></pre>
+<p><strong>MANUAL エディタの表示</strong></p>
+<pre><code>MANUAL EDIT:
+┌──────────────────────────────────────┐
+│ debounce: 1 second after last…       │
+│ Retry: up to 3 times with…           │
+└──────────────────────────────────────┘
+</code></pre>
+<hr>
+<h3>5.4 ResolvedOverlay</h3>
+<p><code>resolveAllStatus === 'success'</code> になった時に右ペイン全面をオーバーレイで覆う。</p>
+<pre><code>（背景を薄い緑で覆う）
+
+✓
+
+Conflicts resolved
+architecture.md — 2 conflicts merged
+
+✓ Merge commit created
+✓ Pushed to origin/main
+✓ Branch conflict resolved · synced
+
+[VIEW IN EDITOR]  [▶ OPEN TERMINAL]  [CLOSE]
+</code></pre>
+<p><strong>ボタン処理</strong></p>
+<table><thead><tr><th>ボタン</th><th>処理</th></tr></thead><tbody><tr><td>VIEW IN EDITOR</td><td><code>navigate('editor')</code></td></tr><tr><td>OPEN TERMINAL</td><td><code>navigate('terminal')</code></td></tr><tr><td>CLOSE</td><td>オーバーレイ非表示（<code>resolveAllStatus</code> をリセット）</td></tr></tbody></table>
+<hr>
+<h2>6. mount 処理</h2>
+<pre><code class="hljs language-typescript"><span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =&gt;</span> {
+  <span class="hljs-keyword">if</span> (!activeProjectId) <span class="hljs-keyword">return</span>
+  conflictStore.<span class="hljs-title function_">loadConflicts</span>(activeProjectId)
+  <span class="hljs-comment">// → conflict_list を invoke → managedFiles・unmanagedCount をセット</span>
+  <span class="hljs-comment">// → 先頭ファイルを activeFile に自動選択</span>
+}, [])
+</code></pre>
+<hr>
+<h2>7. イベントリスナー</h2>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// initListeners 内（AppShell で一度だけ登録）</span>
+<span class="hljs-title function_">listen</span>(<span class="hljs-string">'git_pull_done'</span>, <span class="hljs-function">(<span class="hljs-params">{ payload }</span>) =&gt;</span> {
+  conflictStore.<span class="hljs-title function_">onGitPullDone</span>(payload)
+  <span class="hljs-keyword">if</span> (payload.<span class="hljs-property">status</span> === <span class="hljs-string">'conflict'</span>) {
+    <span class="hljs-comment">// GlobalNav に ⚠ バッジを表示</span>
+    uiStore.<span class="hljs-title function_">showConflictBadge</span>(<span class="hljs-literal">true</span>)
+    <span class="hljs-comment">// ユーザーが ConflictScreen にいない場合は通知</span>
+    <span class="hljs-keyword">if</span> (uiStore.<span class="hljs-property">currentScreen</span> !== <span class="hljs-string">'conflict'</span>) {
+      notificationStore.<span class="hljs-title function_">add</span>({
+        <span class="hljs-attr">type</span>: <span class="hljs-string">'conflict'</span>,
+        <span class="hljs-attr">message</span>: <span class="hljs-string">`コンフリクトが検出されました（<span class="hljs-subst">${payload.conflictFiles?.length ?? <span class="hljs-number">0</span>}</span> ファイル）`</span>,
+      })
+    }
+  }
+})
+</code></pre>
+<hr>
+<h2>8. saveResolutions / resolveAll のフロー</h2>
+<pre><code>ユーザーが全ブロックを選択
+      ↓
+SAVE &amp; MERGE ボタン押下
+      ↓
+saveResolutions(projectId, file1.id)  ← conflict_resolve（block_resolutions 付き）
+saveResolutions(projectId, file2.id)  ← 並列実行
+      ↓
+resolveAll(projectId)                 ← conflict_resolve_all
+      ↓（Rust 内部）
+ディスクへの書き込み → git add → merge commit → git push
+      ↓
+resolveAllStatus='success'
+→ ResolvedOverlay 表示
+→ uiStore.showConflictBadge(false)
+</code></pre>
+<hr>
+<h2>9. エラーハンドリング</h2>
+<table><thead><tr><th>エラー</th><th>表示場所</th><th>対応</th></tr></thead><tbody><tr><td><code>loadConflicts</code> 失敗</td><td>ConflictBlockEditor のエラーメッセージ</td><td>RELOAD ボタン</td></tr><tr><td><code>saveResolutions</code> 失敗</td><td>ConflictHeader 下の赤バナー</td><td>RETRY ボタン</td></tr><tr><td><code>resolveAll</code> 失敗（<code>GitPushFailed</code>）</td><td>同上</td><td>RETRY ボタン（3 回自動リトライ後）</td></tr><tr><td><code>resolveAll</code> 失敗（<code>InvalidResolution</code>）</td><td>対象 ConflictBlock に赤ハイライト</td><td>再選択を促す</td></tr></tbody></table>
+<hr>
+<h2>10. ファイル一覧</h2>
+<pre><code>src/screens/ConflictScreen.tsx
+src/components/conflict/ConflictHeader.tsx
+src/components/conflict/ConflictProgressBar.tsx
+src/components/conflict/UnmanagedFileNote.tsx
+src/components/conflict/SaveAndMergeButton.tsx
+src/components/conflict/ConflictFileList.tsx
+src/components/conflict/ConflictFileItem.tsx
+src/components/conflict/ConflictBlockEditor.tsx
+src/components/conflict/ConflictToolbar.tsx
+src/components/conflict/ConflictBlock.tsx
+src/components/conflict/OursSide.tsx
+src/components/conflict/TheirsSide.tsx
+src/components/conflict/ResolutionButtons.tsx
+src/components/conflict/ResolvedOverlay.tsx
+</code></pre>
+<hr>
+<h2>11. 未解決事項</h2>
+<table><thead><tr><th>#</th><th>内容</th><th>対応方針</th></tr></thead><tbody><tr><td>U-01</td><td>MANUAL 編集の構文チェック</td><td>Phase 1 では自由テキスト。Markdown lint は Phase 3</td></tr><tr><td>U-02</td><td>ファイルが 10 件以上のコンフリクトを持つ場合の ConflictFileList のスクロール</td><td><code>overflow-y: auto</code> で対応。件数上限なし</td></tr><tr><td>U-03</td><td>unmanagedCount のファイルを ConflictScreen で表示すべきか</td><td>読み取り専用で一覧表示するセクションを ConflictFileList 下部に追加（Phase 2）</td></tr></tbody></table>
+</body>
+</html>
