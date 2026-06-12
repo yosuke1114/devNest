@@ -91,7 +91,7 @@ impl GitAnalysis {
             })
             .collect();
 
-        result.sort_by(|a, b| b.change_count.cmp(&a.change_count));
+        result.sort_by_key(|b| std::cmp::Reverse(b.change_count));
         result
     }
 

@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>12-swarm-completion-guide</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:800px;margin:40px auto;padding:0 24px;background:#0d1117;color:#c9d1d9;line-height:1.7;font-size:14px}
+h1,h2,h3,h4,h5,h6{color:#e6edf3;margin:20px 0 8px}
+a{color:#7c6cf2}
+code{background:#2a2a42;padding:2px 6px;border-radius:4px;font-size:.9em}
+pre{background:#161b22;padding:16px;border-radius:8px;overflow-x:auto}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #30363d;padding:6px 12px}
+th{background:#161b22}
+blockquote{border-left:4px solid #30363d;margin:0;padding:0 16px;color:#8b949e}
+img{max-width:100%}
+</style>
+</head>
+<body>
+<h1>DevNest Swarm機能 完成計画 実装指示書</h1>
+<blockquote>
+<p><strong>目的</strong>: 既存swarm骨格（14ファイル）を本格稼働させる4つの実装ステップ。<br>
+<strong>前提</strong>: orchestrator.rs, task_splitter.rs, commands/swarm.rs 等が実装済み。<br>
+<strong>ブランチ規則</strong>: <code>feature/swarm-&lt;step&gt;</code> (例: <code>feature/swarm-ui</code>)</p>
+</blockquote>
+<hr>
+<h2>現状の swarm アーキテクチャ</h2>
+<pre><code>commands/swarm.rs (Tauriコマンド — 全コマンド実装済み)
+    │
+    ├── split_task         → TaskSplitter (Claude APIでタスク分解)
+    ├── orchestrator_start → Orchestrator (依存グラフ解析→Worker並列起動)
+    ├── orchestrator_notify_worker_done → 依存チェーン解決→次Wave起動
+    ├── orchestrator_merge_all         → 成功ブランチ一括マージ
+    ├── orchestrator_ai_resolve_conflict → AIコンフリクト解決
+    └── spawn_worker / kill_worker / list_workers → Worker管理
+</code></pre>
+<p><strong>足りないもの</strong>: UI画面、doc-mapping連携、Agentic Flow統合、通知リング連携</p>
+<hr>
+<h2>Step 1: Swarm UI画面の実装</h2>
+<h3>目標</h3>
+<p>swarmの全機能をGUIから操作・監視できるようにする。</p>
+<h3>画面配置</h3>
+<p>サイドバーの「管理」セクション内、エージェントの下に配置。<br>
+既存の <code>commands/swarm.rs</code> のTauriコマンドをフロントエンドから呼び出す。</p>
+<pre><code>── 管理 ──────────────
+🤖 エージェント
+🐝 Swarm            ← 新規追加
+📊 スプリント
+</code></pre>
+<h3>画面構成: SwarmScreen (<code>/swarm</code>)</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│  🐝 Swarm                                                   │
+│  [タスク分解] [実行中] [コンフリクト] [履歴]                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  （選択中のタブの内容を表示）                                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>タブ1: タスク分解 (<code>/swarm/split</code>)</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│  タスク分解                                                  │
+│                                                             │
+│  ┌─ プロンプト入力 ──────────────────────────────────────┐  │
+│  │ タスクの内容を入力...                                  │  │
+│  │                                                       │  │
+│  │ 例: "認証機能をOAuth2.0に移行したい。                   │  │
+│  │      既存のsession認証も並行して維持する"               │  │
+│  │                                                       │  │
+│  │ [コンテキストファイルを追加]                             │  │
+│  └───────────────────────────────────────────────────────┘  │
+│  [🔀 タスク分解を実行]                                       │
+│                                                             │
+│  ┌─ 分解結果 ────────────────────────────────────────────┐  │
+│  │                                                       │  │
+│  │  Wave 1 (並列可能)                                     │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐             │  │
+│  │  │ #1 DB スキーマ   │  │ #2 OAuth設定    │             │  │
+│  │  │ depends: なし    │  │ depends: なし    │             │  │
+│  │  │ files: schema/  │  │ files: config/  │             │  │
+│  │  └─────────────────┘  └─────────────────┘             │  │
+│  │          │                     │                       │  │
+│  │          ▼                     ▼                       │  │
+│  │  Wave 2 (Wave 1完了後)                                  │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐             │  │
+│  │  │ #3 認証ミドル    │  │ #4 テスト追加    │             │  │
+│  │  │ depends: [1,2]  │  │ depends: [1]    │             │  │
+│  │  └─────────────────┘  └─────────────────┘             │  │
+│  │                                                       │  │
+│  │  ⚠️ ファイル競合警告: #1と#3が schema/ を共有           │  │
+│  │                                                       │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌─ 設定 ────────────────────────────────────────────────┐  │
+│  │ 最大Worker数: [4 ▾]  タイムアウト: [30分 ▾]            │  │
+│  │ ☐ --dangerously-skip-permissions                      │  │
+│  │ ☐ 高信頼度コンフリクトの自動承認                        │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  [🚀 Swarm実行を開始]                                        │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<p><strong>やること</strong>:</p>
+<ol>
+<li><code>SwarmSplitTab.tsx</code> を作成</li>
+<li>プロンプト入力エリア（テキストエリア + コンテキストファイル選択）</li>
+<li>「タスク分解を実行」ボタン → <code>split_task</code> Tauriコマンド呼び出し</li>
+<li>分解結果の依存グラフ可視化:
+<ul>
+<li><code>SubTask.depends_on</code> からWave構造を自動算出</li>
+<li>Wave単位でグルーピング表示</li>
+<li>依存関係を矢印で視覚化</li>
+</ul>
+</li>
+<li>ファイル競合警告の表示（<code>conflict_warnings</code>）</li>
+<li>循環依存エラーの表示（<code>cycle_error</code>）</li>
+<li>SwarmSettings の設定UI</li>
+<li>「Swarm実行を開始」ボタン → <code>orchestrator_start</code> 呼び出し</li>
+</ol>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// Wave構造の算出ロジック（フロントエンド側）</span>
+<span class="hljs-keyword">function</span> <span class="hljs-title function_">computeWaves</span>(<span class="hljs-params"><span class="hljs-attr">tasks</span>: <span class="hljs-title class_">SubTask</span>[]</span>): <span class="hljs-title class_">SubTask</span>[][] {
+  <span class="hljs-keyword">const</span> <span class="hljs-attr">waves</span>: <span class="hljs-title class_">SubTask</span>[][] = [];
+  <span class="hljs-keyword">const</span> done = <span class="hljs-keyword">new</span> <span class="hljs-title class_">Set</span>&lt;<span class="hljs-built_in">number</span>&gt;();
+
+  <span class="hljs-keyword">while</span> (done.<span class="hljs-property">size</span> &lt; tasks.<span class="hljs-property">length</span>) {
+    <span class="hljs-keyword">const</span> wave = tasks.<span class="hljs-title function_">filter</span>(<span class="hljs-function"><span class="hljs-params">t</span> =&gt;</span>
+      !done.<span class="hljs-title function_">has</span>(t.<span class="hljs-property">id</span>) &amp;&amp;
+      t.<span class="hljs-property">depends_on</span>.<span class="hljs-title function_">every</span>(<span class="hljs-function"><span class="hljs-params">dep</span> =&gt;</span> done.<span class="hljs-title function_">has</span>(dep))
+    );
+    <span class="hljs-keyword">if</span> (wave.<span class="hljs-property">length</span> === <span class="hljs-number">0</span>) <span class="hljs-keyword">break</span>; <span class="hljs-comment">// 循環依存</span>
+    waves.<span class="hljs-title function_">push</span>(wave);
+    wave.<span class="hljs-title function_">forEach</span>(<span class="hljs-function"><span class="hljs-params">t</span> =&gt;</span> done.<span class="hljs-title function_">add</span>(t.<span class="hljs-property">id</span>));
+  }
+  <span class="hljs-keyword">return</span> waves;
+}
+</code></pre>
+<h3>タブ2: 実行中 (<code>/swarm/running</code>)</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│  実行中: run-abc12345                                        │
+│  ステータス: 🟡 Running    進捗: 2/5 完了                    │
+│  ベースブランチ: develop                                      │
+│                                                             │
+│  ┌─ Worker一覧 ──────────────────────────────────────────┐  │
+│  │                                                       │  │
+│  │ ✅ #1 DBスキーマ     worker-abc-1  Done     2m 30s    │  │
+│  │ ✅ #2 OAuth設定      worker-abc-2  Done     1m 45s    │  │
+│  │ 🔄 #3 認証ミドル     worker-abc-3  Running  3m 12s    │  │
+│  │ 🔄 #4 テスト追加     worker-abc-4  Running  1m 05s    │  │
+│  │ ⏳ #5 E2Eテスト      (待機中)      Waiting  depends:[3,4]│
+│  │                                                       │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌─ リソース ───────────────────────────────────────────┐   │
+│  │ CPU: ████████░░ 78%    Memory: ██████░░░░ 62%        │   │
+│  │ Workers: 2/4 active                                   │   │
+│  └───────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─ ライブログ（選択Worker） ────────────────────────────┐   │
+│  │ [worker-abc-3] ファイルを分析中...                     │   │
+│  │ [worker-abc-3] src/auth/middleware.rs を編集中          │   │
+│  │ [worker-abc-4] テストケースを生成中...                  │   │
+│  └───────────────────────────────────────────────────────┘   │
+│                                                             │
+│  [⏸️ 一時停止]  [❌ キャンセル]                               │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<p><strong>やること</strong>:</p>
+<ol>
+<li><code>SwarmRunningTab.tsx</code> を作成</li>
+<li><code>orchestrator_get_status</code> を定期ポーリング（1秒間隔）or Tauriイベント <code>orchestrator-status-changed</code> をリッスン</li>
+<li>Worker一覧: ExecutionState に応じたアイコン（✅Done / 🔄Running / ⏳Waiting / ❌Error / ⏭️Skipped）</li>
+<li>経過時間のリアルタイム表示</li>
+<li>リソースモニター: <code>get_system_resources</code> コマンドで CPU/Memory を表示</li>
+<li>ライブログ: Worker選択 → ターミナル出力のストリーム表示（<code>worker-output</code> イベント）</li>
+<li>キャンセルボタン → <code>orchestrator_cancel</code></li>
+<li>全Worker完了 → 「マージ実行」ボタン表示</li>
+</ol>
+<h3>タブ3: コンフリクト (<code>/swarm/conflicts</code>)</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│  コンフリクト解決                                             │
+│                                                             │
+│  2件のコンフリクトが検出されました                             │
+│                                                             │
+│  ┌─ src/auth/middleware.rs (行 42-58) ───────────────────┐  │
+│  │                                                       │  │
+│  │  &lt;&lt;&lt;&lt;&lt;&lt;&lt; ours (worker-abc-3)                          │  │
+│  │  fn authenticate(req: &amp;Request) -&gt; Result&lt;User&gt; {     │  │
+│  │      let token = extract_bearer(req)?;                │  │
+│  │  =======                                              │  │
+│  │  fn authenticate(req: &amp;Request) -&gt; AuthResult {       │  │
+│  │      let token = extract_oauth_token(req)?;           │  │
+│  │  &gt;&gt;&gt;&gt;&gt;&gt;&gt; theirs (worker-abc-4)                        │  │
+│  │                                                       │  │
+│  │  🤖 AI解決案:                                          │  │
+│  │  fn authenticate(req: &amp;Request) -&gt; Result&lt;User&gt; {     │  │
+│  │      let token = extract_oauth_token(req)?;           │  │
+│  │  信頼度: 🟢 High                                       │  │
+│  │                                                       │  │
+│  │  [AI案を採用] [Oursを採用] [Theirsを採用] [手動編集]   │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  [全件解決してコミット]                                       │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<p><strong>やること</strong>:</p>
+<ol>
+<li><code>SwarmConflictsTab.tsx</code> を作成</li>
+<li><code>orchestrator_get_conflicts</code> でコンフリクトブロック取得</li>
+<li>ours/theirs のdiff表示（シンタックスハイライト付き）</li>
+<li>「AI解決案」ボタン → <code>orchestrator_ai_resolve_conflict</code> 呼び出し</li>
+<li>解決方法選択 → <code>orchestrator_resolve_conflict</code> 呼び出し</li>
+<li>全件解決後 → <code>orchestrator_commit_resolution</code> でコミット</li>
+</ol>
+<h3>タブ4: 履歴 (<code>/swarm/history</code>)</h3>
+<p>過去のswarm実行結果を一覧表示。</p>
+<p><strong>やること</strong>:</p>
+<ol>
+<li><code>SwarmHistoryTab.tsx</code> を作成</li>
+<li>実行履歴をSQLiteに保存（<code>orchestrator_run</code> テーブル追加）</li>
+<li>実行ごとの成功/失敗/マージ結果を表示</li>
+</ol>
+<h3>コンポーネントツリー</h3>
+<pre><code>SwarmScreen
+├── SwarmTabs
+├── SwarmSplitTab
+│   ├── PromptInput
+│   ├── ContextFileSelector
+│   ├── DependencyGraph          ← Wave構造の可視化
+│   ├── ConflictWarnings
+│   ├── SwarmSettingsPanel
+│   └── StartButton
+├── SwarmRunningTab
+│   ├── WorkerList
+│   │   └── WorkerCard           ← 各Worker状態表示
+│   ├── ResourceMonitor          ← CPU/Memory
+│   ├── WorkerLogPanel           ← ライブログ
+│   └── ActionButtons            ← 一時停止/キャンセル/マージ
+├── SwarmConflictsTab
+│   ├── ConflictBlockView        ← diff表示
+│   ├── AiResolutionPanel        ← AI解決案
+│   └── ResolutionActions        ← 採用/手動編集
+└── SwarmHistoryTab
+    └── RunHistoryList
+</code></pre>
+<h3>ルーティング追加</h3>
+<pre><code>/swarm              → SwarmScreen
+/swarm/split        → タスク分解タブ
+/swarm/running      → 実行中タブ
+/swarm/conflicts    → コンフリクトタブ
+/swarm/history      → 履歴タブ
+</code></pre>
+<h3>サイドバー更新</h3>
+<p><code>08-ui-component-design.md</code> に追加:</p>
+<pre><code>── 管理 ──────────────
+🤖 エージェント
+🐝 Swarm              ← 新規
+📊 スプリント
+</code></pre>
+<hr>
+<h2>Step 2: doc-mapping連携</h2>
+<h3>目標</h3>
+<p>TaskSplitterがタスク分解する際に、doc-mappingの設計書コンテキストを自動注入する。<br>
+各Workerに関連設計書の内容が渡されるようにする。</p>
+<h3>やること</h3>
+<p><strong>ファイル変更</strong>: <code>src-tauri/src/swarm/task_splitter.rs</code></p>
+<ol>
+<li><code>TaskSplitter::split()</code> のシステムプロンプトを拡張:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-comment">// task_splitter.rs の SYSTEM_PROMPT に追加</span>
+<span class="hljs-keyword">const</span> SYSTEM_PROMPT_WITH_DOCS: &amp;<span class="hljs-type">str</span> = <span class="hljs-string">r#"あなたはタスク分解の専門家です。
+...（既存のプロンプト）...
+
+追加制約:
+- 各サブタスクの instruction に、関連する設計書のパスを参照指示として含めること
+- 設計書の内容とソースコードの整合性を維持するよう指示すること
+- 設計書の frontmatter (last_synced_commit, version) を更新するよう指示すること
+"#</span>;
+</code></pre>
+<ol start="2">
+<li><code>split()</code> に doc-mapping コンテキストを追加:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-keyword">pub</span> <span class="hljs-keyword">async</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">split_with_docs</span>(
+    &amp;<span class="hljs-keyword">self</span>,
+    prompt: &amp;<span class="hljs-type">str</span>,
+    project_path: &amp;<span class="hljs-type">str</span>,
+    context_files: &amp;[<span class="hljs-type">String</span>],
+    doc_index: &amp;DocIndex,          <span class="hljs-comment">// 追加: doc-mappingインデックス</span>
+) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;<span class="hljs-type">Vec</span>&lt;SubTask&gt;&gt; {
+    <span class="hljs-comment">// 1. context_files からdoc-mapで関連設計書を検索</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">related_docs</span> = <span class="hljs-title function_ invoke__">find_related_docs</span>(context_files, doc_index);
+
+    <span class="hljs-comment">// 2. 設計書の内容をコンテキストに追加</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">doc_context</span> = format_doc_context(&amp;related_docs);
+
+    <span class="hljs-comment">// 3. 拡張プロンプトでClaude APIに送信</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">user_message</span> = <span class="hljs-built_in">format!</span>(
+        <span class="hljs-string">"プロジェクト: {}\n\nタスク:\n{}\n\n関連設計書:\n{}\n\nファイル構成:\n{}"</span>,
+        project_path, prompt, doc_context,
+        context_files.<span class="hljs-title function_ invoke__">join</span>(<span class="hljs-string">"\n"</span>)
+    );
+
+    <span class="hljs-comment">// ...</span>
+}
+</code></pre>
+<ol start="3">
+<li>各Worker の instruction に設計書参照を自動付与:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-comment">// orchestrator.rs の make_worker_config を拡張</span>
+<span class="hljs-keyword">fn</span> <span class="hljs-title function_">make_worker_config_with_docs</span>(
+    assign: &amp;WorkerAssignment,
+    repo: &amp;PathBuf,
+    run_id: &amp;<span class="hljs-type">str</span>,
+    settings: &amp;SwarmSettings,
+    doc_index: &amp;DocIndex,
+) <span class="hljs-punctuation">-&gt;</span> WorkerConfig {
+    <span class="hljs-keyword">let</span> <span class="hljs-keyword">mut </span><span class="hljs-variable">metadata</span> = HashMap::<span class="hljs-title function_ invoke__">new</span>();
+
+    <span class="hljs-comment">// 既存の metadata 設定...</span>
+
+    <span class="hljs-comment">// doc-mapping: タスクの対象ファイルから関連設計書を特定</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">related_docs</span>: <span class="hljs-type">Vec</span>&lt;<span class="hljs-type">String</span>&gt; = assign.task.files.<span class="hljs-title function_ invoke__">iter</span>()
+        .<span class="hljs-title function_ invoke__">flat_map</span>(|f| doc_index.<span class="hljs-title function_ invoke__">find_docs_for_source</span>(f))
+        .<span class="hljs-title function_ invoke__">map</span>(|entry| entry.doc.<span class="hljs-title function_ invoke__">clone</span>())
+        .collect::&lt;std::collections::HashSet&lt;_&gt;&gt;()
+        .<span class="hljs-title function_ invoke__">into_iter</span>()
+        .<span class="hljs-title function_ invoke__">collect</span>();
+
+    <span class="hljs-keyword">if</span> !related_docs.<span class="hljs-title function_ invoke__">is_empty</span>() {
+        <span class="hljs-keyword">let</span> <span class="hljs-variable">doc_instruction</span> = <span class="hljs-built_in">format!</span>(
+            <span class="hljs-string">"\n\n## 関連設計書\n以下の設計書を参照し、実装との整合性を維持してください:\n{}\n\n実装完了後、設計書の frontmatter (last_synced_commit, version) を更新してください。"</span>,
+            related_docs.<span class="hljs-title function_ invoke__">iter</span>().<span class="hljs-title function_ invoke__">map</span>(|d| <span class="hljs-built_in">format!</span>(<span class="hljs-string">"- {}"</span>, d)).collect::&lt;<span class="hljs-type">Vec</span>&lt;_&gt;&gt;().<span class="hljs-title function_ invoke__">join</span>(<span class="hljs-string">"\n"</span>)
+        );
+        <span class="hljs-keyword">let</span> <span class="hljs-variable">instruction</span> = metadata.<span class="hljs-title function_ invoke__">get</span>(<span class="hljs-string">"task_instruction"</span>).<span class="hljs-title function_ invoke__">cloned</span>().<span class="hljs-title function_ invoke__">unwrap_or_default</span>();
+        metadata.<span class="hljs-title function_ invoke__">insert</span>(<span class="hljs-string">"task_instruction"</span>.<span class="hljs-title function_ invoke__">to_string</span>(), <span class="hljs-built_in">format!</span>(<span class="hljs-string">"{}{}"</span>, instruction, doc_instruction));
+    }
+
+    <span class="hljs-comment">// ...</span>
+}
+</code></pre>
+<p><strong>ファイル変更</strong>: <code>src-tauri/src/commands/swarm.rs</code></p>
+<ol start="4">
+<li><code>split_task</code> コマンドに doc_index を渡す:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-meta">#[tauri::command]</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">async</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">split_task</span>(
+    request: SplitTaskRequest,
+    state: State&lt;<span class="hljs-symbol">'_</span>, AppState&gt;,
+) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;SplitTaskResult, <span class="hljs-type">String</span>&gt; {
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">api_key</span> = <span class="hljs-title function_ invoke__">load_anthropic_key</span>(&amp;state).<span class="hljs-keyword">await</span>?;
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">splitter</span> = TaskSplitter::<span class="hljs-title function_ invoke__">new</span>(&amp;api_key);
+
+    <span class="hljs-comment">// doc-mapping インデックスを読み込み</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">doc_index</span> = <span class="hljs-title function_ invoke__">load_doc_index</span>(&amp;request.project_path).<span class="hljs-title function_ invoke__">ok</span>();
+
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">tasks</span> = <span class="hljs-keyword">if</span> <span class="hljs-keyword">let</span> <span class="hljs-variable">Some</span>(index) = &amp;doc_index {
+        splitter.<span class="hljs-title function_ invoke__">split_with_docs</span>(
+            &amp;request.prompt, &amp;request.project_path,
+            &amp;request.context_files, index
+        ).<span class="hljs-keyword">await</span>
+    } <span class="hljs-keyword">else</span> {
+        splitter.<span class="hljs-title function_ invoke__">split</span>(
+            &amp;request.prompt, &amp;request.project_path,
+            &amp;request.context_files
+        ).<span class="hljs-keyword">await</span>
+    }.<span class="hljs-title function_ invoke__">map_err</span>(|e| e.<span class="hljs-title function_ invoke__">to_string</span>())?;
+
+    <span class="hljs-comment">// ...</span>
+}
+</code></pre>
+<hr>
+<h2>Step 3: Agentic Flow統合</h2>
+<h3>目標</h3>
+<p>保守スキャンの結果からswarmを自動発動できるようにする。<br>
+Agentic Flowのタスクとしてswarm実行を組み込む。</p>
+<h3>やること</h3>
+<p><strong>ファイル変更</strong>: <code>src-tauri/src/agent/task.rs</code> (既存のTaskType拡張)</p>
+<ol>
+<li>TaskType に SwarmExecution を追加:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-keyword">pub</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">TaskType</span> {
+    <span class="hljs-comment">// ... 既存のタスク型 ...</span>
+
+    <span class="hljs-comment">/// Swarm並列実行（複数サブタスクを同時進行）</span>
+    SwarmExecution {
+        prompt: <span class="hljs-type">String</span>,
+        settings: SwarmSettings,
+    },
+}
+</code></pre>
+<ol start="2">
+<li>SwarmExecution のハンドラ実装:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-comment">// Agentic FlowのタスクハンドラからSwarm Orchestratorを起動</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">handle_swarm_execution</span>(
+    task: &amp;AgentTask,
+    prompt: &amp;<span class="hljs-type">str</span>,
+    settings: &amp;SwarmSettings,
+    app: &amp;AppHandle,
+) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Result</span>&lt;TaskResult, AgentError&gt; {
+    <span class="hljs-comment">// 1. TaskSplitterでサブタスク分解</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">subtasks</span> = <span class="hljs-title function_ invoke__">split_task_for_agent</span>(prompt, &amp;task.product_id).<span class="hljs-keyword">await</span>?;
+
+    <span class="hljs-comment">// 2. Orchestrator起動</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">run</span> = <span class="hljs-title function_ invoke__">start_orchestrator_run</span>(subtasks, settings.<span class="hljs-title function_ invoke__">clone</span>(), app).<span class="hljs-keyword">await</span>?;
+
+    <span class="hljs-comment">// 3. 完了を待機（orchestrator-merge-done イベント）</span>
+    <span class="hljs-keyword">let</span> <span class="hljs-variable">result</span> = <span class="hljs-title function_ invoke__">wait_for_orchestrator_completion</span>(&amp;run.run_id, app).<span class="hljs-keyword">await</span>?;
+
+    <span class="hljs-title function_ invoke__">Ok</span>(TaskResult::<span class="hljs-title function_ invoke__">SwarmCompleted</span>(result))
+}
+</code></pre>
+<p><strong>ファイル作成</strong>: <code>src-tauri/src/swarm/agentic_bridge.rs</code></p>
+<ol start="3">
+<li>保守→Swarm自動発動のブリッジ:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-comment">/// 保守スキャン結果からswarmタスクを自動生成</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span> <span class="hljs-title function_">create_swarm_tasks_from_maintenance</span>(
+    scan_result: &amp;MaintenanceScanResult,
+    product: &amp;Product,
+) <span class="hljs-punctuation">-&gt;</span> <span class="hljs-type">Vec</span>&lt;AgentTask&gt; {
+    <span class="hljs-keyword">let</span> <span class="hljs-keyword">mut </span><span class="hljs-variable">tasks</span> = <span class="hljs-type">Vec</span>::<span class="hljs-title function_ invoke__">new</span>();
+
+    <span class="hljs-comment">// カバレッジ低下 → テスト追加swarm</span>
+    <span class="hljs-keyword">if</span> scan_result.coverage_drop &gt; <span class="hljs-number">2.0</span> {
+        <span class="hljs-keyword">let</span> <span class="hljs-variable">hot_paths</span> = scan_result.hot_paths.<span class="hljs-title function_ invoke__">iter</span>()
+            .<span class="hljs-title function_ invoke__">take</span>(<span class="hljs-number">5</span>)
+            .<span class="hljs-title function_ invoke__">map</span>(|p| p.file_path.<span class="hljs-title function_ invoke__">clone</span>())
+            .collect::&lt;<span class="hljs-type">Vec</span>&lt;_&gt;&gt;();
+
+        tasks.<span class="hljs-title function_ invoke__">push</span>(AgentTask::<span class="hljs-title function_ invoke__">new</span>(
+            TaskType::SwarmExecution {
+                prompt: <span class="hljs-built_in">format!</span>(
+                    <span class="hljs-string">"以下のファイルにユニットテストを追加してください:\n{}"</span>,
+                    hot_paths.<span class="hljs-title function_ invoke__">join</span>(<span class="hljs-string">"\n"</span>)
+                ),
+                settings: SwarmSettings::<span class="hljs-title function_ invoke__">default</span>(),
+            },
+            product.id.<span class="hljs-title function_ invoke__">clone</span>(),
+            TaskPriority::Medium,
+        ));
+    }
+
+    <span class="hljs-comment">// 技術的負債が閾値超過 → リファクタリングswarm</span>
+    <span class="hljs-keyword">if</span> scan_result.debt_score &gt; <span class="hljs-number">70.0</span> {
+        <span class="hljs-keyword">let</span> <span class="hljs-variable">top_candidates</span> = scan_result.refactor_candidates.<span class="hljs-title function_ invoke__">iter</span>()
+            .<span class="hljs-title function_ invoke__">take</span>(<span class="hljs-number">3</span>)
+            .<span class="hljs-title function_ invoke__">map</span>(|c| <span class="hljs-built_in">format!</span>(<span class="hljs-string">"- {} (score: {:.2})"</span>, c.file_path, c.score))
+            .collect::&lt;<span class="hljs-type">Vec</span>&lt;_&gt;&gt;();
+
+        tasks.<span class="hljs-title function_ invoke__">push</span>(AgentTask::<span class="hljs-title function_ invoke__">new</span>(
+            TaskType::SwarmExecution {
+                prompt: <span class="hljs-built_in">format!</span>(
+                    <span class="hljs-string">"以下のファイルをリファクタリングしてください:\n{}"</span>,
+                    top_candidates.<span class="hljs-title function_ invoke__">join</span>(<span class="hljs-string">"\n"</span>)
+                ),
+                settings: SwarmSettings { max_workers: <span class="hljs-number">3</span>, ..<span class="hljs-built_in">Default</span>::<span class="hljs-title function_ invoke__">default</span>() },
+            },
+            product.id.<span class="hljs-title function_ invoke__">clone</span>(),
+            TaskPriority::Low,
+        ));
+    }
+
+    tasks
+}
+</code></pre>
+<ol start="4">
+<li>ワークフローYAMLへの swarm ステップ追加:</li>
+</ol>
+<pre><code class="hljs language-yaml"><span class="hljs-comment"># .devnest/workflows/weekly-maintenance.yaml に追加</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">test-coverage-swarm</span>
+    <span class="hljs-attr">action:</span> <span class="hljs-string">evaluate</span>
+    <span class="hljs-attr">condition:</span> <span class="hljs-string">"scan.result.coverage_drop &gt; 2.0"</span>
+    <span class="hljs-attr">on_true:</span> <span class="hljs-string">run-test-swarm</span>
+    <span class="hljs-attr">on_false:</span> <span class="hljs-string">report</span>
+
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">run-test-swarm</span>
+    <span class="hljs-attr">action:</span> <span class="hljs-string">swarm_execution</span>
+    <span class="hljs-attr">params:</span>
+      <span class="hljs-attr">prompt:</span> <span class="hljs-string">"ホットパスにユニットテストを追加"</span>
+      <span class="hljs-attr">max_workers:</span> <span class="hljs-number">3</span>
+    <span class="hljs-attr">requires_approval:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">next:</span> <span class="hljs-string">report</span>
+</code></pre>
+<hr>
+<h2>Step 4: 通知リング連携</h2>
+<h3>目標</h3>
+<p>Swarm Worker の状態変化を通知リングシステムに接続し、<br>
+サイドバーのSwarmメニューにリアルタイムフィードバックを提供する。</p>
+<h3>やること</h3>
+<p><strong>ファイル変更</strong>: <code>src-tauri/src/swarm/orchestrator.rs</code></p>
+<ol>
+<li>Worker状態変更時に RingEvent を発火:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-comment">// orchestrator.rs の update_worker_status 内に追加</span>
+
+<span class="hljs-comment">// Worker完了時</span>
+<span class="hljs-keyword">if</span> status == WorkerStatus::Done {
+    crate::notification::ring::<span class="hljs-title function_ invoke__">emit_ring_event</span>(
+        app,
+        RingEvent::SwarmWorkerUpdate {
+            run_id: run.run_id.<span class="hljs-title function_ invoke__">clone</span>(),
+            worker_id: worker_id.<span class="hljs-title function_ invoke__">to_string</span>(),
+            task_title: assign.task.title.<span class="hljs-title function_ invoke__">clone</span>(),
+            status: <span class="hljs-string">"done"</span>.<span class="hljs-title function_ invoke__">to_string</span>(),
+            urgency: RingUrgency::Info,
+        },
+    );
+}
+
+<span class="hljs-comment">// Workerエラー時</span>
+<span class="hljs-keyword">if</span> status == WorkerStatus::Error {
+    crate::notification::ring::<span class="hljs-title function_ invoke__">emit_ring_event</span>(
+        app,
+        RingEvent::SwarmWorkerUpdate {
+            run_id: run.run_id.<span class="hljs-title function_ invoke__">clone</span>(),
+            worker_id: worker_id.<span class="hljs-title function_ invoke__">to_string</span>(),
+            task_title: assign.task.title.<span class="hljs-title function_ invoke__">clone</span>(),
+            status: <span class="hljs-string">"error"</span>.<span class="hljs-title function_ invoke__">to_string</span>(),
+            urgency: RingUrgency::Warning,
+        },
+    );
+}
+
+<span class="hljs-comment">// 全Worker完了→マージ準備時</span>
+<span class="hljs-keyword">if</span> run.status == RunStatus::Merging {
+    crate::notification::ring::<span class="hljs-title function_ invoke__">emit_ring_event</span>(
+        app,
+        RingEvent::SwarmRunComplete {
+            run_id: run.run_id.<span class="hljs-title function_ invoke__">clone</span>(),
+            total: run.total,
+            done: run.done_count,
+            has_conflicts: <span class="hljs-literal">false</span>,  <span class="hljs-comment">// マージ後に更新</span>
+            urgency: RingUrgency::Info,
+        },
+    );
+}
+</code></pre>
+<p><strong>ファイル変更</strong>: <code>src-tauri/src/notification/ring.rs</code></p>
+<ol start="2">
+<li>RingEvent に Swarm系イベントを追加:</li>
+</ol>
+<pre><code class="hljs language-rust"><span class="hljs-meta">#[derive(Debug, Clone, Serialize)]</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">RingEvent</span> {
+    <span class="hljs-comment">// ... 既存のイベント ...</span>
+
+    <span class="hljs-comment">/// Swarm Worker の状態変化</span>
+    SwarmWorkerUpdate {
+        run_id: <span class="hljs-type">String</span>,
+        worker_id: <span class="hljs-type">String</span>,
+        task_title: <span class="hljs-type">String</span>,
+        status: <span class="hljs-type">String</span>,      <span class="hljs-comment">// "done" | "error" | "retrying"</span>
+        urgency: RingUrgency,
+    },
+
+    <span class="hljs-comment">/// Swarm 実行全体の完了</span>
+    SwarmRunComplete {
+        run_id: <span class="hljs-type">String</span>,
+        total: <span class="hljs-type">u32</span>,
+        done: <span class="hljs-type">u32</span>,
+        has_conflicts: <span class="hljs-type">bool</span>,
+        urgency: RingUrgency,
+    },
+}
+</code></pre>
+<p><strong>ファイル変更</strong>: フロントエンド</p>
+<ol start="3">
+<li>サイドバーの Swarm メニューにリングインジケーター:</li>
+</ol>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// SwarmメニューのRing表示</span>
+<span class="hljs-keyword">function</span> <span class="hljs-title function_">SwarmMenuItem</span>(<span class="hljs-params"></span>) {
+  <span class="hljs-keyword">const</span> rings = <span class="hljs-title function_">useRingNotification</span>();
+  <span class="hljs-keyword">const</span> swarmRings = rings.<span class="hljs-title function_">filter</span>(<span class="hljs-function"><span class="hljs-params">r</span> =&gt;</span>
+    r.<span class="hljs-property">type</span> === <span class="hljs-string">'SwarmWorkerUpdate'</span> || r.<span class="hljs-property">type</span> === <span class="hljs-string">'SwarmRunComplete'</span>
+  );
+
+  <span class="hljs-keyword">const</span> hasError = swarmRings.<span class="hljs-title function_">some</span>(<span class="hljs-function"><span class="hljs-params">r</span> =&gt;</span> r.<span class="hljs-property">status</span> === <span class="hljs-string">'error'</span>);
+  <span class="hljs-keyword">const</span> isRunning = swarmRings.<span class="hljs-title function_">some</span>(<span class="hljs-function"><span class="hljs-params">r</span> =&gt;</span> r.<span class="hljs-property">status</span> === <span class="hljs-string">'running'</span>);
+
+  <span class="hljs-keyword">return</span> (
+    <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">SidebarItem</span>
+      <span class="hljs-attr">icon</span>=<span class="hljs-string">"🐝"</span>
+      <span class="hljs-attr">label</span>=<span class="hljs-string">"Swarm"</span>
+      <span class="hljs-attr">ringing</span>=<span class="hljs-string">{isRunning}</span>
+      <span class="hljs-attr">ringingUrgency</span>=<span class="hljs-string">{hasError</span> ? '<span class="hljs-attr">critical</span>' <span class="hljs-attr">:</span> <span class="hljs-attr">isRunning</span> ? '<span class="hljs-attr">info</span>' <span class="hljs-attr">:</span> <span class="hljs-attr">undefined</span>}
+      <span class="hljs-attr">badge</span>=<span class="hljs-string">{swarmRings.length</span> &gt;</span> 0 ? swarmRings.length : undefined}
+    /&gt;</span>
+  );
+}
+</code></pre>
+<ol start="4">
+<li>Swarm完了時の通知ベル連携:</li>
+</ol>
+<pre><code class="hljs language-typescript"><span class="hljs-comment">// SwarmRunComplete → 通知パネルに追加</span>
+<span class="hljs-title function_">useEffect</span>(<span class="hljs-function">() =&gt;</span> {
+  listen&lt;<span class="hljs-title class_">RingEvent</span>&gt;(<span class="hljs-string">'ring-event'</span>, <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span> (event.<span class="hljs-property">payload</span>.<span class="hljs-property">type</span> === <span class="hljs-string">'SwarmRunComplete'</span>) {
+      <span class="hljs-title function_">addNotification</span>({
+        <span class="hljs-attr">category</span>: <span class="hljs-string">'agent'</span>,
+        <span class="hljs-attr">title</span>: <span class="hljs-string">`Swarm完了: <span class="hljs-subst">${event.payload.done}</span>/<span class="hljs-subst">${event.payload.total}</span> タスク成功`</span>,
+        <span class="hljs-attr">body</span>: event.<span class="hljs-property">payload</span>.<span class="hljs-property">has_conflicts</span>
+          ? <span class="hljs-string">'コンフリクトがあります。確認してください。'</span>
+          : <span class="hljs-string">'全タスクが正常に完了しました。'</span>,
+        <span class="hljs-attr">urgency</span>: event.<span class="hljs-property">payload</span>.<span class="hljs-property">has_conflicts</span> ? <span class="hljs-string">'warning'</span> : <span class="hljs-string">'info'</span>,
+      });
+    }
+  });
+}, []);
+</code></pre>
+<hr>
+<h2>ドキュメント更新チェックリスト</h2>
+<h3>Step 1 完了時</h3>
+<ul class="contains-task-list">
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>08-ui-component-design.md</code> にSwarm画面を追加</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> サイドバーに 🐝 Swarm を追加</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> ルーティングに <code>/swarm/*</code> を追加</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>docs/screens/swarm-screen.md</code> を新規作成</li>
+</ul>
+<h3>Step 2 完了時</h3>
+<ul class="contains-task-list">
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>docs/swarm/doc-mapping-integration.md</code> を新規作成</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>doc-mapping-design.md</code> にswarm連携セクションを追加</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> task_splitter.rs の設計書マッピング更新</li>
+</ul>
+<h3>Step 3 完了時</h3>
+<ul class="contains-task-list">
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>docs/swarm/agentic-bridge.md</code> を新規作成</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> ワークフローYAMLにswarmステップの例を追加</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>devnest-multiproduct-agentic.md</code> にswarm統合を追記</li>
+</ul>
+<h3>Step 4 完了時</h3>
+<ul class="contains-task-list">
+<li class="task-list-item"><input disabled="" type="checkbox"> <code>docs/notification/ring-system.md</code> にSwarmイベントを追記</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> 通知リングのイベント種別一覧を更新</li>
+</ul>
+</body>
+</html>

@@ -74,10 +74,8 @@ fn extract_github_owner_repo(repo_path: &str) -> Option<(String, String)> {
     // SSH:   git@github.com:owner/repo(.git)
     let path = if let Some(p) = url.strip_prefix("https://github.com/") {
         p
-    } else if let Some(p) = url.strip_prefix("git@github.com:") {
-        p
     } else {
-        return None;
+        url.strip_prefix("git@github.com:")?
     };
 
     let path = path.trim_end_matches(".git");
